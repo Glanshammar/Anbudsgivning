@@ -80,15 +80,40 @@ def UserAdd():
 
 @app.route('/users/', methods=['GET'])
 def UsersGet():
-    return view_users()
+    try:
+        users = view_users()
+        return jsonify(users), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route('/users/<userID>', methods=['DELETE'])
 def UserDelete(userID):
-    return no_content_204()
+    try:
+        user_ref = db.collection('Users').document(userID)
+        if not user_ref.get().exists:
+            return jsonify({"error": "User not found"}), 404
+
+        user_ref.delete()
+        return no_content_204()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route('/users/<userID>', methods=['PUT'])
-def UserUpdate(userID, data):
-    return ok_200('User updated successfully.')
+def UserUpdate(userID):
+    try:
+        data = request.get_json()
+        if not data:
+            return bad_request_400("No update data provided")
+
+        updated = update_user(userID, data)
+        if updated:
+            return ok_200("User updated successfully")
+        else:
+            return jsonify({"error": "User not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 app.run(debug=True, host='0.0.0.0', port=5000)
