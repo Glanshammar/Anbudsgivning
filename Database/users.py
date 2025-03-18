@@ -2,7 +2,8 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
 from google.cloud.firestore_v1.document import DocumentReference
-from database import db
+from Database.database import db
+import requests
 
 def add_user(user_data):
     try:
@@ -30,6 +31,7 @@ def delete_user():
         print(f"✅ User with ID {user_id} deleted successfully")
     else:
         print(f"❌ User with ID {user_id} not found")
+
 
 def update_user(user_id, user_data):
     user_ref = db.collection('Users').document(user_id)

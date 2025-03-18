@@ -1,4 +1,4 @@
-from database import db_main, db_users
+from Database.database import db_main, db_users, db
 from domain import domain_main
 import requests
 

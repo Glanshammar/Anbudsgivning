@@ -6,8 +6,8 @@ import datetime
 import os
 import re
 
-
-cred_file = 'creds.json'
+script_dir = os.path.dirname(os.path.abspath(__file__))
+cred_file = os.path.join(script_dir, 'creds.json')
 
 if not os.path.exists(cred_file):
     print(f"Please place the '{cred_file}' in the same directory as this script.")

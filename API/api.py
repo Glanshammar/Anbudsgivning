@@ -1,7 +1,7 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request, jsonify
 from httpcodes import *
-from database import db, get_document, get_collection, add_document, print_all_documents
-from users import add_user, update_user, delete_user, view_users
+from Database.database import db, get_document, add_document
+from Database.users import add_user, update_user, view_users
 
 app = Flask(__name__)
 
@@ -10,7 +10,7 @@ def Status():
     return ok_200()
 
 @app.route('/document/<collection>/<documentID>', methods=['GET'])
-def DocumentGet(collection, documentID):
+def DocumentGetById(collection, documentID):
     try:
         doc_ref = get_document(collection_name=collection, document_id=documentID)
         doc = doc_ref.get()
@@ -59,8 +59,8 @@ def DocumentCreate(collection, documentID):
 
 
 @app.route('/document/<collection>/<documentID>', methods=['PUT'])
-def DocumentUpdate(collection, documentID, data):
-    return not_found_404('Document update not implemented.')
+def DocumentUpdate(collection, documentID):
+    data = request.get_json()
 
 
 @app.route('/users', methods=['POST'])
