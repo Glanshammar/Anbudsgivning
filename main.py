@@ -1,14 +1,15 @@
-from Database.database import db_main, db_users, db
-from domain import domain_main
+from Database.database import DBMain, db
+from Database.users import UsersMain
+from domain import DomainMain
 import requests
 
 if __name__ == "__main__":
     while True:
         command = input(">> ")
         if command.lower() == "docs":
-            db_main()
+            DBMain()
         elif command.lower() == "users":
-            db_users()
+            UsersMain()
         elif command.lower() == "status":
             response = requests.get("http://127.0.0.1:5000/status")
             if response.status_code == 200:
@@ -17,7 +18,7 @@ if __name__ == "__main__":
             else:
                 print(f"Unexpected status code: {response.status_code}")
         elif command.lower() == "domain":
-            domain_main('C:/Users/Mondus/Documents/Länkar.txt')
+            DomainMain('C:/Users/Mondus/Documents/Länkar.txt')
         elif command.lower() == "exit":
             break
         else:

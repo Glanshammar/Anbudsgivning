@@ -32,7 +32,7 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 
-def get_collection(collection_name):
+def GetCollection(collection_name):
     collections = [collection.id for collection in db.collections()]
 
     if collection_name not in collections:
@@ -43,13 +43,8 @@ def get_collection(collection_name):
     return db.collection(collection_name)
 
 
-def get_document(collection_name, document_id):
+def GetDocument(collection_name, document_id):
     documents = [doc.id for doc in db.collection(collection_name).stream()]
-    '''
-    print("\nAvailable Documents:")
-    for i, document in enumerate(documents, 1):
-        print(f"{i}. {document}")
-    '''
 
     document_name = document_id.strip()
     if document_name.isdigit() and 1 <= int(document_name) <= len(documents):
@@ -58,7 +53,7 @@ def get_document(collection_name, document_id):
     return db.collection(collection_name).document(document_name)
 
 
-def print_all_documents(collection_name):
+def PrintDocuments(collection_name):
     try:
         collection_ref = db.collection(collection_name)
         docs = collection_ref.stream()
@@ -73,7 +68,7 @@ def print_all_documents(collection_name):
         print(f"❌ Error printing documents: {str(e)}")
 
 
-def add_document(collection_name, document_data, document_name=None):
+def AddDocument(collection_name, document_data, document_name=None):
     if not collection_name:
         raise ValueError("Collection name cannot be empty.")
 
@@ -98,7 +93,7 @@ def add_document(collection_name, document_data, document_name=None):
         raise
 
 
-def delete_document(document):
+def DeleteDocument(document):
     confirm = input("Are you sure you want to delete the entire document? (y/N): ").strip().lower()
     if confirm == 'y':
         document.delete()
@@ -106,14 +101,14 @@ def delete_document(document):
     else:
         print("Deletion cancelled.")
 
-def add_field(document):
+def AddField(document):
     name = input("Enter new field name: ").strip()
     value = input(f"Enter value for '{name}': ").strip()
     document.update({name: value})
     print(f"✅ Added '{name}' with value '{value}'.")
 
 
-def read_document(document):
+def ReadDocument(document):
     doc = document.get()
     if not doc.exists:
         print("The document does not exist.")
@@ -142,7 +137,7 @@ def read_document(document):
         else:
             print(f"{i}. {key}: {value}")
 
-def view_all_fields(document):
+def ViewFields(document):
     doc = document.get()
     if doc.exists:
         data = doc.to_dict()
@@ -156,20 +151,19 @@ def view_all_fields(document):
         print("The document does not exist.")
 
 
-def read_field(document):
-    name = input("Enter field name to read: ").strip()
+def ReadField(document, field):
     doc = document.get()
     if doc.exists:
         data = doc.to_dict()
-        if name in data:
-            print(f"{name}: {data[name]}")
+        if field in data:
+            print(f"{field}: {data[field]}")
         else:
-            print(f"Field '{name}' does not exist in the document.")
+            print(f"Field '{field}' does not exist in the document.")
     else:
         print("Document does not exist!")
 
-def update_field(document):
-    view_all_fields(document)
+def UpdateField(document):
+    ViewFields(document)
     doc = document.get()
     if doc.exists and doc.to_dict():
         try:
@@ -186,7 +180,7 @@ def update_field(document):
 
 # Delete Field Operation
 def delete_field(document):
-    view_all_fields(document)
+    ViewFields(document)
     doc = document.get()
     if doc.exists and doc.to_dict():
         try:
@@ -216,7 +210,7 @@ def collection_and_document():
             if 1 <= collection_index <= len(collections):
                 collection_name = collections[collection_index - 1]
                 try:
-                    collection = get_collection(collection_name)
+                    collection = GetCollection(collection_name)
                 except Exception as e:
                     print(f"❌ Error: {str(e)}")
             else:
@@ -224,7 +218,7 @@ def collection_and_document():
         else:
             try:
                 collection_name = collection_input
-                collection = get_collection(collection_name)
+                collection = GetCollection(collection_name)
             except Exception as e:
                 print(f"❌ Error: {str(e)}")
 
@@ -249,7 +243,7 @@ def collection_and_document():
     return collection, document
 
 
-def db_main():
+def DBMain():
     collection, document = collection_and_document()
     print("\n--- CRUD Operations ---")
     print("1. Create Field")
@@ -264,13 +258,14 @@ def db_main():
 
           match choice:
               case '1':
-                  add_field(document)
+                  AddField(document)
               case '2':
-                  read_document(document)
+                  ReadDocument(document)
               case '3':
-                  read_field(document)
+                  field = input("Enter field name: ").strip()
+                  ReadField(document, field)
               case '4':
-                  update_field(document)
+                  UpdateField(document)
               case '5':
                   delete_field(document)
               case '6':
@@ -278,18 +273,3 @@ def db_main():
                   break
               case _:
                   print("Invalid choice. Please try again.")
-
-def add_user():
-    print('Method not added.')
-
-def view_users():
-    users_ref = db.collection('users')
-    users = users_ref.stream()
-    for user in users:
-        print(f"User ID: {user.id}")
-
-def db_users():
-  print("\n--- Users Operations ---")
-  print("1. Create User")
-  print("2. View Users")
-

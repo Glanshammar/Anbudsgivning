@@ -5,7 +5,7 @@ from google.cloud.firestore_v1.document import DocumentReference
 from Database.database import db
 import requests
 
-def add_user(user_data):
+def AddUser(user_data):
     try:
         users_ref = db.collection('Users')
         new_user_ref = users_ref.add(user_data)[1]
@@ -13,7 +13,7 @@ def add_user(user_data):
     except Exception as e:
         print(f"❌ Error adding user: {str(e)}")
 
-def view_users():
+def GetUsers():
     users_ref = db.collection('Users')
     users = users_ref.stream()
     user_list = []
@@ -23,17 +23,16 @@ def view_users():
         user_list.append(user_data)
     return user_list
 
-def delete_user():
-    user_id = input("Enter user ID to delete: ").strip()
-    user_ref = db.collection('Users').document(user_id)
+def DeleteUser(userID):
+    user_ref = db.collection('Users').document(userID)
     if user_ref.get().exists:
         user_ref.delete()
-        print(f"✅ User with ID {user_id} deleted successfully")
+        print(f"✅ User with ID {userID} deleted successfully")
     else:
-        print(f"❌ User with ID {user_id} not found")
+        print(f"❌ User with ID {userID} not found")
 
 
-def update_user(user_id, user_data):
+def UpdateUser(user_id, user_data):
     user_ref = db.collection('Users').document(user_id)
     if not user_ref.get().exists:
         return False
@@ -50,14 +49,13 @@ def update_user(user_id, user_data):
         return False
 
 
-def users_main():
+def UsersMain():
     while True:
         print("\n--- Users Operations ---")
         print("1. Create User")
         print("2. View Users")
-        print("3. Update User")
-        print("4. Delete User")
-        print("5. Exit")
+        print("3. Delete User")
+        print("4. Exit")
 
         choice = input("Enter your choice (1-5): ").strip()
 
@@ -68,12 +66,11 @@ def users_main():
             else:
                 print(f"Unexpected status code: {response.status_code}")
         elif choice == '2':
-            view_users()
+            print(GetUsers())
         elif choice == '3':
-            update_user()
+            userID = int(input("Enter user ID: "))
+            DeleteUser(userID)
         elif choice == '4':
-            delete_user()
-        elif choice == '5':
             print("Exiting user management...")
             break
         else:

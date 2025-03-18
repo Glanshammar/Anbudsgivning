@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 from httpcodes import *
-from Database.database import db, get_document, add_document
-from Database.users import add_user, update_user, view_users
+from Database.database import db, GetDocument, AddDocument, DeleteDocument
+from Database.users import AddUser, UpdateUser, GetUsers
 
 app = Flask(__name__)
 
@@ -12,7 +12,7 @@ def Status():
 @app.route('/document/<collection>/<documentID>', methods=['GET'])
 def DocumentGetById(collection, documentID):
     try:
-        doc_ref = get_document(collection_name=collection, document_id=documentID)
+        doc_ref = GetDocument(collection_name=collection, document_id=documentID)
         doc = doc_ref.get()
         if doc.exists:
             return ok_200(doc.to_dict())
@@ -51,7 +51,7 @@ def DocumentCreate(collection, documentID):
         if not data:
             return bad_request_400('No data provided')
 
-        document_id = add_document(collection_name=collection, document_data=data, document_name=documentID)
+        document_id = AddDocument(collection_name=collection, document_data=data, document_name=documentID)
 
         return jsonify({"message": "Document created successfully", "id": document_id}), 200
     except Exception as e:
@@ -71,7 +71,7 @@ def UserAdd():
             return bad_request_400("No user data provided")
 
         # Call the add_user function with the received data
-        new_user_id = add_user(user_data)
+        new_user_id = AddUser(user_data)
 
         return jsonify({"message": "User added successfully", "id": new_user_id}), 201
     except Exception as e:
@@ -81,7 +81,7 @@ def UserAdd():
 @app.route('/users/', methods=['GET'])
 def UsersGet():
     try:
-        users = view_users()
+        users = GetUsers()
         return jsonify(users), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -107,7 +107,7 @@ def UserUpdate(userID):
         if not data:
             return bad_request_400("No update data provided")
 
-        updated = update_user(userID, data)
+        updated = UpdateUser(userID, data)
         if updated:
             return ok_200("User updated successfully")
         else:

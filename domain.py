@@ -3,7 +3,7 @@ import os
 from Database.database import db
 from urllib.parse import urlparse
 
-def extract_main_domain(url):
+def ExtractMainDomain(url):
     try:
         parsed_url = urlparse(url)
         hostname = parsed_url.netloc
@@ -20,10 +20,10 @@ def extract_main_domain(url):
         print(f"Error extracting main domain from URL '{url}': {e}")
         return url
 
-def process_domains(links):
-    return {extract_main_domain(link): link for link in links}
+def ProcessDomains(links):
+    return {ExtractMainDomain(link): link for link in links}
 
-def parse_links(file_path):
+def ParseLinks(file_path):
     links = []
     with open(file_path, 'r') as file:
         for line in file:
@@ -31,7 +31,7 @@ def parse_links(file_path):
             links.extend(urls)
     return links
 
-def save_links_to_db(db, links):
+def SaveLinksToDB(db, links):
     collection_name = input("Enter the collection name to save links: ").strip()
     document_name = input("Enter the document name to save links: ").strip()
 
@@ -39,8 +39,8 @@ def save_links_to_db(db, links):
     doc = doc_ref.get()
     existing_links = doc.to_dict() if doc.exists else {}
 
-    existing_domains = set(process_domains(existing_links.values()).keys())
-    new_domains = set(process_domains(links).keys())
+    existing_domains = set(ProcessDomains(existing_links.values()).keys())
+    new_domains = set(ProcessDomains(links).keys())
     duplicate_domains = existing_domains.intersection(new_domains)
 
     domains_to_replace = set()
@@ -51,9 +51,9 @@ def save_links_to_db(db, links):
         to_replace = input("Enter domains to replace (comma-separated) or 'all': ").lower()
         domains_to_replace = set(duplicate_domains if to_replace == 'all' else to_replace.split(','))
 
-    final_links = {k: v for k, v in existing_links.items() if extract_main_domain(v) not in domains_to_replace}
+    final_links = {k: v for k, v in existing_links.items() if ProcessDomains(v) not in domains_to_replace}
     for link in links:
-        domain = extract_main_domain(link)
+        domain = ProcessDomains(link)
         if domain not in existing_domains or domain in domains_to_replace:
             key = f"{len(final_links)}"
             final_links[key] = link
@@ -62,11 +62,11 @@ def save_links_to_db(db, links):
     print(f"✅ Links saved to Firestore collection '{collection_name}', document '{document_name}'.")
 
 
-def domain_main(input_file):
+def DomainMain(input_file):
     if not os.path.exists(input_file):
         print(f"Error: File '{input_file}' not found.")
     else:
-        parsed_links = parse_links(input_file)
-        save_links_to_db(db, parsed_links)
+        parsed_links = ParseLinks(input_file)
+        SaveLinksToDB(db, parsed_links)
 
         print(f"URLs have been successfully processed and saved to the database.")
