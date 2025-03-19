@@ -19,9 +19,22 @@ def GetUsers():
     user_list = []
     for user in users:
         user_data = user.to_dict()
-        user_data['id'] = user.id  # Add the document ID to the user data
+        user_data['id'] = user.id
         user_list.append(user_data)
     return user_list
+
+
+def GetUserByID(userID):
+    user_ref = db.collection('Users').document(userID)
+    user = user_ref.get()
+
+    if user.exists:
+        user_data = user.to_dict()
+        user_data['id'] = user.id
+        return user_data
+    else:
+        return False
+
 
 def DeleteUser(userID):
     user_ref = db.collection('Users').document(userID)

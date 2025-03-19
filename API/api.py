@@ -81,10 +81,22 @@ def UserAdd():
 @app.route('/users/', methods=['GET'])
 def UsersGet():
     try:
-        users = GetUsers()
-        return jsonify(users), 200
+        return jsonify(GetUsers()), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return http_500(str(e))
+
+
+@app.route('/users/<userID>', methods=['GET'])
+def UserGetById(userID):
+    try:
+        user_data = GetUserByID(userID)
+
+        if user_data:
+            return jsonify(user_data), 200
+        else:
+            return http_404('User not found')
+    except Exception as e:
+        return http_500(str(e))
 
 
 @app.route('/users/<userID>', methods=['DELETE'])
