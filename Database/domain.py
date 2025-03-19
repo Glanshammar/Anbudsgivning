@@ -5,16 +5,14 @@ from urllib.parse import urlparse
 
 def ExtractMainDomain(url):
     try:
-        parsed_url = urlparse(url)
-        hostname = parsed_url.netloc
-
-        if hostname.startswith('www.'):
-            hostname = hostname[4:]
-
-        match = re.search(r'([a-zA-Z0-9-]+\.(?:[a-zA-Z]{2,}|[a-zA-Z]{2,}\.[a-zA-Z]{2,}))$', hostname)
+        match = re.search(r'\/\/(?:www\.)?([^\/\?]+)', url)
 
         if match:
             return match.group(1)
+
+        parsed_url = urlparse(url)
+        hostname = parsed_url.netloc
+
         return hostname
     except Exception as e:
         print(f"Error extracting main domain from URL '{url}': {e}")

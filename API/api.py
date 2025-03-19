@@ -1,13 +1,19 @@
 from flask import Flask, request, jsonify
 from httpcodes import *
 from Database.database import db, GetDocument, AddDocument, DeleteDocument
-from Database.users import AddUser, UpdateUser, GetUsers
+from Database.users import AddUser, UpdateUser, GetUsers, GetUserByID
+import threading
 
 app = Flask(__name__)
 
+
 @app.route('/status', methods=['GET'])
 def Status():
-    return ok_200()
+    return http_200()
+
+@app.route('/threads', methods=['GET'])
+def Threads():
+    return threading.active_count()
 
 @app.route('/document/<collection>/<documentID>', methods=['GET'])
 def DocumentGetById(collection, documentID):
@@ -15,14 +21,14 @@ def DocumentGetById(collection, documentID):
         doc_ref = GetDocument(collection_name=collection, document_id=documentID)
         doc = doc_ref.get()
         if doc.exists:
-            return ok_200(doc.to_dict())
+            return http_200(doc.to_dict())
         else:
-            return not_found_404('Document not found')
+            return http_404('Document not found')
     except Exception as e:
-        return internal_server_error_500(str(e))
+        return http_500(str(e))
 
 
-@app.route('/print/<collection>', methods=['GET'])
+@app.route('/document/<collection>', methods=['GET'])
 def DocumentGetAll(collection):
     try:
         collection_ref = db.collection(collection)
@@ -35,12 +41,12 @@ def DocumentGetAll(collection):
                 "data": doc.to_dict()
             })
 
-        return jsonify({
+        return http_200({
             "collection": collection,
             "documents": documents
-        }), 200
+        })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return http_500(str(e))
 
 
 @app.route('/document/<collection>/<documentID>', methods=['POST'])
@@ -49,13 +55,13 @@ def DocumentCreate(collection, documentID):
         data = request.get_json()
 
         if not data:
-            return bad_request_400('No data provided')
+            return http_400('No data provided')
 
         document_id = AddDocument(collection_name=collection, document_data=data, document_name=documentID)
 
-        return jsonify({"message": "Document created successfully", "id": document_id}), 200
+        return http_200(f"{document_id} was created.")
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return http_500(str(e))
 
 
 @app.route('/document/<collection>/<documentID>', methods=['PUT'])
@@ -68,14 +74,14 @@ def UserAdd():
     try:
         user_data = request.get_json()
         if not user_data:
-            return bad_request_400("No user data provided")
+            return http_400("No user data provided")
 
         # Call the add_user function with the received data
         new_user_id = AddUser(user_data)
 
         return jsonify({"message": "User added successfully", "id": new_user_id}), 201
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return http_500(str(e))
 
 
 @app.route('/users/', methods=['GET'])
@@ -104,12 +110,12 @@ def UserDelete(userID):
     try:
         user_ref = db.collection('Users').document(userID)
         if not user_ref.get().exists:
-            return jsonify({"error": "User not found"}), 404
+            return http_404('User not found')
 
         user_ref.delete()
-        return no_content_204()
+        return http_204()
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return http_500(str(e))
 
 
 @app.route('/users/<userID>', methods=['PUT'])
@@ -117,15 +123,15 @@ def UserUpdate(userID):
     try:
         data = request.get_json()
         if not data:
-            return bad_request_400("No update data provided")
+            return http_400("No update data provided")
 
         updated = UpdateUser(userID, data)
         if updated:
-            return ok_200("User updated successfully")
+            return http_200("User updated successfully")
         else:
-            return jsonify({"error": "User not found"}), 404
+            return http_404('User not found')
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return http_500(str(e))
 
 
-app.run(debug=True, host='0.0.0.0', port=5000)
+app.run(host='0.0.0.0', port=5000, threaded=True)
