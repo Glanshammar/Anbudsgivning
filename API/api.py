@@ -1,7 +1,13 @@
+import os
+import sys
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.dirname(current_dir)
+sys.path.insert(0, root_dir)
+
 from flask import Flask, request, jsonify
 from httpcodes import *
-from Database.database import db, GetDocument, AddDocument, DeleteDocument
-from Database.users import AddUser, UpdateUser, GetUsers, GetUserByID
+from Database import db, GetDocument, AddDocument, DeleteDocument, AddUser, UpdateUser, GetUsers, GetUserByID
 import threading
 
 app = Flask(__name__)
