@@ -17,6 +17,13 @@
             "request": "launch",
             "program": "${workspaceFolder}/API/api.py",
             "console": "integratedTerminal"
+        },
+    ],
+    "compounds": [
+        {
+            "name": "Main+API",
+            "configurations": ["Main", "API"],
+            "stopAll": true
         }
     ]
 }
