@@ -18,6 +18,20 @@
             "program": "${workspaceFolder}/API/api.py",
             "console": "integratedTerminal"
         },
+        {
+            "name": "Agent",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/Agents/agent.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Agent - ZeroMQ",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/Agents/agent_zmq.py",
+            "console": "integratedTerminal"
+        },
     ],
     "compounds": [
         {

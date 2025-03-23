@@ -1,6 +1,7 @@
 from Database.database import DBMain
 from Database.users import UsersMain
 from Database.domain import DomainMain
+from Agents.agent import AgentMain
 import requests
 
 if __name__ == "__main__":
@@ -10,6 +11,8 @@ if __name__ == "__main__":
             DBMain()
         elif command.lower() == "users":
             UsersMain()
+        elif command.lower() == "agent":
+            AgentMain()
         elif command.lower() == "status":
             response = requests.get("http://127.0.0.1:5000/status")
             if response.status_code == 200:
