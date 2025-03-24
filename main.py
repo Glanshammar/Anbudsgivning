@@ -1,7 +1,7 @@
-from Database.database import DBMain
-from Database.users import UsersMain
-from Database.domain import DomainMain
-from Agents.agent import AgentMain
+from Data.database import DBMain
+from Data import UsersMain
+from Data.domain import DomainMain
+from Agents import AgentManager, AgentType
 import requests
 
 if __name__ == "__main__":

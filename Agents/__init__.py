@@ -1,1 +1,1 @@
-from .agent import AgentMain, StartAgent, StopAgent, manager, AgentType
+from .agents import AgentType, AgentManager
