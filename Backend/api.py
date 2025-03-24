@@ -7,7 +7,8 @@ sys.path.insert(0, root_dir)
 
 from flask import Flask, request, jsonify
 from httpcodes import *
-from Database import db, GetDocument, AddDocument, DeleteDocument, AddUser, UpdateUser, GetUsers, GetUserByID
+from Data import db, GetDocument, AddDocument, DeleteDocument, AddUser, UpdateUser, GetUsers, GetUserByID
+from Agents import AgentType, StartAgent, StopAgent, AgentMain, manager
 import threading
 
 app = Flask(__name__)
@@ -17,9 +18,21 @@ app = Flask(__name__)
 def Status():
     return http_200()
 
-@app.route('/threads', methods=['GET'])
-def Threads():
-    return threading.active_count()
+@app.route('/api', methods=['GET'])
+def api():
+    name = request.args.get('name')
+    age = request.args.get('age', type=int)  # Specify type for conversion
+
+    # Use the parameters as needed
+    print(f"Name: {name}, Age: {age}")
+    return "Query parameters processed"
+
+@app.route('/agent', methods=['POST'])
+def Agent():
+    name = request.args.get('name')
+    agent_type = request.args.get('type')
+    task = request.args.get('task')
+    StartAgent(name=name, agent_type=agent_type, task=task)
 
 @app.route('/document/<collection>/<documentID>', methods=['GET'])
 def DocumentGetById(collection, documentID):
