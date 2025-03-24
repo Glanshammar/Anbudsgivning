@@ -131,5 +131,5 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# Database creds file
-Database/creds.json
+# Data creds file
+Data/creds.json
