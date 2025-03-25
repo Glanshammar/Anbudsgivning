@@ -1,6 +1,6 @@
 import re
 import os
-from Data.database import db
+from Backend import db
 from urllib.parse import urlparse
 
 def ExtractMainDomain(url):
