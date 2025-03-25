@@ -7,9 +7,9 @@ sys.path.insert(0, root_dir)
 
 from flask import Flask, request, jsonify
 from httpcodes import *
-from Data import db, GetDocument, AddDocument, DeleteDocument, AddUser, UpdateUser, GetUsers, GetUserByID
-from Agents import AgentType, StartAgent, StopAgent, AgentMain, manager
-import threading
+from Data import Consultant, Company
+from Agents import AgentType, AgentManager
+
 
 app = Flask(__name__)
 
@@ -21,136 +21,36 @@ def Status():
 @app.route('/api', methods=['GET'])
 def api():
     name = request.args.get('name')
-    age = request.args.get('age', type=int)  # Specify type for conversion
+    age = request.args.get('age', type=int)
 
-    # Use the parameters as needed
-    print(f"Name: {name}, Age: {age}")
-    return "Query parameters processed"
+    return f"Name: {name}, Age: {age}"
 
 @app.route('/agent', methods=['POST'])
 def Agent():
     name = request.args.get('name')
     agent_type = request.args.get('type')
     task = request.args.get('task')
-    StartAgent(name=name, agent_type=agent_type, task=task)
+    manager = AgentManager
 
-@app.route('/document/<collection>/<documentID>', methods=['GET'])
-def DocumentGetById(collection, documentID):
-    try:
-        doc_ref = GetDocument(collection_name=collection, document_id=documentID)
-        doc = doc_ref.get()
-        if doc.exists:
-            return http_200(doc.to_dict())
-        else:
-            return http_404('Document not found')
-    except Exception as e:
-        return http_500(str(e))
-
-
-@app.route('/document/<collection>', methods=['GET'])
-def DocumentGetAll(collection):
-    try:
-        collection_ref = db.collection(collection)
-        docs = collection_ref.stream()
-
-        documents = []
-        for doc in docs:
-            documents.append({
-                "id": doc.id,
-                "data": doc.to_dict()
-            })
-
-        return http_200({
-            "collection": collection,
-            "documents": documents
-        })
-    except Exception as e:
-        return http_500(str(e))
-
-
-@app.route('/document/<collection>/<documentID>', methods=['POST'])
-def DocumentCreate(collection, documentID):
+@app.route('/company', methods=['POST'])
+def CreateCompany():
     try:
         data = request.get_json()
-
-        if not data:
-            return http_400('No data provided')
-
-        document_id = AddDocument(collection_name=collection, document_data=data, document_name=documentID)
-
-        return http_200(f"{document_id} was created.")
+        new_company = Company(**data)
+        company_id = Company.AddCompany(new_company)
+        return jsonify({"message": "Company created successfully", "id": company_id}), 201
     except Exception as e:
-        return http_500(str(e))
+        return jsonify({"error": str(e)}), 400
 
-
-@app.route('/document/<collection>/<documentID>', methods=['PUT'])
-def DocumentUpdate(collection, documentID):
-    data = request.get_json()
-
-
-@app.route('/users', methods=['POST'])
-def UserAdd():
-    try:
-        user_data = request.get_json()
-        if not user_data:
-            return http_400("No user data provided")
-
-        # Call the add_user function with the received data
-        new_user_id = AddUser(user_data)
-
-        return jsonify({"message": "User added successfully", "id": new_user_id}), 201
-    except Exception as e:
-        return http_500(str(e))
-
-
-@app.route('/users/', methods=['GET'])
-def UsersGet():
-    try:
-        return jsonify(GetUsers()), 200
-    except Exception as e:
-        return http_500(str(e))
-
-
-@app.route('/users/<userID>', methods=['GET'])
-def UserGetById(userID):
-    try:
-        user_data = GetUserByID(userID)
-
-        if user_data:
-            return jsonify(user_data), 200
-        else:
-            return http_404('User not found')
-    except Exception as e:
-        return http_500(str(e))
-
-
-@app.route('/users/<userID>', methods=['DELETE'])
-def UserDelete(userID):
-    try:
-        user_ref = db.collection('Users').document(userID)
-        if not user_ref.get().exists:
-            return http_404('User not found')
-
-        user_ref.delete()
-        return http_204()
-    except Exception as e:
-        return http_500(str(e))
-
-
-@app.route('/users/<userID>', methods=['PUT'])
-def UserUpdate(userID):
+@app.route('/consultant', methods=['POST'])
+def CreateConsultant():
     try:
         data = request.get_json()
-        if not data:
-            return http_400("No update data provided")
-
-        updated = UpdateUser(userID, data)
-        if updated:
-            return http_200("User updated successfully")
-        else:
-            return http_404('User not found')
+        new_consultant = Consultant(**data)
+        consultant_id = Consultant.AddConsultant(new_consultant)
+        return jsonify({"message": "Consultant created successfully", "id": consultant_id}), 201
     except Exception as e:
-        return http_500(str(e))
-
+        return jsonify({"error": str(e)}), 400
+    
 
 app.run(host='0.0.0.0', port=5000, threaded=True)
