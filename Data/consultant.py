@@ -2,22 +2,39 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
 from google.cloud.firestore_v1.document import DocumentReference
-from Data.database import db
+from Backend import db
 import requests
+from typing import List
+
 
 class Consultant:
-    pass
+    def __init__(self, name: str, expertise: List[str], years_of_experience: int, certifications: List[str],
+                 contact_email: str, contact_phone: str, availability: str, hourly_rate: float):
+        self.name = name
+        self.expertise = expertise
+        self.years_of_experience = years_of_experience
+        self.certifications = certifications
+        self.contact_email = contact_email
+        self.contact_phone = contact_phone
+        self.availability = availability
+        self.hourly_rate = hourly_rate
+
+    def __str__(self):
+        return f"Consultant(name={self.name}, expertise={self.expertise}, years_of_experience={self.years_of_experience}, " \
+               f"certifications={self.certifications}, contact_email={self.contact_email}, " \
+               f"contact_phone={self.contact_phone}, availability={self.availability}, hourly_rate={self.hourly_rate})"
+
 
 def AddConsultant(consultant_data):
     try:
-        consultant_ref = db.collection('Users')
+        consultant_ref = db.collection('Consultants')
         new_consultant_ref = consultant_ref.add(consultant_data)[1]
         print(f"✅ Consultant added successfully with ID: {new_consultant_ref.id}")
     except Exception as e:
         print(f"❌ Error adding consultant: {str(e)}")
 
 def GetConsultants():
-    consultant_ref = db.collection('Users')
+    consultant_ref = db.collection('Consultants')
     consultants = consultant_ref.stream()
     consultant_list = []
     for user in consultants:
@@ -28,7 +45,7 @@ def GetConsultants():
 
 
 def GetConsultantByID(consultantID):
-    consultant_ref = db.collection('Users').document(consultantID)
+    consultant_ref = db.collection('Consultants').document(consultantID)
     consultant = consultant_ref.get()
 
     if consultant.exists:
@@ -40,7 +57,7 @@ def GetConsultantByID(consultantID):
 
 
 def DeleteConsultant(consultantID):
-    consultant_ref = db.collection('Users').document(consultantID)
+    consultant_ref = db.collection('Consultants').document(consultantID)
     if consultant_ref.get().exists:
         consultant_ref.delete()
         print(f"✅ User with ID {consultantID} deleted successfully")
@@ -48,8 +65,8 @@ def DeleteConsultant(consultantID):
         print(f"❌ User with ID {consultantID} not found")
 
 
-def UpdateUser(user_id, user_data):
-    user_ref = db.collection('Users').document(user_id)
+def UpdateConsultant(user_id, user_data):
+    user_ref = db.collection('Consultants').document(user_id)
     if not user_ref.get().exists:
         return False
 
@@ -64,30 +81,3 @@ def UpdateUser(user_id, user_data):
         print(f"❌ No valid fields provided for update for user {user_id}")
         return False
 
-
-def UsersMain():
-    while True:
-        print("\n--- Consultant Operations ---")
-        print("1. Create consultant")
-        print("2. View consultants")
-        print("3. Delete consultant")
-        print("4. Exit")
-
-        choice = input("Enter your choice (1-5): ").strip()
-
-        if choice == '1':
-            response = requests.post("http://127.0.0.1:5000/status")
-            if response.status_code == 201:
-                print(response.json()["message"])
-            else:
-                print(f"Unexpected status code: {response.status_code}")
-        elif choice == '2':
-            print(GetConsultants())
-        elif choice == '3':
-            consultantID = int(input("Enter consultant ID: "))
-            DeleteConsultant(consultantID)
-        elif choice == '4':
-            print("Exiting user management...")
-            break
-        else:
-            print("Invalid choice. Please try again.")
