@@ -132,4 +132,4 @@ dmypy.json
 cython_debug/
 
 # Data creds file
-Data/creds.json
+creds.json
