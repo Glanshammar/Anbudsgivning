@@ -15,14 +15,21 @@
             "name": "API",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/API/api.py",
+            "program": "${workspaceFolder}/Backend/api.py",
             "console": "integratedTerminal"
         },
         {
             "name": "Agent",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/Agents/agent.py",
+            "program": "${workspaceFolder}/Agents/agents.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Server",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/Backend/server.py",
             "console": "integratedTerminal"
         },
     ],
