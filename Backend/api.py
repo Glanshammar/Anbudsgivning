@@ -6,51 +6,108 @@ root_dir = os.path.dirname(current_dir)
 sys.path.insert(0, root_dir)
 
 from flask import Flask, request, jsonify
+from jwt_authentication import *
+import jwt
+import zmq
+from functools import wraps
 from httpcodes import *
 from Data import Consultant, Company
 from Agents import AgentType, AgentManager
 
 
 app = Flask(__name__)
+context = zmq.Context()
+socket = context.socket(zmq.REQ)
+socket.connect("tcp://localhost:5001")
 
 
 @app.route('/status', methods=['GET'])
 def Status():
     return http_200()
 
-@app.route('/api', methods=['GET'])
-def api():
-    name = request.args.get('name')
-    age = request.args.get('age', type=int)
+@app.route('/login', methods=['POST'])
+def Login():
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
+    if username == "admin" and password == "password":
+        token = GenerateJWT(user_id=1)
+        return http_200(token)
+    return http_401('Invalid credentials.')
 
-    return f"Name: {name}, Age: {age}"
 
-@app.route('/agent', methods=['POST'])
-def Agent():
-    name = request.args.get('name')
-    agent_type = request.args.get('type')
-    task = request.args.get('task')
-    manager = AgentManager
-
+# @JWTAuthentication
 @app.route('/company', methods=['POST'])
 def CreateCompany():
     try:
         data = request.get_json()
-        new_company = Company(**data)
-        company_id = Company.AddCompany(new_company)
-        return jsonify({"message": "Company created successfully", "id": company_id}), 201
+        command_data = {
+            'command': 'create',
+            'params': {
+                'collection_name': 'Companies',
+                'document_data': data
+            }
+        }
+        socket.send_json(command_data)
+        response = socket.recv_json()
+        
+        if "message" in response:
+            return jsonify({"message": response["message"]}), 201
+        else:
+            return jsonify({"error": response.get("error", "Unknown error")}), 400
+    
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"exception": str(e)}), 400
 
-@app.route('/consultant', methods=['POST'])
-def CreateConsultant():
-    try:
-        data = request.get_json()
-        new_consultant = Consultant(**data)
-        consultant_id = Consultant.AddConsultant(new_consultant)
-        return jsonify({"message": "Consultant created successfully", "id": consultant_id}), 201
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+
+# @JWTAuthentication
+@app.route('/consultant', methods=['POST', 'GET'])
+def ConsultantsRequest():
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            command_data = {
+                'command': 'create',
+                'params': {
+                    'collection_name': 'Consultants',
+                    'document_data': data
+                }
+            }
+            
+            socket.send_json(command_data)
+            response = socket.recv_json()
+            
+            if "message" in response:
+                return jsonify({"message": response["message"]}), 201
+            else:
+                return jsonify({"error": response.get("error", "Unknown error")}), 400
+        
+        except Exception as e:
+            return jsonify({"exception": str(e)}), 400
+    
+    elif request.method == 'GET':
+        try:
+            document_id = request.args.get('id')
+            params = {'collection_name': 'Consultants'}
+            
+            if document_id:
+                params['document_id'] = document_id.strip()
+            
+            command_data = {
+                'command': 'read',
+                'params': params
+            }
+            
+            socket.send_json(command_data)
+            response = socket.recv_json()
+            
+            if isinstance(response, dict) and "error" not in response:
+                return jsonify(response), 200
+            else:
+                return jsonify({"error": response.get("error", "Failed to retrieve data")}), 400
+        
+        except Exception as e:
+            return jsonify({"exception": str(e)}), 400
     
 
 app.run(host='0.0.0.0', port=5000, threaded=True)

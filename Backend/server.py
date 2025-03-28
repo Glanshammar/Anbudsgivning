@@ -6,6 +6,10 @@ from opstatus import OpStatus
 import os
 import shutil
 from time import sleep
+from jwt_authentication import JWTAuthentication
+from httpcodes import *
+import zmq
+import json
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(current_dir)
@@ -51,7 +55,15 @@ def CreateDocument(collection_name, document_data, document_name=None):
         return OpStatus.INVALID_INPUT
 
 
-def GetDocument(collection_name, document_id):
+def GetDocument(collection_name: str, document_id: str = None) -> DocumentReference:
+    if not document_id or document_id.strip() == "":
+        raise ValueError("Missing document ID")
+    
+    collection_ref = db.collection(collection_name.strip())
+    return collection_ref.document(document_id.strip())
+
+
+def GetDocument2(collection_name, document_id):
     collection_ref = db.collection(collection_name)
     documents = [doc.id for doc in collection_ref.stream()]
 
@@ -76,6 +88,19 @@ def GetDocuments(collection_name):
 
     except Exception as e:
         print(f"❌ Error getting documents: {str(e)}")
+        return OpStatus.INVALID_INPUT
+
+
+def CountDocuments(collection_name):
+    try:
+        collection_ref = db.collection(collection_name)
+        count = sum(1 for _ in collection_ref.stream())
+
+        print(f"✅ Collection '{collection_name}' contains {count} documents.")
+        return count
+
+    except Exception as e:
+        print(f"❌ Error counting documents: {str(e)}")
         return OpStatus.INVALID_INPUT
 
 
@@ -252,26 +277,53 @@ def CollectionAndDocument():
     return collection, document
 
 
-def ProcessCommand(command):
+def ProcessCommand(command, params):
     if command.lower() == 'exit':
         return False
     elif command.lower() == 'create':
-        collection, _ = CollectionAndDocument()
-        document_data = input("Enter document data (as a dictionary): ")
-        CreateDocument(collection.id, eval(document_data))
+        collection_name = params.get('collection_name')
+        document_data = params.get('document_data')
+        return CreateDocument(collection_name, document_data)
     elif command.lower() == 'read':
-        collection, document = CollectionAndDocument()
-        print(document.get().to_dict())
+        collection_name = params.get('collection_name')
+        document_id = params.get('document_id')
+        
+        if document_id:  # Single document read
+            try:
+                document = GetDocument(collection_name, document_id)
+                return document.get().to_dict()
+            except ValueError as e:
+                return {"error": str(e)}
+        else:  # Full collection read
+            try:
+                collection_ref = db.collection(collection_name)
+                docs = collection_ref.stream()
+                return {doc.id: doc.to_dict() for doc in docs}
+            except Exception as e:
+                return {"error": str(e)}
     elif command.lower() == 'update':
-        collection, document = CollectionAndDocument()
-        update_data = input("Enter update data (as a dictionary): ")
-        UpdateDocument(collection.id, document.id, eval(update_data))
+        collection_name = params.get('collection_name')
+        document_id = params.get('document_id')
+        update_data = params.get('update_data')
+        return UpdateDocument(collection_name, document_id, update_data)
     elif command.lower() == 'delete':
-        collection, document = CollectionAndDocument()
-        DeleteDocument(document)
+        collection_name = params.get('collection_name')
+        document_id = params.get('document_id')
+        document = GetDocument(collection_name, document_id)
+        if isinstance(document, DocumentReference):
+            return DeleteDocument(document)
+        else:
+            return {"error": "Document not found"}
     else:
-        print("Unknown command. Available commands: create, read, update, delete, exit")
-    return True
+        return {"error": "Unknown command. Available commands: create, read, update, delete, exit"}
+
+def worker_task():
+        worker = context.socket(zmq.DEALER)
+        worker.connect("inproc://backend-workers")
+        while True:
+            client_id, empty, *message = worker.recv_multipart()
+            response = ProcessCommand(message[0].decode(), json.loads(message[1]))
+            worker.send_multipart([client_id, b'', json.dumps(response).encode()])
 
 
 if __name__ == '__main__':
@@ -293,8 +345,35 @@ if __name__ == '__main__':
         firebase_admin.initialize_app(cred)
 
     db = firestore.client()
+    context = zmq.Context()
+    socket = context.socket(zmq.REP)
+    socket.bind("tcp://0.0.0.0:5001")
+
+    print("ZeroMQ server is running on port 5001...")
 
     while True:
-        collection, document = CollectionAndDocument()
-        print(document)
-        sleep(60)
+        try:
+            message = socket.recv_json()
+            command = message.get('command')
+            params = message.get('params', {})
+            response = ProcessCommand(command, params)
+            socket.send_json(response)
+        
+        except (json.JSONDecodeError, KeyError) as e:
+            socket.send_json({"error": f"Invalid request: {str(e)}"})
+
+
+'''
+ROUTER-DEALER Pattern
+
+    db = firestore.client()
+    context = zmq.Context()
+    frontend = context.socket(zmq.ROUTER)  # Handles client connections
+    backend = context.socket(zmq.DEALER)   # Distributes to workers
+    frontend.bind("tcp://0.0.0.0:5001")
+    backend.bind("inproc://backend-workers")
+    print("ZeroMQ server is running on port 5001...")
+
+    # Proxy messages between frontend and backend
+    zmq.proxy(frontend, backend)
+'''
