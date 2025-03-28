@@ -41,6 +41,8 @@ def Login():
 def CreateCompany():
     try:
         data = request.get_json()
+        if not isinstance(data, dict):
+            return jsonify({"error": "Invalid data format. Expected a JSON object."}), 400
         command_data = {
             'command': 'create',
             'params': {
@@ -50,6 +52,9 @@ def CreateCompany():
         }
         socket.send_json(command_data)
         response = socket.recv_json()
+        
+        if isinstance(response, int):
+            return jsonify({"error": "Unexpected response from server"}), 500
         
         if "message" in response:
             return jsonify({"message": response["message"]}), 201
@@ -70,7 +75,8 @@ def ConsultantsRequest():
                 'command': 'create',
                 'params': {
                     'collection_name': 'Consultants',
-                    'document_data': data
+                    'document_data': data,
+                    'document_name': request.args.get('docname')
                 }
             }
             
@@ -81,7 +87,6 @@ def ConsultantsRequest():
                 return jsonify({"message": response["message"]}), 201
             else:
                 return jsonify({"error": response.get("error", "Unknown error")}), 400
-        
         except Exception as e:
             return jsonify({"exception": str(e)}), 400
     
