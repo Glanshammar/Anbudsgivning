@@ -32,6 +32,13 @@
             "program": "${workspaceFolder}/Backend/server.py",
             "console": "integratedTerminal"
         },
+        {
+            "name": "ZMQ Test",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/Tests/zmq_test.py",
+            "console": "integratedTerminal"
+        },
     ],
     "compounds": [
         {
