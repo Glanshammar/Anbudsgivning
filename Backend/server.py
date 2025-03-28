@@ -283,7 +283,10 @@ def ProcessCommand(command, params):
     elif command.lower() == 'create':
         collection_name = params.get('collection_name')
         document_data = params.get('document_data')
-        return CreateDocument(collection_name, document_data)
+        document_name = params.get('document_name')
+        if not isinstance(document_data, dict):
+            return {"error": "document_data must be a dictionary"}
+        return CreateDocument(collection_name, document_data, document_name)
     elif command.lower() == 'read':
         collection_name = params.get('collection_name')
         document_id = params.get('document_id')
@@ -348,7 +351,6 @@ if __name__ == '__main__':
     context = zmq.Context()
     socket = context.socket(zmq.REP)
     socket.bind("tcp://0.0.0.0:5001")
-
     print("ZeroMQ server is running on port 5001...")
 
     while True:
@@ -358,22 +360,5 @@ if __name__ == '__main__':
             params = message.get('params', {})
             response = ProcessCommand(command, params)
             socket.send_json(response)
-        
         except (json.JSONDecodeError, KeyError) as e:
             socket.send_json({"error": f"Invalid request: {str(e)}"})
-
-
-'''
-ROUTER-DEALER Pattern
-
-    db = firestore.client()
-    context = zmq.Context()
-    frontend = context.socket(zmq.ROUTER)  # Handles client connections
-    backend = context.socket(zmq.DEALER)   # Distributes to workers
-    frontend.bind("tcp://0.0.0.0:5001")
-    backend.bind("inproc://backend-workers")
-    print("ZeroMQ server is running on port 5001...")
-
-    # Proxy messages between frontend and backend
-    zmq.proxy(frontend, backend)
-'''
