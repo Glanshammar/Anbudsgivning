@@ -35,8 +35,8 @@
     ],
     "compounds": [
         {
-            "name": "Main+API",
-            "configurations": ["Main", "API"],
+            "name": "Server+API",
+            "configurations": ["Server", "API"],
             "stopAll": true
         }
     ]
