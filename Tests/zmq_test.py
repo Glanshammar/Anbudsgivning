@@ -9,7 +9,6 @@ class RouterServer:
         self.socket.bind(address)
         print(f"Router server bound to {address}")
 
-        # Command handlers dictionary
         self.command_handlers = {
             b"add": self.add,
             b"sub": self.sub,
@@ -31,7 +30,7 @@ class RouterServer:
 
     def start(self):
         while True:
-            frames = self.router.recv_multipart()
+            frames = self.socket.recv_multipart()
             
             threading.Thread(
                 target=self._process_request,
@@ -39,11 +38,11 @@ class RouterServer:
                 daemon=True
             ).start()
 
-def _process_request(self, frames):
-    identity, _, command, *args = frames
-    handler = self.command_handlers.get(command, lambda *x: b"Unknown command")
-    response = handler(*args)
-    self.router.send_multipart([identity, b"", response])
+    def _process_request(self, frames):
+        identity, _, command, *args = frames
+        handler = self.command_handlers.get(command, lambda *x: b"Unknown command")
+        response = handler(*args)
+        self.socket.send_multipart([identity, b"", response])
 
 
 class DealerClient:
@@ -59,16 +58,14 @@ class DealerClient:
 
 
 if __name__ == "__main__":
-    # Start server in background thread
     server = RouterServer()
     server_thread = threading.Thread(target=server.start, daemon=True)
     server_thread.start()
 
-    # Create clients with unique IDs
     client_a = DealerClient("ClientA")
     client_b = DealerClient("ClientB")
 
-    # Make requests from different clients
-    print("Client A Add:", client_a.send_request("add", "10", "5"))    # 15.0
-    print("Client B Upper:", client_b.send_request("upper", "hello"))  # HELLO
-    print("Unknown command:", client_a.send_request("invalid"))        # Unknown command
+    print("Client A Add:", client_a.send_request("add", "10", "5"))
+    print("Client B Upper:", client_b.send_request("upper", "hello"))
+    print("Unknown command:", client_a.send_request("invalid"))
+    print("Echo:", client_b.send_request("echo", "Your mom!"))
