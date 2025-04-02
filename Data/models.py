@@ -1,5 +1,32 @@
 from typing import List
-from Backend import server
+from faker import Faker
+from typing import List
+import random
+
+fake = Faker()
+Faker.seed(42)
+
+INDUSTRIES = [
+    "Construction", "Healthcare", "Technology", "Finance", 
+    "Manufacturing", "Education", "Energy", "Transportation",
+]
+
+SERVICES_BY_INDUSTRY = {
+    "Construction": ["Project Management", "Structural Engineering", 
+                    "Cost Estimation", "Site Safety", "Quality Control"],
+    "Healthcare": ["Clinical Consultancy", "Hospital Management", 
+                  "Medical Equipment", "Staff Training", "Compliance"],
+    "Technology": ["Cloud Migration", "Cybersecurity", "AI Solutions",
+                  "Software Development", "IT Infrastructure"],
+    "Finance": ["Risk Management", "Investment Strategy", 
+               "Regulatory Compliance", "Mergers & Acquisitions",
+               "Tax Optimization"]
+}
+
+CERTIFICATIONS = [
+    "PMP", "CCNA", "AWS Certified", "CISSP", "Six Sigma", 
+    "CFA", "PE License", "ISO 9001"
+]
 
 class Company:
     COLLECTION_NAME = 'Companies'
@@ -33,32 +60,29 @@ class Company:
             'past_projects': self.past_projects,
             'current_projects': self.current_projects
         }
+    
+    @staticmethod
+    def Generate(seed=None) -> 'Company':
+        if seed is not None:
+            Faker.seed(seed)
+            random.seed(seed)
 
-    @classmethod
-    def AddCompany(cls, company):
-        company_data = company.to_dict()
-        return server.CreateDocument(cls.COLLECTION_NAME, company_data)
+        industry = random.choice(INDUSTRIES)
+        services = random.sample(
+            SERVICES_BY_INDUSTRY.get(industry, ["General Consulting"]),
+            k=random.randint(3, 5)
+        )
 
-    @classmethod
-    def GetCompanies(cls):
-        companies = server.GetDocuments(cls.COLLECTION_NAME)
-        return [cls(**doc.to_dict(), id=doc.id) for doc in companies]
-
-    @classmethod
-    def GetCompanyByID(cls, company_id):
-        doc = server.db.collection(cls.COLLECTION_NAME).document(company_id).get()
-        if doc.exists:
-            company_data = doc.to_dict()
-            return cls(**company_data, id=doc.id)
-        return None
-
-    @classmethod
-    def DeleteCompany(cls, company_id):
-        return server.DeleteDocument(server.db.collection(cls.COLLECTION_NAME).document(company_id))
-
-    @classmethod
-    def UpdateCompany(cls, company_id, update_data):
-        return server.UpdateDocument(cls.COLLECTION_NAME, company_id, update_data)
+        return Company(
+            name=fake.company(),
+            industry=industry,
+            services_offered=services,
+            registration_number=fake.bothify(text="??-####-####-###"),
+            contact_email=fake.company_email(),
+            contact_phone=fake.numerify(text="+1 (###) ###-####"),
+            past_projects=[fake.catch_phrase() for _ in range(random.randint(2, 3))],
+            current_projects=[fake.bs() for _ in range(random.randint(1, 2))]
+        )
 
 
 class Consultant:
@@ -82,31 +106,118 @@ class Consultant:
             'contact_email': self.contact_email,
             'contact_phone': self.contact_phone,
         }
-
-    @classmethod
-    def AddConsultant(cls, consultant):
-        consultant_data = consultant.to_dict()
-        return server.CreateDocument(cls.COLLECTION_NAME, consultant_data)
-
-    @classmethod
-    def GetConsultants(cls):
-        consultants = server.GetDocuments(cls.COLLECTION_NAME)
-        return [cls(**doc.to_dict()) for doc in consultants]
-
-    @classmethod
-    def GetConsultantByID(cls, consultant_id):
-        doc = server.db.collection(cls.COLLECTION_NAME).document(consultant_id).get()
-        if doc.exists:
-            consultant_data = doc.to_dict()
-            consultant_data['id'] = doc.id
-            return cls(**consultant_data)
-        return None
-
-    @classmethod
-    def DeleteConsultant(cls, consultant_id):
-        return server.DeleteDocument(server.db.collection(cls.COLLECTION_NAME).document(consultant_id))
-
-    @classmethod
-    def UpdateConsultant(cls, consultant_id, update_data):
-        return server.UpdateDocument(cls.COLLECTION_NAME, consultant_id, update_data)
     
+    @staticmethod
+    def Generate(seed=None) -> 'Consultant':
+        if seed is not None:
+            Faker.seed(seed)
+            random.seed(seed)
+
+        exp_years = random.randint(2, 25)
+        base_certs = random.sample(CERTIFICATIONS, k=random.randint(1, 3))
+
+        return Consultant(
+            name=fake.name(),
+            expertise=random.sample(INDUSTRIES, k=random.randint(1, 2)),
+            years_of_experience=exp_years,
+            certifications=base_certs + [
+                f"{fake.word().title()} Certified Specialist"
+                for _ in range(random.randint(0, 2))
+            ],
+            contact_email=fake.free_email(),
+            contact_phone=fake.numerify(text="+1 (###) ###-####")
+        )
+
+
+class TenderDocument:
+    def __init__(self, company_name, contact_details, address, registration_certificates,
+                 tax_clearance_certificates, business_profile, project_description,
+                 timelines, objectives, technical_requirements, workforce_requirements,
+                 key_personnel, pricing_breakdown, payment_terms, financial_statements,
+                 contract_terms, insurance_certificates, industry_registrations,
+                 evaluation_criteria, administrative_requirements):
+        # Basic Company Information
+        self.company_name = company_name
+        self.contact_details = contact_details
+        self.address = address
+        self.registration_certificates = registration_certificates
+        self.tax_clearance_certificates = tax_clearance_certificates
+        self.business_profile = business_profile
+
+        # Project Overview
+        self.project_description = project_description
+        self.timelines = timelines
+        self.objectives = objectives
+
+        # Technical Requirements
+        self.technical_requirements = technical_requirements
+
+        # Employment and Workforce Details
+        self.workforce_requirements = workforce_requirements
+        self.key_personnel = key_personnel
+
+        # Financial Information
+        self.pricing_breakdown = pricing_breakdown
+        self.payment_terms = payment_terms
+        self.financial_statements = financial_statements
+
+        # Legal and Compliance Documents
+        self.contract_terms = contract_terms
+        self.insurance_certificates = insurance_certificates
+        self.industry_registrations = industry_registrations
+
+        # Evaluation Criteria
+        self.evaluation_criteria = evaluation_criteria
+
+        # Administrative Requirements
+        self.administrative_requirements = administrative_requirements
+
+    def __repr__(self):
+        return f"TenderDocument(company_name={self.company_name}, project_description={self.project_description})"
+
+    @staticmethod
+    def Generate(seed=None) -> 'TenderDocument':
+        if seed is not None:
+            Faker.seed(seed)
+            random.seed(seed)
+
+        industry = random.choice([
+            "Construction", "Healthcare", "Technology", "Finance", "Manufacturing"
+        ])
+        
+        return TenderDocument(
+            company_name=fake.company(),
+            contact_details=f"Email: {fake.company_email()}, Phone: {fake.phone_number()}",
+            address=fake.address(),
+            registration_certificates=[fake.bothify(text="??-####-####") for _ in range(random.randint(1, 2))],
+            tax_clearance_certificates=[fake.bothify(text="TAX-#####")],
+            business_profile=fake.catch_phrase(),
+            project_description=f"Project to develop {fake.bs()} in the {industry} industry.",
+            timelines=f"{random.randint(3, 24)} months",
+            objectives=f"To achieve {fake.catch_phrase()} within budget and timeline.",
+            technical_requirements=[f"{fake.word().title()} Compliance" for _ in range(random.randint(2, 4))],
+            workforce_requirements=f"{random.randint(3, 30)} workers required",
+            key_personnel=[f"{fake.name()}, {random.choice(['Project Manager', 'Engineer', 'Consultant'])}"
+                           for _ in range(random.randint(1, 3))],
+            pricing_breakdown=f"${random.randint(100000, 5000000):,.2f}",
+            payment_terms="50% upfront, 50% upon completion.",
+            financial_statements="Available upon request.",
+            contract_terms="Standard terms and conditions apply.",
+            insurance_certificates=[f"{random.choice(['Public Liability', 'Professional Indemnity'])} Insurance"],
+            industry_registrations=[f"{industry} Association Membership"],
+            evaluation_criteria="Technical competence: 50%, Pricing: 50%",
+            administrative_requirements=f"Submit by {fake.date_between(start_date='+15d', end_date='+200d')}"
+        )
+        
+        
+class BusinessCalendar():
+    def __init__(self):
+        self.availability = []
+        self.months
+
+    def AddConsultant(self, consultant_id, months : list):
+        self.availability.append(consultant_id)
+
+    @staticmethod
+    def Generate():
+        pass
