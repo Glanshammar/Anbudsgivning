@@ -35,8 +35,18 @@
     ],
     "compounds": [
         {
+            "name": "Server+Main",
+            "configurations": ["Server", "Main"],
+            "stopAll": true
+        },
+        {
             "name": "Server+API",
             "configurations": ["Server", "API"],
+            "stopAll": true
+        },
+        {
+            "name": "Server+API+Main",
+            "configurations": ["Server", "API", "Main"],
             "stopAll": true
         }
     ]
