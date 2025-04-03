@@ -2,6 +2,7 @@ from typing import List
 from faker import Faker
 from typing import List
 import random
+from datetime import datetime, timedelta, date
 
 fake = Faker()
 Faker.seed(42)
@@ -11,18 +12,6 @@ INDUSTRIES = [
     "Manufacturing", "Education", "Energy", "Transportation",
 ]
 
-SERVICES_BY_INDUSTRY = {
-    "Construction": ["Project Management", "Structural Engineering", 
-                    "Cost Estimation", "Site Safety", "Quality Control"],
-    "Healthcare": ["Clinical Consultancy", "Hospital Management", 
-                  "Medical Equipment", "Staff Training", "Compliance"],
-    "Technology": ["Cloud Migration", "Cybersecurity", "AI Solutions",
-                  "Software Development", "IT Infrastructure"],
-    "Finance": ["Risk Management", "Investment Strategy", 
-               "Regulatory Compliance", "Mergers & Acquisitions",
-               "Tax Optimization"]
-}
-
 CERTIFICATIONS = [
     "PMP", "CCNA", "AWS Certified", "CISSP", "Six Sigma", 
     "CFA", "PE License", "ISO 9001"
@@ -31,34 +20,19 @@ CERTIFICATIONS = [
 class Company:
     COLLECTION_NAME = 'Companies'
 
-    def __init__(self, name: str, industry: str, services_offered: List[str], registration_number: str,
-                 contact_email: str, contact_phone: str, past_projects: List[str], current_projects: List[str], id: str = None):
+    def __init__(self, name: str, industry: str, id: str = None):
         self.id = id
         self.name = name
         self.industry = industry
-        self.services_offered = services_offered
-        self.registration_number = registration_number
-        self.contact_email = contact_email
-        self.contact_phone = contact_phone
-        self.past_projects = past_projects
-        self.current_projects = current_projects
 
     def __str__(self):
-        return f"Company(id={self.id}, name={self.name}, industry={self.industry}, services_offered={self.services_offered}, " \
-               f"registration_number={self.registration_number}, contact_email={self.contact_email}, " \
-               f"contact_phone={self.contact_phone}, past_projects={self.past_projects}, " \
-               f"current_projects={self.current_projects})"
+        return f"Company(id={self.id}, name={self.name}, industry={self.industry}"
 
     def to_dict(self):
         return {
+            'id': self.id,
             'name': self.name,
             'industry': self.industry,
-            'services_offered': self.services_offered,
-            'registration_number': self.registration_number,
-            'contact_email': self.contact_email,
-            'contact_phone': self.contact_phone,
-            'past_projects': self.past_projects,
-            'current_projects': self.current_projects
         }
     
     @staticmethod
@@ -66,45 +40,27 @@ class Company:
         if seed is not None:
             Faker.seed(seed)
             random.seed(seed)
-
-        industry = random.choice(INDUSTRIES)
-        services = random.sample(
-            SERVICES_BY_INDUSTRY.get(industry, ["General Consulting"]),
-            k=random.randint(3, 5)
-        )
-
+        
         return Company(
             name=fake.company(),
-            industry=industry,
-            services_offered=services,
-            registration_number=fake.bothify(text="??-####-####-###"),
-            contact_email=fake.company_email(),
-            contact_phone=fake.numerify(text="+1 (###) ###-####"),
-            past_projects=[fake.catch_phrase() for _ in range(random.randint(2, 3))],
-            current_projects=[fake.bs() for _ in range(random.randint(1, 2))]
+            id=f"company_{fake.bothify(text='????_####')}",
+            industry=random.choice(INDUSTRIES)
         )
 
 
 class Consultant:
     COLLECTION_NAME = 'Consultants'
 
-    def __init__(self, name, expertise, years_of_experience, certifications,
-                 contact_email, contact_phone):
+    def __init__(self, name: str, consultant_id: str, expertise: list):
         self.name = name
+        self.id = consultant_id
         self.expertise = expertise
-        self.years_of_experience = years_of_experience
-        self.certifications = certifications
-        self.contact_email = contact_email
-        self.contact_phone = contact_phone
 
     def to_dict(self):
         return {
             'name': self.name,
             'expertise': self.expertise,
-            'years_of_experience': self.years_of_experience,
-            'certifications': self.certifications,
-            'contact_email': self.contact_email,
-            'contact_phone': self.contact_phone,
+            'id': self.id,
         }
     
     @staticmethod
@@ -113,13 +69,14 @@ class Consultant:
             Faker.seed(seed)
             random.seed(seed)
 
-        exp_years = random.randint(2, 25)
+        exp_months = random.randint(6, 20*12)
         base_certs = random.sample(CERTIFICATIONS, k=random.randint(1, 3))
 
         return Consultant(
             name=fake.name(),
+            consultant_id=f"consultant_{fake.bothify(text='????_####')}",
             expertise=random.sample(INDUSTRIES, k=random.randint(1, 2)),
-            years_of_experience=exp_years,
+            months_of_experience=exp_months,
             certifications=base_certs + [
                 f"{fake.word().title()} Certified Specialist"
                 for _ in range(random.randint(0, 2))
@@ -130,50 +87,14 @@ class Consultant:
 
 
 class TenderDocument:
-    def __init__(self, company_name, contact_details, address, registration_certificates,
-                 tax_clearance_certificates, business_profile, project_description,
-                 timelines, objectives, technical_requirements, workforce_requirements,
-                 key_personnel, pricing_breakdown, payment_terms, financial_statements,
-                 contract_terms, insurance_certificates, industry_registrations,
-                 evaluation_criteria, administrative_requirements):
-        # Basic Company Information
-        self.company_name = company_name
-        self.contact_details = contact_details
-        self.address = address
-        self.registration_certificates = registration_certificates
-        self.tax_clearance_certificates = tax_clearance_certificates
-        self.business_profile = business_profile
-
-        # Project Overview
-        self.project_description = project_description
-        self.timelines = timelines
-        self.objectives = objectives
-
-        # Technical Requirements
+    def __init__(self, technical_requirements, workforce_requirements, start_date, end_date):
         self.technical_requirements = technical_requirements
-
-        # Employment and Workforce Details
         self.workforce_requirements = workforce_requirements
-        self.key_personnel = key_personnel
-
-        # Financial Information
-        self.pricing_breakdown = pricing_breakdown
-        self.payment_terms = payment_terms
-        self.financial_statements = financial_statements
-
-        # Legal and Compliance Documents
-        self.contract_terms = contract_terms
-        self.insurance_certificates = insurance_certificates
-        self.industry_registrations = industry_registrations
-
-        # Evaluation Criteria
-        self.evaluation_criteria = evaluation_criteria
-
-        # Administrative Requirements
-        self.administrative_requirements = administrative_requirements
+        self.start_date = start_date
+        self.end_date = end_date
 
     def __repr__(self):
-        return f"TenderDocument(company_name={self.company_name}, project_description={self.project_description})"
+        return f"TenderDocument(company_name={self.company_name}, project_description={self.project_description}, start_date={self.start_date}, end_date={self.end_date})"
 
     @staticmethod
     def Generate(seed=None) -> 'TenderDocument':
@@ -184,40 +105,124 @@ class TenderDocument:
         industry = random.choice([
             "Construction", "Healthcare", "Technology", "Finance", "Manufacturing"
         ])
-        
+
+        start_date = datetime.now() + timedelta(days=random.randint(1, 30))
+        end_date = start_date + timedelta(days=random.randint(30, 180))
+
         return TenderDocument(
-            company_name=fake.company(),
-            contact_details=f"Email: {fake.company_email()}, Phone: {fake.phone_number()}",
-            address=fake.address(),
-            registration_certificates=[fake.bothify(text="??-####-####") for _ in range(random.randint(1, 2))],
-            tax_clearance_certificates=[fake.bothify(text="TAX-#####")],
-            business_profile=fake.catch_phrase(),
-            project_description=f"Project to develop {fake.bs()} in the {industry} industry.",
-            timelines=f"{random.randint(3, 24)} months",
-            objectives=f"To achieve {fake.catch_phrase()} within budget and timeline.",
             technical_requirements=[f"{fake.word().title()} Compliance" for _ in range(random.randint(2, 4))],
             workforce_requirements=f"{random.randint(3, 30)} workers required",
-            key_personnel=[f"{fake.name()}, {random.choice(['Project Manager', 'Engineer', 'Consultant'])}"
-                           for _ in range(random.randint(1, 3))],
-            pricing_breakdown=f"${random.randint(100000, 5000000):,.2f}",
-            payment_terms="50% upfront, 50% upon completion.",
-            financial_statements="Available upon request.",
-            contract_terms="Standard terms and conditions apply.",
-            insurance_certificates=[f"{random.choice(['Public Liability', 'Professional Indemnity'])} Insurance"],
-            industry_registrations=[f"{industry} Association Membership"],
-            evaluation_criteria="Technical competence: 50%, Pricing: 50%",
-            administrative_requirements=f"Submit by {fake.date_between(start_date='+15d', end_date='+200d')}"
+            start_date = start_date,
+            end_date = end_date
         )
         
         
-class BusinessCalendar():
-    def __init__(self):
-        self.availability = []
-        self.months
-
-    def AddConsultant(self, consultant_id, months : list):
-        self.availability.append(consultant_id)
+class BusinessCalendar:
+    COLLECTION_NAME = 'BusinessCalendars'
+    VALID_MONTH_FORMATS = [
+        "%Y-%m",    # ISO Standard (2025-04)
+        "%m/%Y",    # US Format (04/2025)
+        "%Y/%m",    # Alternative ISO (2025/04)
+        "%m-%Y",    # Hyphenated (04-2025)
+        "%b %Y",    # Abbreviated month (Apr 2025)
+        "%B %Y"     # Full month name (April 2025)
+    ]
+    
+    def __init__(self, company_id: str):
+        self.company_id = company_id
+        self.availability = {}
 
     @staticmethod
-    def Generate():
-        pass
+    def _normalize_month(input_month) -> str:
+        if isinstance(input_month, str) and BusinessCalendar._valid_month_format(input_month):
+            return input_month
+            
+        if isinstance(input_month, (datetime, date)):
+            return input_month.strftime("%Y-%m")
+
+        if isinstance(input_month, int):
+            if 1 <= input_month <= 12:
+                now = datetime.now()
+                return f"{now.year}-{input_month:02d}"
+            raise ValueError(f"Invalid month number: {input_month} (must be 1-12)")
+
+        if isinstance(input_month, tuple) and len(input_month) == 2:
+            year, month = input_month
+            return f"{year}-{month:02d}"
+
+        try:
+            for fmt in ["%Y-%m", "%m/%Y", "%Y/%m", "%b %Y", "%B %Y"]:
+                try:
+                    dt = datetime.strptime(str(input_month), fmt)
+                    return dt.strftime("%Y-%m")
+                except ValueError:
+                    continue
+        except TypeError:
+            pass
+
+        raise ValueError(f"Unrecognized month format: {input_month}")
+
+    def add_availability(self, consultant_id: str, months: list):
+        if not all(self._valid_month_format(m) for m in months):
+            raise ValueError("Months must be in YYYY-MM format")
+            
+        self.availability.setdefault(consultant_id, []).extend(
+            m for m in months if m not in self.availability.get(consultant_id, [])
+        )
+        self.availability[consultant_id].sort()
+
+    def remove_availability(self, consultant_id: str, months: list):
+        if consultant_id in self.availability:
+            self.availability[consultant_id] = [
+                m for m in self.availability[consultant_id] 
+                if m not in months
+            ]
+
+    def get_available_consultants(self, target_month) -> list:
+        normalized_month = self._normalize_month(target_month)
+        if not self._valid_month_format(normalized_month):
+            raise ValueError(f"Invalid month format: {target_month}")
+            
+        return [
+            cid for cid, months in self.availability.items()
+            if normalized_month in months
+        ]
+
+    def get_consultant_availability(self, consultant_id: str) -> list:
+        return self.availability.get(consultant_id, []).copy()
+
+    @staticmethod
+    def _valid_month_format(month_str: str) -> bool:
+        try:
+            datetime.strptime(month_str, "%Y-%m")
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def Generate(seed=None, company=None, consultants=None) -> 'BusinessCalendar':
+        if seed is not None:
+            Faker.seed(seed)
+            random.seed(seed)
+
+        if company is None:
+            company = Company.Generate()
+
+        if consultants is None:
+            consultants = [Consultant.Generate() for _ in range(random.randint(3, 8))]
+        
+        calendar = BusinessCalendar(company_id=company.id)
+
+        for consultant in consultants:
+            for _ in range(random.randint(1, 3)):
+                start = datetime.today() + timedelta(days=random.randint(0, 180))
+                duration_months = random.randint(1, 6)
+                
+                months = [
+                    (start + timedelta(days=30*i)).strftime("%Y-%m")
+                    for i in range(duration_months)
+                ]
+                calendar.add_availability(consultant.id, months)
+
+        return calendar
+
