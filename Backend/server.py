@@ -1,18 +1,25 @@
+import os
+import sys
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.dirname(current_dir)
+sys.path.insert(0, root_dir)
+
+
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
 from google.cloud.firestore_v1.document import DocumentReference
 from zmq.auth import Authenticator, create_certificates
+from httpcodes import *
 from enum import Enum, IntEnum
 from Agents import *
 from multiprocessing import Process
-import os
 import shutil
 import zmq
 import json
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = os.path.dirname(current_dir)
+
 cred_file = os.path.join(root_dir, 'creds.json')
 master_agent = None
 db = None
@@ -53,14 +60,14 @@ def MasterAgent():
 
 def GetCollection(collection_name):
     collections = [collection.id for collection in db.collections()]
-    if collection_name not in collections:
-        return OpStatus.DOCUMENT_NOT_FOUND
-    return OpStatus.SUCCESS
+    if collection_name in collections:
+        return OpStatus.SUCCESS
+    return OpStatus.DOCUMENT_NOT_FOUND
 
 
 def CreateDocument(collection_name, document_data, document_name=None):
     if not collection_name:
-        return "Error: Collection name cannot be empty."
+        return OpStatus.DOCUMENT_NOT_FOUND
     if not isinstance(document_data, dict):
         return "Error: Document data must be a dictionary."
     try:
@@ -84,7 +91,7 @@ def ReadDocument(collection_name: str, document_id: str = None):
         doc_ref = collection_ref.document(document_id.strip())
         doc = doc_ref.get()
         if doc.exists:
-            return str(doc.to_dict())
+            return doc.to_dict()
         else:
             return f"Error: Document '{document_id}' does not exist"
     except Exception as e:
@@ -178,10 +185,10 @@ def UpdateField(document, fieldID: int, value):
 def DeleteField(document, fieldID: int):
     doc = document.get()
     if not doc.exists:
-        return "Error: Document does not exist!"
+        return ('Document does not exist.', 404)
     fields = doc.to_dict()
     if not fields or fieldID < 1 or fieldID > len(fields):
-        return "Error: Invalid field ID."
+        return ('Invalid field ID.', 400)
     try:
         field_name = list(fields.keys())[fieldID - 1]
         document.update({field_name: firestore.DELETE_FIELD})
@@ -197,7 +204,7 @@ def ProcessCommand(command, params):
             document_data = params.get('document_data')
             document_name = params.get('document_name')
             if not isinstance(document_data, dict):
-                return "error: document_data must be a dictionary"
+                return ('document_data must be a dictionary', 400)
             return CreateDocument(collection_name, document_data, document_name)
         case 'read':
             collection_name = params.get('collection_name')
@@ -206,7 +213,7 @@ def ProcessCommand(command, params):
             if document_id:  # Single document read
                 try:
                     document = ReadDocument(collection_name, document_id)
-                    return document.get().to_dict()
+                    return document
                 except ValueError as e:
                     return f"Exception:  {str(e)}"
             else:  # Full collection read
@@ -228,11 +235,13 @@ def ProcessCommand(command, params):
             if isinstance(document, DocumentReference):
                 return DeleteDocument(document)
             else:
-                return {"error": "Document not found"}
+                return ('Document not found', 404)
         case 'status':
-            return 'Server is Online!'
+            return 'Server is online!'
         case 'agent':
             return MasterAgent()
+        case 'collection':
+            return GetCollection('Consultants')
         case _:
             return 'Unknown command.'
 
@@ -301,14 +310,18 @@ if __name__ == '__main__':
             if command == 'exit':
                 break
 
-            response = ProcessCommand(command, params)
-            data = {
-                'data': response
-            }
-            error = {
-                'error': 'This is an error!'
-            }
-            server.send_json(error)
+            raw_response = ProcessCommand(command, params)
+            if isinstance(raw_response, tuple) and len(raw_response) == 2:
+                response_data = {
+                    'data': raw_response[0],
+                    'status_code': raw_response[1]
+                }
+            else:
+                response_data = {
+                    'data': raw_response,
+                    'status_code': 200
+                }
+            server.send_json(response_data)
         except (json.JSONDecodeError, KeyError) as e:
             server.send_json({"error": f"Invalid request: {str(e)}"})
 
