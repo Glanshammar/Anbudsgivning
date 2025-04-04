@@ -12,7 +12,7 @@ import jwt
 import zmq
 from functools import wraps
 from httpcodes import *
-from Data import Consultant, Company
+from Data import Consultant, Company, Expertise
 from Agents import AgentType, AgentManager
 
 
@@ -21,19 +21,39 @@ context = zmq.Context()
 socket = context.socket(zmq.REQ)
 socket.connect("tcp://localhost:5001")
 
-def HandleExceptions(func):
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except BadRequest:
-            return http_400('Invalid JSON in request body.')
-        except (zmq.ZMQError, ConnectionRefusedError):
-            return http_503('Server unavailable.')
-        except Exception as e:
-            app.logger.error(f"Internal Server Error: {str(e)}")
-            return http_500('Internal Server Error')
-    return wrapper
 
+def ProcessRequest(action: str =None, collection_name: str =None, data: dict =None, doc_id:str =None):
+    try:
+        command = {
+            'command': action,
+            'params': {
+                'collection_name': collection_name,
+                'document_data': data,
+                'document_id': doc_id
+            }
+        }
+        socket.send_json(command)
+        backend_response = socket.recv_json()
+        return jsonify(backend_response["data"]), backend_response.get("status_code", 200)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+def ValidateModel(model_class):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            data = request.get_json()
+            try:
+                model_instance = model_class(**data)
+                request.validated_data = model_instance.to_dict()
+            except TypeError as e:
+                return http_400(f"Validation Error: {str(e)}")
+            except ValueError as e:
+                return http_422(f"Data Error: {str(e)}")
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 def Response():
     try:
@@ -44,23 +64,20 @@ def Response():
 
 
 @app.route('/server-status', methods=['GET'])
-@HandleExceptions
 def ServerStatus():
     socket.send_json({
         'command': 'status'
     })
-    data, status_code = Response()
-    return jsonify(data), status_code
+    response, status_code = Response()
+    return jsonify(response), status_code
 
 
 @app.route('/api-status', methods=['GET'])
-@HandleExceptions
 def ApiStatus():
     http_200('API is Online!')
 
 
 @app.route('/login', methods=['POST'])
-@HandleExceptions
 def Login():
     data = request.get_json()
     username = data.get("username")
@@ -73,58 +90,44 @@ def Login():
 
 # @JWTAuthentication
 @app.route('/company', methods=['POST'])
-@HandleExceptions
+@ValidateModel(Company)
 def CreateCompany():
-    data = request.get_json()
-
-    if not isinstance(data, dict):
-        return http_400('Invalid data format. Expected a JSON object.')
-    
-    command_data = {
-        'command': 'create',
-        'params': {
-            'collection_name': 'Companies',
-            'document_data': data
-        }
-    }
-    socket.send_json(command_data)
-    data, status_code = Response()
-    return jsonify(data), status_code
+    return ProcessRequest(action='create', collection_name='Company', data=request.get_json(), doc_id='Company Info')
 
 
 # @JWTAuthentication
 @app.route('/consultant', methods=['POST', 'GET'])
-@HandleExceptions
+@ValidateModel(Consultant)
 def ConsultantsRequest():
     if request.method == 'POST':
-        data = request.get_json()
-        command_data = {
-            'command': 'create',
-            'params': {
-                'collection_name': 'Consultants',
-                'document_data': data,
-                'document_name': request.args.get('docname')
-            }
-        }
-    
-        socket.send_json(command_data)
-        data, status_code = Response()
-        return jsonify(data), status_code
+        return ProcessRequest(action='create', 
+                            collection_name='Consultants',
+                            data=request.get_json(),
+                            doc_id=request.args.get('docname'))
     elif request.method == 'GET':
-        document_id = request.args.get('id')
-        params = {'collection_name': 'Consultants'}
-        
-        if document_id:
-            params['document_id'] = document_id.strip()
-        
-        command_data = {
-            'command': 'read',
-            'params': params
-        }
-        
-        socket.send_json(command_data)
-        data, status_code = Response()
-        return jsonify(data), status_code
+        return ProcessRequest(action='read',
+                            collection_name='Consultants',
+                            data=None,
+                            doc_id=None)
+
+
+@app.route('/expertise', methods=['POST', 'GET', 'PUT'])
+def ModelsRequest():
+    if request.method == 'POST':
+        return ProcessRequest(action='create',
+                              collection_name='Company',
+                              data=request.get_json(),
+                              doc_id='Expertise')
+    elif request.method == 'GET':
+        return ProcessRequest(action='read',
+                              collection_name='Company',
+                              data=None,
+                              doc_id='Expertise')
+    elif request.method == 'PUT':
+        return ProcessRequest(action='update',
+                              collection_name='Company',
+                              data=request.get_json(),
+                              doc_id='Expertise')
 
 
 app.run(host='0.0.0.0', port=5000, threaded=True)
