@@ -1,2 +1,2 @@
 from .domain import DomainMain
-from .models import Consultant, Company, TenderDocument, BusinessCalendar
+from .models import *

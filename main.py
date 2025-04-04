@@ -17,9 +17,6 @@ if __name__ == "__main__":
         
         match command:
             case 'consultant':
-                consult = Consultant.Generate()
-                print(consult.to_dict())
-            case 'consult':
                 consultant_dummy_data = Consultant.Generate()
                 command_data = {
                     'command': 'create',
@@ -43,10 +40,6 @@ if __name__ == "__main__":
 
                 client.send_json(command_data)
                 response = client.recv_json()
-            case 'agent':
-                manager = AgentManager()
-            case 'domain':
-                DomainMain('C:/Users/Mondus/Documents/Länkar.txt')
             case 'status':
                 response = requests.get("http://127.0.0.1:5000/server-status")
                 print(response.status_code)

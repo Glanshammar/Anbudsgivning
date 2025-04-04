@@ -122,8 +122,6 @@ def CountDocuments(collection_name):
 def UpdateDocument(collection_name, document_id, document_data, merge=True):
     if not collection_name or not document_id:
         return "Error: Collection name and document ID cannot be empty."
-    if not isinstance(document_data, dict):
-        return "Error: Document data must be a dictionary."
     try:
         collection_ref = db.collection(collection_name)
         doc_ref = collection_ref.document(document_id)
@@ -202,10 +200,10 @@ def ProcessCommand(command, params):
         case 'create':
             collection_name = params.get('collection_name')
             document_data = params.get('document_data')
-            document_name = params.get('document_name')
+            document_id = params.get('document_id')
             if not isinstance(document_data, dict):
                 return ('document_data must be a dictionary', 400)
-            return CreateDocument(collection_name, document_data, document_name)
+            return CreateDocument(collection_name, document_data, document_id)
         case 'read':
             collection_name = params.get('collection_name')
             document_id = params.get('document_id')
