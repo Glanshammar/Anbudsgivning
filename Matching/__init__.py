@@ -1,1 +1,1 @@
-from .matching import is_tender_match
+from .matching import IsTenderMatch

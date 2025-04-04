@@ -4,7 +4,7 @@ import requests
 import zmq
 from zmq.auth import load_certificate
 from datetime import datetime, timedelta
-from Matching import is_tender_match
+from Matching import IsTenderMatch
 
 context = zmq.Context()
 client = context.socket(zmq.REQ)
@@ -17,17 +17,15 @@ if __name__ == "__main__":
         
         match command:
             case 'consultant':
-                consultant_dummy_data = Consultant.Generate()
-                command_data = {
-                    'command': 'create',
-                    'params': {
-                        'collection_name': 'Consultants',
-                        'document_data': consultant_dummy_data.to_dict()
-                    }
-                }
+                consultant_data = Consultant.Generate()
 
-                client.send_json(command_data)
-                response = client.recv_json()
+                response = requests.post(
+                    url='http://127.0.0.1:5000/consultants',
+                    json=consultant_data.to_dict()
+                )
+
+                print(response.status_code)
+                print(response.json())
             case 'company':
                 company_dummy_data = Company.Generate()
                 command_data = {
@@ -62,11 +60,20 @@ if __name__ == "__main__":
                     print(f"    Current month status: {'Available' if str(current_month).zfill(2) in availability else 'Unavailable'}")
                     print("-" * 40)
             case 'match':
+                params = []
+                with open(file='/home/mondus/Documents/anbud1.txt', mode='r') as file:
+                    for line in file:
+                        params.append(line.strip())
+                
+                start_date = datetime.strptime(params[0], '%Y-%m-%d')
+                end_date = datetime.strptime(params[1], '%Y-%m-%d')
+                qualifications = params[2].split(',')
+
                 company = Company.Generate()
-                consultants = [Consultant.Generate() for x in range(5)]
+                consultants = [Consultant.Generate() for x in range(10)]
                 calendar = BusinessCalendar.Generate(company=company, consultants=consultants)
-                document = TenderDocument.Generate()
-                results = is_tender_match(tender=document, company=company, consultants=consultants, calendar=calendar)
+                document = TenderDocument(qualifications=qualifications, start_date=start_date, end_date=end_date, workforce_requirements=3)
+                results = IsTenderMatch(tender=document, company=company, consultants=consultants, calendar=calendar)
                 print(results)
             case 'exit':
                 break

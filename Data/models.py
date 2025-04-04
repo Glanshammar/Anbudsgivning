@@ -7,6 +7,7 @@ from enum import IntEnum
 fake = Faker()
 Faker.seed(42)
 
+
 class Expertise(IntEnum):
     Fullstack = 1
     Frontend = 2
@@ -17,11 +18,12 @@ class Expertise(IntEnum):
 
 
 class Company:
-    def __init__(self, name: str = None, id: str = None):
+    def __init__(self, name: str =None, id: str =None, calendar: int =None):
         if not isinstance(name, str):
             raise ValueError("Name must be a string")
-        self.id = id or f"company_{fake.bothify(text='????_####')}"
-        self.name = name or fake.company()
+        self.id = id
+        self.name = name
+        self.calendar = calendar
 
     def __str__(self):
         return f"Company(id={self.id}, name={self.name}"
@@ -30,6 +32,7 @@ class Company:
         return {
             'id': self.id,
             'name': self.name,
+            'calendar': self.calendar
         }
     
     @staticmethod
@@ -37,28 +40,30 @@ class Company:
         if seed is not None:
             Faker.seed(seed)
             random.seed(seed)
-        
+
         return Company(
             name=fake.company(),
-            id=f"company_{fake.bothify(text='????_####')}"
+            id=f"company_{fake.bothify(text='????_####')}",
         )
 
 
 class Consultant:
-    def __init__(self, consultant_id: str, name: str, expertise: List[int]):
-        if not consultant_id.startswith('consultant_'):
-            raise ValueError("Invalid ID format")
+    def __init__(self, id: int, name: str, expertise: List[int], company_id: int):
+        if not isinstance(id, int):
+            raise ValueError("Invalid ID format. Must be int")
         if not all(e in Expertise.__members__.values() for e in expertise):
             raise ValueError("Invalid expertise values")
-        self.id = consultant_id
+        self.id = id
         self.name = name
         self.expertise = expertise
+        self.company_id = company_id
 
     def to_dict(self):
         return {
             'id': self.id,
             'name': self.name,
             'expertise': self.expertise,
+            'company_id': self.company_id
         }
     
     @staticmethod
@@ -69,14 +74,14 @@ class Consultant:
 
         return Consultant(
             name=fake.name(),
-            consultant_id=f"consultant_{fake.bothify(text='?????_#####')}",
-            expertise=random.sample(Expertise, k=random.randint(1, 3)),
+            id=random.randint(1, 1000),
+            expertise=random.sample(list(Expertise), k=random.randint(1, 3)),
+            company_id=0
         )
 
 
 class TenderDocument:
-    def __init__(self, industry: str, qualifications: List[str], workforce_requirements: List[str], start_date: datetime, end_date: datetime):
-        self.industry
+    def __init__(self, qualifications: List[int], workforce_requirements: int, start_date: datetime, end_date: datetime):
         self.qualifications = qualifications
         self.workforce_requirements = workforce_requirements
         self.start_date = start_date
@@ -91,16 +96,12 @@ class TenderDocument:
             Faker.seed(seed)
             random.seed(seed)
 
-        industry = random.choice([
-            "Construction", "Healthcare", "Technology", "Finance", "Manufacturing"
-        ])
-
         start_date = datetime.now() + timedelta(days=random.randint(1, 30))
         end_date = start_date + timedelta(days=random.randint(30, 180))
 
         return TenderDocument(
-            qualifications=[Expertise for x in range(random.randint(1, 3))],
-            workforce_requirements=f"{random.randint(3, 30)} workers required",
+            qualifications=[list(Expertise) for x in range(random.randint(1, 3))],
+            workforce_requirements=3,
             start_date = start_date,
             end_date = end_date
         )
@@ -116,8 +117,10 @@ class BusinessCalendar:
         "%B %Y"     # Full month name (April 2025)
     ]
     
-    def __init__(self):
+    def __init__(self, id: int, company_id: int = None):
         self.availability = {}
+        self.id = id
+        self.company_id = company_id
 
     @staticmethod
     def _normalize_month(input_month) -> str:
@@ -195,7 +198,7 @@ class BusinessCalendar:
         if consultants is None:
             consultants = [Consultant.Generate() for x in range(random.randint(3, 8))]
         
-        calendar = BusinessCalendar()
+        calendar = BusinessCalendar(random.randint(1, 100))
 
         for consultant in consultants:
             for _ in range(random.randint(1, 3)):
