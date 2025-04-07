@@ -18,10 +18,8 @@ def IsTenderMatch(
     
     print(f"Tender requires {tender.qualifications} and {tender.workforce_requirements} consultants.")
 
-    tender_qualifications = None
-
     if not tender or not company or not consultants or not calendar:
-        print("[ERROR] Invalid input provided to is_tender_match.")
+        print("[ERROR] Invalid input provided to tender match.")
         return False
 
     if tender.start_date >= tender.end_date:
@@ -40,16 +38,19 @@ def IsTenderMatch(
 
     def is_consultant_eligible(consultant: Consultant) -> bool:
         print(f"Checking consultant {consultant.id}...")
-
+        
         if not any(expertise in consultant.expertise for expertise in tender.qualifications):
             print(f"Consultant {consultant.id} lacks required expertise. ({consultant.expertise})")
             return False
+        
+        print(f"Consultant {consultant.id} has the required expertise. ({consultant.expertise})")
 
         required_months = month_range(tender.start_date, tender.end_date)
-        available_months = calendar.get_consultant_availability(consultant.id)
-        
+        available_months = calendar.get_consultant_availability(str(consultant.id))
+
         if not all(month in available_months for month in required_months):
-            print(f"[DEBUG] Consultant {consultant.id} is unavailable for required months: {required_months}")
+            unavailable_months = [month for month in required_months if month not in available_months]
+            print(f"[DEBUG] Consultant {consultant.id} is unavailable for required months: {unavailable_months}")
             return False
 
         print(f"[DEBUG] Consultant {consultant.id} meets all requirements.")

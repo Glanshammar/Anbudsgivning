@@ -2,28 +2,29 @@ from faker import Faker
 import random
 from typing import List
 from datetime import datetime, timedelta, date
-from enum import IntEnum
 
 fake = Faker()
 Faker.seed(42)
 
 
-class Expertise(IntEnum):
-    Fullstack = 1
-    Frontend = 2
-    Backend = 3
-    Architect = 4
-    AI = 5
-    Construction = 6
+Expertise = {
+    "Fullstack": 1,
+    "Frontend": 2,
+    "Backend": 3,
+    "Architect": 4,
+    "AI": 5,
+    "Construction": 6
+}
 
 
 class Company:
-    def __init__(self, name: str =None, id: str =None, calendar: int =None):
+    def __init__(self, name: str ='ACME AB', id: int =0, calendar: int =None, consultants: List[int] = []):
         if not isinstance(name, str):
             raise ValueError("Name must be a string")
         self.id = id
         self.name = name
         self.calendar = calendar
+        self.consultants = consultants
 
     def __str__(self):
         return f"Company(id={self.id}, name={self.name}"
@@ -34,25 +35,14 @@ class Company:
             'name': self.name,
             'calendar': self.calendar
         }
-    
-    @staticmethod
-    def Generate(seed=None) -> 'Company':
-        if seed is not None:
-            Faker.seed(seed)
-            random.seed(seed)
-
-        return Company(
-            name=fake.company(),
-            id=f"company_{fake.bothify(text='????_####')}",
-        )
 
 
 class Consultant:
-    def __init__(self, id: int, name: str, expertise: List[int], company_id: int):
+    def __init__(self, id: int = None, name: str = fake.name(), expertise: List[int] = [0, 1], company_id: int = 0):
         if not isinstance(id, int):
-            raise ValueError("Invalid ID format. Must be int")
-        if not all(e in Expertise.__members__.values() for e in expertise):
-            raise ValueError("Invalid expertise values")
+            raise ValueError('Invalid ID format. Must be int')
+        if not all(e in Expertise.values() for e in expertise):
+            raise ValueError('Invalid expertise values')
         self.id = id
         self.name = name
         self.expertise = expertise
@@ -65,46 +55,19 @@ class Consultant:
             'expertise': self.expertise,
             'company_id': self.company_id
         }
-    
-    @staticmethod
-    def Generate(seed=None) -> 'Consultant':
-        if seed is not None:
-            Faker.seed(seed)
-            random.seed(seed)
-
-        return Consultant(
-            name=fake.name(),
-            id=random.randint(1, 1000),
-            expertise=random.sample(list(Expertise), k=random.randint(1, 3)),
-            company_id=0
-        )
 
 
 class TenderDocument:
     def __init__(self, qualifications: List[int], workforce_requirements: int, start_date: datetime, end_date: datetime):
+        if not all(q in Expertise.values() for q in qualifications):
+            raise ValueError('Invalid qualifications')
         self.qualifications = qualifications
         self.workforce_requirements = workforce_requirements
         self.start_date = start_date
         self.end_date = end_date
 
     def __repr__(self):
-        return f"TenderDocument(company_name={self.company_name}, project_description={self.project_description}, start_date={self.start_date}, end_date={self.end_date})"
-
-    @staticmethod
-    def Generate(seed=None) -> 'TenderDocument':
-        if seed is not None:
-            Faker.seed(seed)
-            random.seed(seed)
-
-        start_date = datetime.now() + timedelta(days=random.randint(1, 30))
-        end_date = start_date + timedelta(days=random.randint(30, 180))
-
-        return TenderDocument(
-            qualifications=[list(Expertise) for x in range(random.randint(1, 3))],
-            workforce_requirements=3,
-            start_date = start_date,
-            end_date = end_date
-        )
+        return f'TenderDocument(company_name={self.company_name}, project_description={self.project_description}, start_date={self.start_date}, end_date={self.end_date})'
         
         
 class BusinessCalendar:
@@ -117,9 +80,8 @@ class BusinessCalendar:
         "%B %Y"     # Full month name (April 2025)
     ]
     
-    def __init__(self, id: int, company_id: int = None):
-        self.availability = {}
-        self.id = id
+    def __init__(self, company_id: int = 0, availability: dict = {}):
+        self.availability = availability
         self.company_id = company_id
 
     @staticmethod
@@ -185,31 +147,4 @@ class BusinessCalendar:
             return True
         except ValueError:
             return False
-
-    @staticmethod
-    def Generate(seed=None, company=None, consultants=None) -> 'BusinessCalendar':
-        if seed is not None:
-            Faker.seed(seed)
-            random.seed(seed)
-
-        if company is None:
-            company = Company.Generate()
-
-        if consultants is None:
-            consultants = [Consultant.Generate() for x in range(random.randint(3, 8))]
-        
-        calendar = BusinessCalendar(random.randint(1, 100))
-
-        for consultant in consultants:
-            for _ in range(random.randint(1, 3)):
-                start = datetime.today() + timedelta(days=random.randint(0, 180))
-                duration_months = random.randint(1, 6)
-                
-                months = [
-                    (start + timedelta(days=30*i)).strftime("%Y-%m")
-                    for i in range(duration_months)
-                ]
-                calendar.add_availability(consultant.id, months)
-
-        return calendar
 

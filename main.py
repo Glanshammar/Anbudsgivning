@@ -1,7 +1,8 @@
-from Data import DomainMain, Company, Consultant, TenderDocument, BusinessCalendar
+from Data import DomainMain, Company, Consultant, TenderDocument, BusinessCalendar, Expertise
 from Agents import AgentManager, AgentType
 import requests
 import zmq
+import json
 from zmq.auth import load_certificate
 from datetime import datetime, timedelta
 from Matching import IsTenderMatch
@@ -17,7 +18,7 @@ if __name__ == "__main__":
         
         match command:
             case 'consultant':
-                consultant_data = Consultant.Generate()
+                consultant_data = Consultant()
 
                 response = requests.post(
                     url='http://127.0.0.1:5000/consultants',
@@ -27,7 +28,7 @@ if __name__ == "__main__":
                 print(response.status_code)
                 print(response.json())
             case 'company':
-                company_dummy_data = Company.Generate()
+                company_dummy_data = Company()
                 command_data = {
                     'command': 'create',
                     'params': {
@@ -67,14 +68,84 @@ if __name__ == "__main__":
                 
                 start_date = datetime.strptime(params[0], '%Y-%m-%d')
                 end_date = datetime.strptime(params[1], '%Y-%m-%d')
-                qualifications = params[2].split(',')
+                qualifications = [Expertise[q.strip()] for q in params[2].split(',') if q.strip() in Expertise]
 
-                company = Company.Generate()
-                consultants = [Consultant.Generate() for x in range(10)]
-                calendar = BusinessCalendar.Generate(company=company, consultants=consultants)
+                company = Company()
+                consultants = [
+                    Consultant(id=0, name='Andreas Johansson', expertise=[2, 3], company_id=0),
+                    Consultant(id=1, name='Kalle Anka', expertise=[2, 3], company_id=0),
+                    Consultant(id=2, name='Robert Johansson', expertise=[2, 3], company_id=0)
+                ]
+                availability = ['2025-05', '2025-06', '2025-07', '2025-08', '2025-09', '2025-10', '2025-11', '2025-12']
+                calendar = BusinessCalendar()
+                calendar.add_availability(consultant_id=consultants[0].id, months=availability)
+                calendar.add_availability(consultant_id=consultants[1].id, months=availability)
+                availability.pop()
+                calendar.add_availability(consultant_id=consultants[2].id, months=availability)
                 document = TenderDocument(qualifications=qualifications, start_date=start_date, end_date=end_date, workforce_requirements=3)
+                print(consultants[0].expertise)
                 results = IsTenderMatch(tender=document, company=company, consultants=consultants, calendar=calendar)
                 print(results)
+            case 'match2':
+                # Fetch data from API
+                company_request = requests.get(url="http://127.0.0.1:5000/company", params={'id': '0'})
+                consultants_request = requests.get(url="http://127.0.0.1:5000/consultants")
+                tender_request = requests.get(url="http://127.0.0.1:5000/tenders", params={'tender_id': '0'})
+
+                # Parse JSON responses
+                company_data = json.loads(company_request.text)
+                consultants_data = json.loads(consultants_request.text)
+                tender_data = json.loads(tender_request.text)
+
+                # Create Consultant objects
+                consultants = [
+                    Consultant(
+                        id=consultant['id'],
+                        name=consultant['name'],
+                        expertise=consultant['expertise'],
+                        company_id=int(consultant['company_id'])
+                    )
+                    for consultant in consultants_data.values()
+                ]
+
+                # Create TenderDocument object
+                tender = TenderDocument(
+                    qualifications=list(tender_data['qualifications'].values()),
+                    workforce_requirements=tender_data['workforce'],
+                    start_date=datetime.strptime(tender_data['start_date'], "%Y-%m-%d"),
+                    end_date=datetime.strptime(tender_data['end_date'], "%Y-%m-%d")
+                )
+
+                # Create Company object
+                company = Company(
+                    name=company_data['name'],
+                    id=company_data['id'],
+                    calendar=company_data.get('calendar'),
+                    consultants=consultants_data.keys()
+                )
+
+                # Setup calendar availability
+                calendar = BusinessCalendar(company_id=company.id)
+                availability = ['2025-05', '2025-06', '2025-07', '2025-08', 
+                            '2025-09', '2025-10', '2025-11', '2025-12']
+
+                for month in availability:
+                    try:
+                        datetime.strptime(month, "%Y-%m")
+                    except ValueError:
+                        raise ValueError(f"Invalid month format: {month}")
+
+                # Add availability with string IDs
+                for consultant in consultants:
+                    calendar.add_availability(
+                        consultant_id=str(consultant.id),
+                        months=availability.copy()  # Prevent list reference issues
+                    )
+
+                # Perform matching
+                result = IsTenderMatch(tender=tender, company=company, 
+                                    consultants=consultants, calendar=calendar)
+                print("Is Tender Match:", result)
             case 'exit':
                 break
             case _:

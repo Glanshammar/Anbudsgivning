@@ -11,9 +11,9 @@ from firebase_admin import credentials
 from firebase_admin import firestore
 from google.cloud.firestore_v1.document import DocumentReference
 from zmq.auth import Authenticator, create_certificates
-from httpcodes import *
 from enum import Enum, IntEnum
 from Agents import *
+from Matching import IsTenderMatch
 from multiprocessing import Process
 import shutil
 import zmq
@@ -70,15 +70,21 @@ def CreateDocument(collection_name, document_data, document_name=None):
         return OpStatus.DOCUMENT_NOT_FOUND
     if not isinstance(document_data, dict):
         return "Error: Document data must be a dictionary."
+
     try:
         collection_ref = db.collection(collection_name)
-        if document_name:
-            new_doc_ref = collection_ref.document(document_name)
-            new_doc_ref.set(document_data)
-            return f"Success: Document added successfully with name: {document_name}"
-        else:
-            new_doc_ref = collection_ref.add(document_data)[1]
-            return f"Success: Document added successfully with ID: {new_doc_ref.id}"
+
+        count_query = collection_ref
+        count_snapshot = count_query.get()
+        document_count = len(count_snapshot)
+
+        if not document_name:
+            document_name = str(document_count + 1)
+
+        new_doc_ref = collection_ref.document(document_name)
+        new_doc_ref.set(document_data)
+
+        return f"Success: Document added successfully with name: {document_name}"
     except Exception as e:
         return f"Error: Error adding document: {str(e)}"
 
@@ -110,23 +116,33 @@ def GetDocuments(collection_name):
         return f"Error: Error getting documents: {str(e)}"
 
 
-def CountDocuments(collection_name):
-    try:
-        collection_ref = db.collection(collection_name)
-        count = sum(1 for _ in collection_ref.stream())
-        return f"Success: Collection '{collection_name}' contains {count} documents."
-    except Exception as e:
-        return f"Error: Error counting documents: {str(e)}"
-
-
-def UpdateDocument(collection_name, document_id, document_data, merge=True):
+def UpdateDocument(collection_name, document_id, document_data, merge=True, add_section=False, section_key=None, section_data=None):
     if not collection_name or not document_id:
         return "Error: Collection name and document ID cannot be empty."
+
+    if document_data is None and not add_section:
+        return "Error: No data provided for update."
+
     try:
+        # Fetch the collection and document reference
         collection_ref = db.collection(collection_name)
         doc_ref = collection_ref.document(document_id)
+
+        # Check if the document exists
         if not doc_ref.get().exists:
             return f"Error: Document '{document_id}' does not exist"
+
+        # If add_section is True, add or update the specified section
+        if add_section and section_key and isinstance(section_data, dict):
+            existing_data = doc_ref.get().to_dict() or {}
+            nested_data = existing_data.get(section_key, {})
+            if isinstance(nested_data, dict):
+                nested_data.update(section_data)
+            else:
+                nested_data = section_data
+            document_data = {section_key: nested_data}
+
+        # Update the document with merged data
         doc_ref.set(document_data, merge=merge)
         return f"Success: Document '{document_id}' updated successfully"
     except Exception as e:
@@ -224,8 +240,23 @@ def ProcessCommand(command, params):
         case 'update':
             collection_name = params.get('collection_name')
             document_id = params.get('document_id')
-            update_data = params.get('update_data')
-            return UpdateDocument(collection_name, document_id, update_data)
+            document_data = params.get('document_data', {})
+            add_section = params.get('add_section', False)
+            section_key = params.get('section_key')
+            section_data = params.get('section_data', {})
+
+            if not collection_name or not document_id:
+                return ("Error: Collection name and document ID required", 400)
+
+            result = UpdateDocument(
+                collection_name=collection_name,
+                document_id=document_id,
+                document_data=document_data,
+                add_section=add_section,
+                section_key=section_key,
+                section_data=section_data
+            )
+            return (result, 200) if "Success" in result else (result, 400)
         case 'delete':
             collection_name = params.get('collection_name')
             document_id = params.get('document_id')

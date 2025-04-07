@@ -1,6 +1,5 @@
 import re
 import os
-from Backend import db
 from urllib.parse import urlparse
 
 def ExtractMainDomain(url):
@@ -65,6 +64,6 @@ def DomainMain(input_file):
         print(f"Error: File '{input_file}' not found.")
     else:
         parsed_links = ParseLinks(input_file)
-        SaveLinksToDB(db, parsed_links)
+        # SaveLinksToDB(db, parsed_links)
 
         print(f"URLs have been successfully processed and saved to the database.")
