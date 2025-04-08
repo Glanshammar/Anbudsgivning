@@ -77,7 +77,9 @@ class BusinessCalendar:
         "%Y/%m",    # Alternative ISO (2025/04)
         "%m-%Y",    # Hyphenated (04-2025)
         "%b %Y",    # Abbreviated month (Apr 2025)
-        "%B %Y"     # Full month name (April 2025)
+        "%B %Y",    # Full month name (April 2025)
+        "%d-%b-%Y", # Day-Month-Year format (08-Apr-2025)
+        "%d/%m/%Y"  # Day/Month/Year format (08/04/2025)
     ]
     
     def __init__(self, company_id: int = 0, availability: dict = {}):

@@ -76,14 +76,17 @@ if __name__ == "__main__":
                     Consultant(id=1, name='Kalle Anka', expertise=[2, 3], company_id=0),
                     Consultant(id=2, name='Robert Johansson', expertise=[2, 3], company_id=0)
                 ]
+
                 availability = ['2025-05', '2025-06', '2025-07', '2025-08', '2025-09', '2025-10', '2025-11', '2025-12']
                 calendar = BusinessCalendar()
                 calendar.add_availability(consultant_id=consultants[0].id, months=availability)
                 calendar.add_availability(consultant_id=consultants[1].id, months=availability)
                 availability.pop()
                 calendar.add_availability(consultant_id=consultants[2].id, months=availability)
+
                 document = TenderDocument(qualifications=qualifications, start_date=start_date, end_date=end_date, workforce_requirements=3)
                 print(consultants[0].expertise)
+                
                 results = IsTenderMatch(tender=document, company=company, consultants=consultants, calendar=calendar)
                 print(results)
             case 'match2':

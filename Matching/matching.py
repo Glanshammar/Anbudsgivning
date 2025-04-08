@@ -28,7 +28,7 @@ def IsTenderMatch(
 
     def month_range(start: datetime, end: datetime) -> List[str]:
         months = []
-        current = start.replace(day=1)
+        current = datetime.strptime(start.strftime("%Y-%m"), "%Y-%m")
         while current <= end:
             months.append(current.strftime("%Y-%m"))
             next_month = current.month % 12 + 1
@@ -50,16 +50,16 @@ def IsTenderMatch(
 
         if not all(month in available_months for month in required_months):
             unavailable_months = [month for month in required_months if month not in available_months]
-            print(f"[DEBUG] Consultant {consultant.id} is unavailable for required months: {unavailable_months}")
+            print(f"Consultant {consultant.id} is unavailable for required months: {unavailable_months}")
             return False
 
-        print(f"[DEBUG] Consultant {consultant.id} meets all requirements.")
+        print(f"Consultant {consultant.id} meets all requirements.\n")
         return True
 
     eligible_consultants = [consultant for consultant in consultants if is_consultant_eligible(consultant)]
 
     if eligible_consultants:
-        print(f"[DEBUG] Found {len(eligible_consultants)} eligible consultants.")
+        print(f"Found {len(eligible_consultants)} eligible consultants.")
         if len(eligible_consultants) >= tender.workforce_requirements:
             return True
 
