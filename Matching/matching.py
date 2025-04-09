@@ -39,7 +39,7 @@ def IsTenderMatch(
     def is_consultant_eligible(consultant: Consultant) -> bool:
         print(f"Checking consultant {consultant.id}...")
         
-        if not any(expertise in consultant.expertise for expertise in tender.qualifications):
+        if not all(expertise in consultant.expertise for expertise in tender.qualifications):
             print(f"Consultant {consultant.id} lacks required expertise. ({consultant.expertise})")
             return False
         

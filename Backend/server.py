@@ -269,8 +269,6 @@ def ProcessCommand(command, params):
             return 'Server is online!'
         case 'agent':
             return MasterAgent()
-        case 'collection':
-            return GetCollection('Consultants')
         case _:
             return 'Unknown command.'
 

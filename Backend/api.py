@@ -22,38 +22,6 @@ socket = context.socket(zmq.REQ)
 socket.connect("tcp://localhost:5001")
 
 
-def ProcessRequest2(action: str = None, collection_name: str = None, 
-                   data: dict = None, doc_id: str = None):
-    try:
-        # Build command parameters
-        params = {
-            "collection_name": collection_name,
-            "document_id": doc_id
-        }
-
-        # Include conditional update fields only for 'update' actions
-        if action == "update":
-            params.update({
-                "document_data": data.get("document_data", {}),
-                "add_section": data.get("add_section", False),
-                "section_key": data.get("section_key"),
-                "section_data": data.get("section_data", {})
-            })
-        else:
-            params["document_data"] = data  # For create/other actions
-
-        # Send command to server
-        command = {"command": action, "params": params}
-        socket.send_json(command)
-        
-        # Get server response
-        backend_response = socket.recv_json()
-        return jsonify(backend_response["data"]), backend_response.get("status_code", 200)
-    
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
 def ProcessRequest(action: str =None, collection_name: str =None, data: dict =None, doc_id:str =None):
     try:
         command = {
@@ -97,6 +65,7 @@ def Response():
     except zmq.error.Again:
         raise TimeoutError("The operation timed out")
 
+#------------------------------------------------------------------#
 
 @app.route('/server-status', methods=['GET'])
 def ServerStatus():
@@ -131,7 +100,6 @@ def Company():
         return ProcessRequest(action='create', collection_name='Company', data=request.get_json(), doc_id='Company Info')
     elif request.method == 'GET':
         data = ProcessRequest(action='read', collection_name='CompanyList', data=None, doc_id=request.args.get('id'))
-        print(data)
         return data
 
 
@@ -141,7 +109,7 @@ def UpdateConsultant(doc_id):
     return ProcessRequest(
         action="update",
         collection_name="Consultants",
-        data=data,  # Contains document_data, add_section, etc.
+        data=data,
         doc_id=doc_id
     )
 
@@ -160,6 +128,25 @@ def ConsultantsRequest():
                             collection_name='ConsultantList',
                             data=None,
                             doc_id=None)
+
+
+@app.route('/calendar', methods=['POST'])
+def AddBusinessCalendar():
+    data = request.get_json()
+    company_id = data.get("company_id")
+    availability = data.get("availability")
+    
+    if not company_id or not isinstance(availability, dict):
+        return http_400("Invalid input: 'company_id' must be provided and 'availability' must be a dictionary.")
+
+    return ProcessRequest(
+        action='create',
+        collection_name='BusinessCalendar',
+        data={
+            "availability": availability
+        }
+    )
+
 
 
 # @JWTAuthentication
@@ -189,41 +176,6 @@ def ModelsRequest():
                               collection_name='Company',
                               data=request.get_json(),
                               doc_id='Expertise')
-
-
-@app.route('/update-document/<string:collection>/<string:doc_id>', methods=['PUT'])
-def UpdateDocumentEndpoint(collection, doc_id):
-    try:
-        # Parse request JSON
-        request_data = request.get_json()
-        
-        # Extract parameters
-        document_data = request_data.get("document_data", {})
-        add_section = request_data.get("add_section", False)
-        section_key = request_data.get("section_key")
-        section_data = request_data.get("section_data", {})
-
-        # Validate inputs
-        if not isinstance(document_data, dict) or (add_section and not isinstance(section_data, dict)):
-            return http_400("Invalid input: 'document_data' and 'section_data' must be dictionaries.")
-
-        # Call UpdateDocument function
-        response_message = UpdateDocument(
-            collection_name=collection,
-            document_id=doc_id,
-            document_data=document_data,
-            merge=True,
-            add_section=add_section,
-            section_key=section_key,
-            section_data=section_data
-        )
-        
-        if response_message.startswith("Success"):
-            return http_200(response_message)
-        else:
-            return http_400(response_message)
-    except Exception as e:
-        return http_500(f"Internal Server Error: {str(e)}")
 
 
 app.run(host='0.0.0.0', port=5000, threaded=True)

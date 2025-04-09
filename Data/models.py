@@ -18,27 +18,26 @@ Expertise = {
 
 
 class Company:
-    def __init__(self, name: str ='ACME AB', id: int =0, calendar: int =None, consultants: List[int] = []):
+    def __init__(self, name: str ='ACME AB', calendar: int =None, consultants: List[int] = []):
         if not isinstance(name, str):
             raise ValueError("Name must be a string")
-        self.id = id
         self.name = name
         self.calendar = calendar
         self.consultants = consultants
 
     def __str__(self):
-        return f"Company(id={self.id}, name={self.name}"
+        return f"Company(name={self.name},\ncalendar={self.calendar},\nconsultants={self.consultants}"
 
     def to_dict(self):
         return {
-            'id': self.id,
             'name': self.name,
-            'calendar': self.calendar
+            'calendar': self.calendar,
+            'consultants': self.consultants
         }
 
 
 class Consultant:
-    def __init__(self, id: int = None, name: str = fake.name(), expertise: List[int] = [0, 1], company_id: int = 0):
+    def __init__(self, id: int = None, name: str = fake.name(), expertise: List[int] = [0, 1]):
         if not isinstance(id, int):
             raise ValueError('Invalid ID format. Must be int')
         if not all(e in Expertise.values() for e in expertise):
@@ -46,14 +45,12 @@ class Consultant:
         self.id = id
         self.name = name
         self.expertise = expertise
-        self.company_id = company_id
 
     def to_dict(self):
         return {
             'id': self.id,
             'name': self.name,
             'expertise': self.expertise,
-            'company_id': self.company_id
         }
 
 
@@ -82,9 +79,8 @@ class BusinessCalendar:
         "%d/%m/%Y"  # Day/Month/Year format (08/04/2025)
     ]
     
-    def __init__(self, company_id: int = 0, availability: dict = {}):
+    def __init__(self, availability: dict = {}):
         self.availability = availability
-        self.company_id = company_id
 
     @staticmethod
     def _normalize_month(input_month) -> str:
