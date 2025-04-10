@@ -7,18 +7,17 @@ sys.path.insert(0, root_dir)
 
 from datetime import datetime
 from typing import List
-from Data import TenderDocument, Company, Consultant, BusinessCalendar, Expertise
+from Data import TenderDocument, Consultant, BusinessCalendar, Expertise
 
 def IsTenderMatch(
     tender: TenderDocument,
-    company: Company,
     consultants: List[Consultant],
     calendar: BusinessCalendar
 ) -> bool:
     
     print(f"Tender requires {tender.qualifications} and {tender.workforce_requirements} consultants.")
 
-    if not tender or not company or not consultants or not calendar:
+    if not tender or not consultants or not calendar:
         print("[ERROR] Invalid input provided to tender match.")
         return False
 
@@ -36,32 +35,41 @@ def IsTenderMatch(
             current = current.replace(year=next_year, month=next_month)
         return months
 
+    required_months = month_range(tender.start_date, tender.end_date)
+    required_qualifications = set(tender.qualifications)
+
     def is_consultant_eligible(consultant: Consultant) -> bool:
-        print(f"Checking consultant {consultant.id}...")
-        
-        if not all(expertise in consultant.expertise for expertise in tender.qualifications):
-            print(f"Consultant {consultant.id} lacks required expertise. ({consultant.expertise})")
+        # Check for at least one matching qualification
+        if not any(ex in consultant.expertise for ex in required_qualifications):
             return False
-        
-        print(f"Consultant {consultant.id} has the required expertise. ({consultant.expertise})")
+            
+        # Check availability in at least one required month
+        consultant_months = calendar.get_consultant_availability(str(consultant.id))
+        return any(month in consultant_months for month in required_months)
 
-        required_months = month_range(tender.start_date, tender.end_date)
-        available_months = calendar.get_consultant_availability(str(consultant.id))
+    eligible_consultants = [c for c in consultants if is_consultant_eligible(c)]
 
-        if not all(month in available_months for month in required_months):
-            unavailable_months = [month for month in required_months if month not in available_months]
-            print(f"Consultant {consultant.id} is unavailable for required months: {unavailable_months}")
-            return False
+    # Qualification coverage check
+    covered_quals = {ex for c in eligible_consultants for ex in c.expertise}
+    if not required_qualifications.issubset(covered_quals):
+        print(f"Missing qualifications: {required_qualifications - covered_quals}")
+        return False
 
-        print(f"Consultant {consultant.id} meets all requirements.\n")
-        return True
+    # Monthly availability check per qualification
+    for month in required_months:
+        for qual in required_qualifications:
+            if not any(
+                qual in c.expertise and 
+                month in calendar.get_consultant_availability(str(c.id))
+                for c in eligible_consultants
+            ):
+                print(f"No coverage for qualification {qual} in {month}")
+                return False
 
-    eligible_consultants = [consultant for consultant in consultants if is_consultant_eligible(consultant)]
+    # Workforce check
+    if len(eligible_consultants) < tender.workforce_requirements:
+        print(f"Insufficient workforce: {len(eligible_consultants)}/{tender.workforce_requirements}")
+        return False
 
-    if eligible_consultants:
-        print(f"Found {len(eligible_consultants)} eligible consultants.")
-        if len(eligible_consultants) >= tender.workforce_requirements:
-            return True
-
-    print(f"Not enough eligible consultants. Tender needs {tender.workforce_requirements}, company has {len(eligible_consultants)}.")
-    return False
+    print("Tender requirements fully covered with available consultants!")
+    return True

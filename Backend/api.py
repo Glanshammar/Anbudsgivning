@@ -21,6 +21,12 @@ context = zmq.Context()
 socket = context.socket(zmq.REQ)
 socket.connect("tcp://localhost:5001")
 
+# Collection name constants
+COMPANY_DATA = 'CompanyData'
+TENDERS = 'Tenders'
+CONSULTANTS = 'Consultants'
+
+# ------------------------------------------------------------------------------------------------------------- #
 
 def ProcessRequest(action: str =None, collection_name: str =None, data: dict =None, doc_id:str =None):
     try:
@@ -97,10 +103,16 @@ def Login():
 @ValidateModel(Company)
 def Company():
     if request.method == 'POST':
-        return ProcessRequest(action='create', collection_name='Company', data=request.get_json(), doc_id='Company Info')
+        return ProcessRequest(
+            action='create', 
+            collection_name=COMPANY_DATA, 
+            data=request.get_json(), 
+            doc_id='Info')
     elif request.method == 'GET':
-        data = ProcessRequest(action='read', collection_name='CompanyList', data=None, doc_id=request.args.get('id'))
-        return data
+        return ProcessRequest(action='read', 
+                              collection_name='CompanyList', 
+                              data=None, 
+                              doc_id=request.args.get('id'))
 
 
 @app.route('/consultant/<string:doc_id>', methods=['PUT'])
@@ -108,7 +120,7 @@ def UpdateConsultant(doc_id):
     data = request.get_json()
     return ProcessRequest(
         action="update",
-        collection_name="Consultants",
+        collection_name=CONSULTANTS,
         data=data,
         doc_id=doc_id
     )
@@ -120,60 +132,70 @@ def UpdateConsultant(doc_id):
 def ConsultantsRequest():
     if request.method == 'POST':
         return ProcessRequest(action='create', 
-                            collection_name='ConsultantList',
+                            collection_name=CONSULTANTS,
                             data=request.get_json(),
                             doc_id=request.args.get('id'))
     elif request.method == 'GET':
         return ProcessRequest(action='read',
-                            collection_name='ConsultantList',
+                            collection_name=CONSULTANTS,
                             data=None,
                             doc_id=None)
 
 
-@app.route('/calendar', methods=['POST'])
-def AddBusinessCalendar():
-    data = request.get_json()
-    company_id = data.get("company_id")
-    availability = data.get("availability")
-    
-    if not company_id or not isinstance(availability, dict):
-        return http_400("Invalid input: 'company_id' must be provided and 'availability' must be a dictionary.")
+@app.route('/calendar', methods=['POST', 'GET'])
+def BusinessCalendar():
+    if request.method == 'POST':
+        data = request.get_json()
+        availability = data.get("availability")
+        
+        if not isinstance(availability, dict):
+            return http_400("Invalid input: 'availability' must be a dictionary.")
 
-    return ProcessRequest(
-        action='create',
-        collection_name='BusinessCalendar',
-        data={
-            "availability": availability
-        }
-    )
+        return ProcessRequest(
+            action='create',
+            collection_name=COMPANY_DATA,
+            data=availability,
+            doc_id='ConsultantCalendar'
+        )
+    
+    if request.method == 'GET':
+        return ProcessRequest(
+            action='read',
+            collection_name=COMPANY_DATA,
+            data=None,
+            doc_id='ConsultantCalendar'
+        )
 
 
 
 # @JWTAuthentication
-@app.route('/tenders', methods=['GET'])
+@app.route('/tenders', methods=['GET', 'POST'])
 def TendersRequest():
     if request.method == 'GET':
         return ProcessRequest(action='read',
-                            collection_name='Tenders',
+                            collection_name=TENDERS,
                             data=None,
                             doc_id=request.args.get('tender_id'))
+    if request.method == 'POST':
+        return ProcessRequest(action='create',
+                              collection_name=TENDERS)
 
 
 @app.route('/expertise', methods=['POST', 'GET', 'PUT'])
-def ModelsRequest():
+def ExpertiseRequest():
     if request.method == 'POST':
         return ProcessRequest(action='create',
-                              collection_name='Company',
+                              collection_name=COMPANY_DATA,
                               data=request.get_json(),
                               doc_id='Expertise')
     elif request.method == 'GET':
         return ProcessRequest(action='read',
-                              collection_name='Company',
+                              collection_name=COMPANY_DATA,
                               data=None,
                               doc_id='Expertise')
     elif request.method == 'PUT':
         return ProcessRequest(action='update',
-                              collection_name='Company',
+                              collection_name=COMPANY_DATA,
                               data=request.get_json(),
                               doc_id='Expertise')
 

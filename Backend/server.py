@@ -79,7 +79,7 @@ def CreateDocument(collection_name, document_data, document_name=None):
         document_count = len(count_snapshot)
 
         if not document_name:
-            document_name = str(document_count + 1)
+            document_name = str(document_count)
 
         new_doc_ref = collection_ref.document(document_name)
         new_doc_ref.set(document_data)
@@ -241,10 +241,16 @@ def ProcessCommand(command, params):
             collection_name = params.get('collection_name')
             document_id = params.get('document_id')
             document_data = params.get('document_data', {})
-            add_section = params.get('add_section', False)
-            section_key = params.get('section_key')
-            section_data = params.get('section_data', {})
 
+            # Dynamically unpack document_data into local variables
+            if isinstance(document_data, dict):
+                locals().update(document_data)
+
+            add_section = locals().get('add_section', False)
+            section_key = locals().get('section_key')
+            section_data = locals().get('section_data', {})
+
+            # Proceed with the update logic
             if not collection_name or not document_id:
                 return ("Error: Collection name and document ID required", 400)
 
@@ -256,6 +262,7 @@ def ProcessCommand(command, params):
                 section_key=section_key,
                 section_data=section_data
             )
+
             return (result, 200) if "Success" in result else (result, 400)
         case 'delete':
             collection_name = params.get('collection_name')

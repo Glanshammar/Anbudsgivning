@@ -18,21 +18,17 @@ Expertise = {
 
 
 class Company:
-    def __init__(self, name: str ='ACME AB', calendar: int =None, consultants: List[int] = []):
+    def __init__(self, name: str ='ACME AB'):
         if not isinstance(name, str):
             raise ValueError("Name must be a string")
         self.name = name
-        self.calendar = calendar
-        self.consultants = consultants
 
     def __str__(self):
-        return f"Company(name={self.name},\ncalendar={self.calendar},\nconsultants={self.consultants}"
+        return f"Company(name={self.name}"
 
     def to_dict(self):
         return {
             'name': self.name,
-            'calendar': self.calendar,
-            'consultants': self.consultants
         }
 
 
@@ -55,16 +51,16 @@ class Consultant:
 
 
 class TenderDocument:
-    def __init__(self, qualifications: List[int], workforce_requirements: int, start_date: datetime, end_date: datetime):
+    def __init__(self, qualifications: List[int], workforce: int, start_date: datetime, end_date: datetime):
         if not all(q in Expertise.values() for q in qualifications):
             raise ValueError('Invalid qualifications')
         self.qualifications = qualifications
-        self.workforce_requirements = workforce_requirements
+        self.workforce = workforce
         self.start_date = start_date
         self.end_date = end_date
 
     def __repr__(self):
-        return f'TenderDocument(company_name={self.company_name}, project_description={self.project_description}, start_date={self.start_date}, end_date={self.end_date})'
+        return f'TenderDocument(company_name={self.company_name}, start_date={self.start_date}, end_date={self.end_date})'
         
         
 class BusinessCalendar:
