@@ -167,7 +167,6 @@ def BusinessCalendar():
         )
 
 
-
 # @JWTAuthentication
 @app.route('/tenders', methods=['GET', 'POST'])
 def TendersRequest():

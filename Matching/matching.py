@@ -7,15 +7,15 @@ sys.path.insert(0, root_dir)
 
 from datetime import datetime
 from typing import List
-from Data import TenderDocument, Consultant, BusinessCalendar, Expertise
+from Data import TenderDocument, Consultant, Calendar
 
 def IsTenderMatch(
     tender: TenderDocument,
     consultants: List[Consultant],
-    calendar: BusinessCalendar
+    calendar: Calendar
 ) -> bool:
     
-    print(f"Tender requires {tender.qualifications} and {tender.workforce_requirements} consultants.")
+    print(f"Tender requires {tender.qualifications} and {tender.workforce} consultants.")
 
     if not tender or not consultants or not calendar:
         print("[ERROR] Invalid input provided to tender match.")
@@ -58,17 +58,17 @@ def IsTenderMatch(
     # Monthly availability check per qualification
     for month in required_months:
         for qual in required_qualifications:
-            if not any(
+             if not any(
                 qual in c.expertise and 
                 month in calendar.get_consultant_availability(str(c.id))
                 for c in eligible_consultants
             ):
                 print(f"No coverage for qualification {qual} in {month}")
                 return False
-
+           
     # Workforce check
-    if len(eligible_consultants) < tender.workforce_requirements:
-        print(f"Insufficient workforce: {len(eligible_consultants)}/{tender.workforce_requirements}")
+    if len(eligible_consultants) < tender.workforce:
+        print(f"Insufficient workforce: {len(eligible_consultants)}/{tender.workforce}")
         return False
 
     print("Tender requirements fully covered with available consultants!")

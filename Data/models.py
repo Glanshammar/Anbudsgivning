@@ -6,15 +6,11 @@ from datetime import datetime, timedelta, date
 fake = Faker()
 Faker.seed(42)
 
+with open("/home/mondus/Documents/expertise.txt", "r") as file:
+    lines = [line.strip() for line in file.readlines()]
 
-Expertise = {
-    "Fullstack": 1,
-    "Frontend": 2,
-    "Backend": 3,
-    "Architect": 4,
-    "AI": 5,
-    "Construction": 6
-}
+
+Expertise = {index: value for index, value in enumerate(lines)}
 
 
 class Company:
@@ -63,7 +59,7 @@ class TenderDocument:
         return f'TenderDocument(company_name={self.company_name}, start_date={self.start_date}, end_date={self.end_date})'
         
         
-class BusinessCalendar:
+class Calendar:
     VALID_MONTH_FORMATS = [
         "%Y-%m",    # ISO Standard (2025-04)
         "%m/%Y",    # US Format (04/2025)
@@ -77,10 +73,15 @@ class BusinessCalendar:
     
     def __init__(self, availability: dict = {}):
         self.availability = availability
+        self.availability.clear()
+
+    def __del__(self):
+        self.availability.clear()
+
 
     @staticmethod
     def _normalize_month(input_month) -> str:
-        if isinstance(input_month, str) and BusinessCalendar._valid_month_format(input_month):
+        if isinstance(input_month, str) and Calendar._valid_month_format(input_month):
             return input_month
             
         if isinstance(input_month, (datetime, date)):
@@ -96,7 +97,7 @@ class BusinessCalendar:
             year, month = input_month
             return f"{year}-{month:02d}"
 
-        for fmt in BusinessCalendar.VALID_MONTH_FORMATS:
+        for fmt in Calendar.VALID_MONTH_FORMATS:
             try:
                 dt = datetime.strptime(str(input_month), fmt)
                 return dt.strftime("%Y-%m")

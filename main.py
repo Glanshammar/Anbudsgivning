@@ -1,4 +1,4 @@
-from Data import DomainMain, Company, Consultant, TenderDocument, BusinessCalendar, Expertise
+from Data import DomainMain, Company, Consultant, TenderDocument, Calendar, Expertise
 from Agents import AgentManager, AgentType
 import requests
 import zmq
@@ -22,6 +22,9 @@ if __name__ == "__main__":
                 response = requests.get(f'{API_URL}/server-status')
                 print(response.status_code)
                 print(response.text)
+            case 'expertise':
+                response = requests.post(f'{API_URL}/expertise', json=Expertise)
+                print(response.text)
             case 'match':
                 # Fetch data from API
                 consultants_request = requests.get(url=f'{API_URL}/consultants')
@@ -32,16 +35,13 @@ if __name__ == "__main__":
                 consultants_data = consultants_request.json()
                 tender_data = tender_request.json()
                 calendar_data = calendar_request.json()
-                print(f'Constultant data: {consultants_data}\n')
-                print(f'Tender data: {tender_data}\n')
-                print(f'Calendar data: {calendar_data}\n')
 
                 # Create Consultant objects
                 consultants = [
                     Consultant(
                         id=int(consultant_id),
                         name=consultant['name'],
-                        expertise=consultant['expertise']
+                        expertise=[Expertise[e] for e in consultant['expertise']]
                     )
                     for consultant_id, consultant in consultants_data.items()
                 ]
@@ -54,19 +54,16 @@ if __name__ == "__main__":
                     end_date=datetime.strptime(tender_data['end_date'], "%Y-%m-%d")
                 )
 
-                print('Tender qualifications: ', tender.qualifications)
-                print('Tender data: ', tender_data['qualifications'])
-
                 # Add validation for qualifications
                 if len(tender.qualifications) != len(tender_data['qualifications']):
                     invalid = [q for q in tender_data['qualifications'].values() if q not in Expertise]
                     raise ValueError(f"Invalid qualifications in tender data: {invalid}")
 
                 # Setup calendar availability from server data
-                calendar = BusinessCalendar()
+                calendar = Calendar()
                 for consultant_id_str, months in calendar_data.items():
                     calendar.add_availability(
-                        consultant_id=consultant_id_str,  # Keep as string to match calendar storage
+                        consultant_id=consultant_id_str,
                         months=months
                     )
 
