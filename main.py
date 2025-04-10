@@ -30,25 +30,27 @@ if __name__ == "__main__":
                 consultants_request = requests.get(url=f'{API_URL}/consultants')
                 tender_request = requests.get(url=f'{API_URL}/tenders', params={'tender_id': '0'})
                 calendar_request = requests.get(url=f'{API_URL}/calendar')
+                expertise_request = requests.get(url=f'{API_URL}/expertise')
 
                 # Parse JSON responses
                 consultants_data = consultants_request.json()
                 tender_data = tender_request.json()
                 calendar_data = calendar_request.json()
+                expertise_data = expertise_request.json()
 
                 # Create Consultant objects
                 consultants = [
                     Consultant(
                         id=int(consultant_id),
                         name=consultant['name'],
-                        expertise=[Expertise[e] for e in consultant['expertise']]
+                        expertise=[expertise_data[str(e)] for e in consultant['expertise'] if str(e) in expertise_data]
                     )
                     for consultant_id, consultant in consultants_data.items()
                 ]
 
                 # Create TenderDocument object
                 tender = TenderDocument(
-                    qualifications=[Expertise[q] for q in tender_data['qualifications'].values() if q in Expertise],
+                    qualifications=[expertise_data[str(q)] for q in tender_data['qualifications'].values() if str(q) in expertise_data],
                     workforce=tender_data['workforce'],
                     start_date=datetime.strptime(tender_data['start_date'], "%Y-%m-%d"),
                     end_date=datetime.strptime(tender_data['end_date'], "%Y-%m-%d")
@@ -56,7 +58,7 @@ if __name__ == "__main__":
 
                 # Add validation for qualifications
                 if len(tender.qualifications) != len(tender_data['qualifications']):
-                    invalid = [q for q in tender_data['qualifications'].values() if q not in Expertise]
+                    invalid = [q for q in tender_data['qualifications'].values() if str(q) not in expertise_data]
                     raise ValueError(f"Invalid qualifications in tender data: {invalid}")
 
                 # Setup calendar availability from server data
