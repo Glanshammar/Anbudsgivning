@@ -1,15 +1,12 @@
 from Data import DomainMain, Company, Consultant, TenderDocument, Calendar, Expertise
 from Agents import AgentManager, AgentType
 import requests
-import zmq
-import json
+from Web import PageGrab
 from zmq.auth import load_certificate
 from datetime import datetime, timedelta
 from Matching import IsTenderMatch
 
-context = zmq.Context()
-client = context.socket(zmq.REQ)
-client.connect("tcp://server:5001")
+
 API_URL = 'http://127.0.0.1:5000'
 
 
@@ -37,6 +34,10 @@ if __name__ == "__main__":
                 tender_data = tender_request.json()
                 calendar_data = calendar_request.json()
                 expertise_data = expertise_request.json()
+                print(consultants_data)
+                print(tender_data)
+                print(calendar_data)
+                print(expertise_data)
 
                 # Create Consultant objects
                 consultants = [
@@ -61,7 +62,7 @@ if __name__ == "__main__":
                     invalid = [q for q in tender_data['qualifications'].values() if str(q) not in expertise_data]
                     raise ValueError(f"Invalid qualifications in tender data: {invalid}")
 
-                # Setup calendar availability from server data
+                # Setup calendar from server data
                 calendar = Calendar()
                 for consultant_id_str, months in calendar_data.items():
                     calendar.add_availability(
@@ -81,5 +82,12 @@ if __name__ == "__main__":
             case 'expertise':
                 response = requests.get(f'{API_URL}/expertise')
                 print(response.text)
+            case 'web':
+                page1 = 'https://www.opic.com/upphandlingar/'
+                page2 = 'https://www.e-avrop.com/upphandlingar/e-Upphandling/Default.aspx'
+                page3 = 'https://tendium.ai/se/upphandlingar/'
+                PageGrab(url=page3)
+                print()
+                PageGrab(url=page3, href_filter='upphandling')
             case _:
                 print("Invalid command. Please try again.")
