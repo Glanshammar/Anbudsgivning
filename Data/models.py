@@ -9,7 +9,6 @@ Faker.seed(42)
 with open("/home/mondus/Documents/expertise.txt", "r") as file:
     lines = [line.strip() for line in file.readlines()]
 
-
 Expertise = {index: value for index, value in enumerate(lines)}
 
 

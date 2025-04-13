@@ -18,6 +18,7 @@ from multiprocessing import Process
 import shutil
 import zmq
 import json
+import command
 
 
 cred_file = os.path.join(root_dir, 'creds.json')
@@ -65,7 +66,12 @@ def GetCollection(collection_name):
     return OpStatus.DOCUMENT_NOT_FOUND
 
 
-def CreateDocument(collection_name, document_data, document_name=None):
+def CreateDocument(params):
+    collection_name = params.get('collection_name')
+    document_data = params.get('document_data')
+    document_name = params.get('document_id')
+    if not isinstance(document_data, dict):
+        return ('document_data must be a dictionary', 400)
     if not collection_name:
         return OpStatus.DOCUMENT_NOT_FOUND
     if not isinstance(document_data, dict):
@@ -89,9 +95,13 @@ def CreateDocument(collection_name, document_data, document_name=None):
         return f"Error: Error adding document: {str(e)}"
 
 
-def ReadDocument(collection_name: str, document_id: str = None):
-    if not document_id or document_id.strip() == "":
-        return "Error: Missing document ID"
+def ReadDocument(params):
+    collection_name = params.get('collection_name')
+    document_id = params.get('document_id')
+    if not document_id or document_id.strip() == "": # Multiple docs
+        collection_ref = db.collection(collection_name)
+        docs = collection_ref.stream()
+        return {doc.id: doc.to_dict() for doc in docs}
     try:
         collection_ref = db.collection(collection_name.strip())
         doc_ref = collection_ref.document(document_id.strip())
@@ -157,127 +167,21 @@ def DeleteDocument(document):
         return f"Error: Error deleting document: {str(e)}"
 
 
-def CreateField(document, params):
-    name = params['name'].strip()
-    value = params['value'].strip()
-    if not name:
-        return "Error: Field name cannot be empty."
-    try:
-        document.update({name: value})
-        return f"Success: Added field '{name}' with value '{value}'."
-    except Exception as e:
-        return f"Error: Error adding field: {str(e)}"
+operations = {
+    'create': CreateDocument,
+    'read': ReadDocument,
+    'update': UpdateDocument,
+    'delete': DeleteDocument,
+    'status': lambda params: 'Server is online!',
+    'agent': lambda params: MasterAgent()
+}
 
-
-def ReadField(document, field):
-    doc = document.get()
-    if doc.exists:
-        data = doc.to_dict()
-        if field in data:
-            return str({field: data[field]})
-        else:
-            return f"Error: Field '{field}' not found in document."
+def ProcessCommand(command, args):
+    func = operations.get(command.lower())
+    if func:
+        return func(*args)
     else:
-        return "Error: Document does not exist!"
-
-
-def UpdateField(document, fieldID: int, value):
-    doc = document.get()
-    if not doc.exists:
-        return "Error: Document does not exist!"
-    fields = doc.to_dict()
-    if not fields or fieldID < 1 or fieldID > len(fields):
-        return "Error: Invalid field ID."
-    try:
-        field_name = list(fields.keys())[fieldID - 1]
-        document.update({field_name: value})
-        return f"Success: Field '{field_name}' updated successfully."
-    except Exception as e:
-        return f"Error: Error updating field: {str(e)}"
-
-
-def DeleteField(document, fieldID: int):
-    doc = document.get()
-    if not doc.exists:
-        return ('Document does not exist.', 404)
-    fields = doc.to_dict()
-    if not fields or fieldID < 1 or fieldID > len(fields):
-        return ('Invalid field ID.', 400)
-    try:
-        field_name = list(fields.keys())[fieldID - 1]
-        document.update({field_name: firestore.DELETE_FIELD})
-        return f"Success: Field '{field_name}' deleted successfully."
-    except Exception as e:
-        return f"Error: Error deleting field: {str(e)}"
-
-
-def ProcessCommand(command, params):
-    match command.lower():
-        case 'create':
-            collection_name = params.get('collection_name')
-            document_data = params.get('document_data')
-            document_id = params.get('document_id')
-            if not isinstance(document_data, dict):
-                return ('document_data must be a dictionary', 400)
-            return CreateDocument(collection_name, document_data, document_id)
-        case 'read':
-            collection_name = params.get('collection_name')
-            document_id = params.get('document_id')
-            
-            if document_id:  # Single document read
-                try:
-                    document = ReadDocument(collection_name, document_id)
-                    return document
-                except ValueError as e:
-                    return f"Exception:  {str(e)}"
-            else:  # Full collection read
-                try:
-                    collection_ref = db.collection(collection_name)
-                    docs = collection_ref.stream()
-                    return {doc.id: doc.to_dict() for doc in docs}
-                except Exception as e:
-                    return f"Exception:  {str(e)}"
-        case 'update':
-            collection_name = params.get('collection_name')
-            document_id = params.get('document_id')
-            document_data = params.get('document_data', {})
-
-            # Dynamically unpack document_data into local variables
-            if isinstance(document_data, dict):
-                locals().update(document_data)
-
-            add_section = locals().get('add_section', False)
-            section_key = locals().get('section_key')
-            section_data = locals().get('section_data', {})
-
-            # Proceed with the update logic
-            if not collection_name or not document_id:
-                return ("Error: Collection name and document ID required", 400)
-
-            result = UpdateDocument(
-                collection_name=collection_name,
-                document_id=document_id,
-                document_data=document_data,
-                add_section=add_section,
-                section_key=section_key,
-                section_data=section_data
-            )
-
-            return (result, 200) if "Success" in result else (result, 400)
-        case 'delete':
-            collection_name = params.get('collection_name')
-            document_id = params.get('document_id')
-            document = ReadDocument(collection_name, document_id)
-            if isinstance(document, DocumentReference):
-                return DeleteDocument(document)
-            else:
-                return ('Document not found', 404)
-        case 'status':
-            return 'Server is online!'
-        case 'agent':
-            return MasterAgent()
-        case _:
-            return 'Unknown command.'
+        return f"Error: Unknown command '{command}'."
 
 
 if __name__ == '__main__':
@@ -344,15 +248,15 @@ if __name__ == '__main__':
             if command == 'exit':
                 break
 
-            raw_response = ProcessCommand(command, params)
-            if isinstance(raw_response, tuple) and len(raw_response) == 2:
+            response = ProcessCommand(command, params)
+            if isinstance(response, tuple) and len(response) == 2:
                 response_data = {
-                    'data': raw_response[0],
-                    'status_code': raw_response[1]
+                    'data': response[0],
+                    'status_code': response[1]
                 }
             else:
                 response_data = {
-                    'data': raw_response,
+                    'data': response,
                     'status_code': 200
                 }
             server.send_json(response_data)
