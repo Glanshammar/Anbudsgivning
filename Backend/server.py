@@ -18,7 +18,6 @@ from multiprocessing import Process
 import shutil
 import zmq
 import json
-import command
 
 
 cred_file = os.path.join(root_dir, 'creds.json')

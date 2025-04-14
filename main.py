@@ -1,7 +1,7 @@
 from Data import DomainMain, Company, Consultant, TenderDocument, Calendar, Expertise
 from Agents import AgentManager, AgentType
 import requests
-from Web import PageGrab
+from Web import LinkGrab, TenderInfoGrab
 from zmq.auth import load_certificate
 from datetime import datetime, timedelta
 from Matching import IsTenderMatch
@@ -86,8 +86,8 @@ if __name__ == "__main__":
                 page1 = 'https://www.opic.com/upphandlingar/'
                 page2 = 'https://www.e-avrop.com/upphandlingar/e-Upphandling/Default.aspx'
                 page3 = 'https://tendium.ai/se/upphandlingar/'
-                PageGrab(url=page3)
+                LinkGrab(url=page3)
                 print()
-                PageGrab(url=page3, href_filter='upphandling')
+                LinkGrab(url=page3, href_filter='upphandling')
             case _:
                 print("Invalid command. Please try again.")

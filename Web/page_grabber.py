@@ -2,7 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 
 
-def PageGrab(url=None, href_filter=None):
+def LinkGrab(url=None, href_filter=None):
     if url == None:
         print('You must pass a URL.')
         return
@@ -22,3 +22,7 @@ def PageGrab(url=None, href_filter=None):
         print(index, item)
     
     return links
+
+
+def TenderInfoGrab():
+    pass
