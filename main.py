@@ -1,4 +1,4 @@
-from Data import DomainMain, Company, Consultant, TenderDocument, Calendar, Expertise
+from Data import DomainMain, Company, Consultant, TenderDocument, Calendar, Expertise, Page
 from Agents import AgentManager, AgentType
 import requests
 import json
@@ -6,6 +6,7 @@ import os
 from zmq.auth import load_certificate
 from datetime import datetime, timedelta
 from Matching import IsTenderMatch
+from openai import OpenAI
 
 
 API_URL = 'http://127.0.0.1:5000'
@@ -16,8 +17,21 @@ if __name__ == "__main__":
         command = input(">> ").lower()
         
         match command:
-            case 'env':
-                print(os.getenv("AI_API_KEY"))
+            case 'ai':
+                client = OpenAI(
+                    base_url="https://openrouter.ai/api/v1",
+                    api_key=os.getenv("AI_API_KEY")
+                )
+                response = client.chat.completions.create(
+                    model="microsoft/mai-ds-r1:free",
+                    messages=[{"role": "user",
+                               "content": "Hello, world!"}]
+                )
+                print(response.choices[0].message.content)
+            case 'tender':
+                ted_url = 'https://ted.europa.eu/sv/search/result?classification-cpv=core&search-scope=ACTIVE'
+                cpv_list = ["30100000", "45000000", "72000000"]
+                Page(url=ted_url)
             case 'status':
                 response = requests.get(f'{API_URL}/server-status')
                 print(response.status_code)
@@ -85,16 +99,5 @@ if __name__ == "__main__":
             case 'expertise':
                 response = requests.get(f'{API_URL}/expertise')
                 print(response.text)
-            case 'web':
-                page1 = 'https://www.opic.com/upphandlingar/'
-                page2 = 'https://www.e-avrop.com/upphandlingar/e-Upphandling/Default.aspx'
-                page3 = 'https://tendium.ai/se/upphandlingar/'
-                page4 = 'https://ted.europa.eu/sv/search/result?classification-cpv=teeq&search-scope=ACTIVE'
-                page5 = 'https://tedweb.api.ted.europa.eu/private-search/api/v1/notices/family/83badc12-ec87-4647-aa2b-ec8e40ec13b0?language=SV&fields=publication-date&fields=notice-type&fields=publication-number&fields=deadline-receipt-request&fields=procedure-identifier&fields=change-notice-version-identifier&fields=modification-previous-notice-identifier&fields=previous-planning-identifier-part-lot&fields=previous-planning-identifier-part-part&fields=latest-republished-version&sort=publication-date,desc'
-                # LinkGrab(url=page4, href_filter='notice')
-                response = requests.get(page5)
-                data = response.json()
-                json_data = json.dumps(data, indent=4, sort_keys=True)
-                print(json_data)
             case _:
                 print("Invalid command. Please try again.")
