@@ -1,7 +1,8 @@
 from Data import DomainMain, Company, Consultant, TenderDocument, Calendar, Expertise
 from Agents import AgentManager, AgentType
 import requests
-from Web import LinkGrab, TenderInfoGrab
+import json
+import os
 from zmq.auth import load_certificate
 from datetime import datetime, timedelta
 from Matching import IsTenderMatch
@@ -15,6 +16,8 @@ if __name__ == "__main__":
         command = input(">> ").lower()
         
         match command:
+            case 'env':
+                print(os.getenv("AI_API_KEY"))
             case 'status':
                 response = requests.get(f'{API_URL}/server-status')
                 print(response.status_code)
@@ -86,8 +89,12 @@ if __name__ == "__main__":
                 page1 = 'https://www.opic.com/upphandlingar/'
                 page2 = 'https://www.e-avrop.com/upphandlingar/e-Upphandling/Default.aspx'
                 page3 = 'https://tendium.ai/se/upphandlingar/'
-                LinkGrab(url=page3)
-                print()
-                LinkGrab(url=page3, href_filter='upphandling')
+                page4 = 'https://ted.europa.eu/sv/search/result?classification-cpv=teeq&search-scope=ACTIVE'
+                page5 = 'https://tedweb.api.ted.europa.eu/private-search/api/v1/notices/family/83badc12-ec87-4647-aa2b-ec8e40ec13b0?language=SV&fields=publication-date&fields=notice-type&fields=publication-number&fields=deadline-receipt-request&fields=procedure-identifier&fields=change-notice-version-identifier&fields=modification-previous-notice-identifier&fields=previous-planning-identifier-part-lot&fields=previous-planning-identifier-part-part&fields=latest-republished-version&sort=publication-date,desc'
+                # LinkGrab(url=page4, href_filter='notice')
+                response = requests.get(page5)
+                data = response.json()
+                json_data = json.dumps(data, indent=4, sort_keys=True)
+                print(json_data)
             case _:
                 print("Invalid command. Please try again.")
