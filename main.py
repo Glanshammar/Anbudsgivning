@@ -1,8 +1,9 @@
-from Data import DomainMain, Company, Consultant, TenderDocument, Calendar, Expertise, Page
+from Data import DomainMain, Company, Consultant, TenderDocument, Calendar, Expertise, Page, GetLinks, PromptAI, mock_response
 from Agents import AgentManager, AgentType
 import requests
 import json
 import os
+import re
 from zmq.auth import load_certificate
 from datetime import datetime, timedelta
 from Matching import IsTenderMatch
@@ -10,6 +11,9 @@ from openai import OpenAI
 
 
 API_URL = 'http://127.0.0.1:5000'
+ted_url = 'https://ted.europa.eu/sv/search/result?classification-cpv=core&search-scope=ACTIVE'
+tender_url = 'https://ted.europa.eu/sv/notice/-/detail/266375-2025'
+cpv_list = ["30100000", "45000000", "72000000"]
 
 
 if __name__ == "__main__":
@@ -17,21 +21,36 @@ if __name__ == "__main__":
         command = input(">> ").lower()
         
         match command:
-            case 'ai':
-                client = OpenAI(
-                    base_url="https://openrouter.ai/api/v1",
-                    api_key=os.getenv("AI_API_KEY")
-                )
-                response = client.chat.completions.create(
-                    model="microsoft/mai-ds-r1:free",
-                    messages=[{"role": "user",
-                               "content": "Hello, world!"}]
-                )
+            case 'urls':
+                urls = GetLinks(ted_url)
+                print(urls, '\n\n')
+                urls_string = "\n".join(urls)
+                prompt = urls_string + "\n\n Give me a list of links of tender pages from these links I give to you. There's a certain pattern to how the links look like."
+                response = PromptAI(prompt=prompt)
+                print(response.choices[0].message.content)
+                response_text = response.choices[0].message.content
+                tender_pattern = r'https?://[^{}\s)>\]]+'
+                pattern_regex = r'https?://[^\s]*[{}][^\s]*'
+                tender_urls = re.findall(tender_pattern, response_text)
+                pattern = re.findall(pattern_regex, response_text)
+                print('\n'.join(str(item) for item in tender_urls))
+                print('\n', pattern)
+            case 'url2':
+                tender_pattern = r'https?://[^{}\s)>\]]+'
+                pattern_regex = r'https?://[^\s]*[{}][^\s]*'
+                tender_urls = re.findall(tender_pattern, mock_response)
+                pattern = re.findall(pattern_regex, mock_response)
+                print('\n'.join(str(item) for item in tender_urls))
+                print('Pattern: ', pattern)
+            case 'doc':
+                prompt = """Analyze the following links and return all tender document links as a list (PDF, DOC, DOCX, PPT, TXT, etc.) that are explicitly marked as English."""
+                urls = GetLinks(tender_url)
+                urls_string = "\n".join(urls)
+                print(urls_string, '\n\n')
+                response = PromptAI(urls_string + '\n\n' + prompt)
                 print(response.choices[0].message.content)
             case 'tender':
-                ted_url = 'https://ted.europa.eu/sv/search/result?classification-cpv=core&search-scope=ACTIVE'
-                cpv_list = ["30100000", "45000000", "72000000"]
-                Page(url=ted_url)
+                Page(url=tender_url)
             case 'status':
                 response = requests.get(f'{API_URL}/server-status')
                 print(response.status_code)

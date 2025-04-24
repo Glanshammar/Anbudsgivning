@@ -3,6 +3,7 @@ import math
 import datetime
 from typing import List, Dict
 from selenium import webdriver
+from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
@@ -12,6 +13,7 @@ from time import sleep
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 ted_url = 'https://ted.europa.eu/sv/search/result?classification-cpv=core&search-scope=ACTIVE'
+tender_url = 'https://ted.europa.eu/sv/notice/-/detail/266375-2025'
 
 def validate_json(content: str) -> bool:
     try:
@@ -73,13 +75,13 @@ def prompt_extract_docs(html_fragment: str) -> list[dict]:
             print("API returned no choices.")
             return []
         content = response.choices[0].message.content
-        print(content, "\n")
         return json.loads(content) if validate_json(content) else []
     except json.JSONDecodeError:
         return extract_fallback_json(content)
     except Exception as e:
         print(f"API Error: {str(e)}")
         return []
+
 
 
 def aggregate_results(results: List[List[Dict]]) -> List[Dict]:
@@ -129,15 +131,6 @@ def filter_results(docs: List[Dict], cpv_codes: List[str]) -> List[Dict]:
     return filtered
 
 def Page(url: str, cpv_codes: List[str] = None):
-    """Process tender portal pages and extract documents.
-    
-    Args:
-        url: Tender portal URL to scrape
-        cpv_codes: List of CPV codes to filter (optional)
-    
-    Returns:
-        List of processed tender documents
-    """
     # Process CPV codes
     cpv_list = [code.strip() for code in (cpv_codes or []) if code.strip()]
     
@@ -160,3 +153,11 @@ def Page(url: str, cpv_codes: List[str] = None):
     
     return filtered_docs
 
+def GetLinks(url:str):
+    driver = webdriver.Chrome()
+    driver.get(url)
+    sleep(7)
+    link_elements = driver.find_elements(By.TAG_NAME, "a")
+    links = [link.get_attribute("href") for link in link_elements if link.get_attribute("href")]
+    driver.quit()
+    return links
