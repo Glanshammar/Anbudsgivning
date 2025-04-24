@@ -153,7 +153,7 @@ def Page(url: str, cpv_codes: List[str] = None):
     
     return filtered_docs
 
-def GetLinks(url:str):
+def GetLinksFromPage(url:str):
     driver = webdriver.Chrome()
     driver.get(url)
     sleep(7)

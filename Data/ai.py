@@ -1,5 +1,6 @@
 from openai import OpenAI
 import os
+import re
 
 def PromptAI(prompt:str):
     client = OpenAI(
@@ -13,7 +14,16 @@ def PromptAI(prompt:str):
     )
     return response
 
-mock_response = """Here is the list of tender notice pages following the pattern `/sv/notice/-/detail/{number}-{year}` from the provided links:
+
+def GetLinksFromResponse(response_text:str):
+    pattern = r'https?://[^{}\s)>\]]+'
+    urls = re.findall(pattern, response_text)
+    return urls
+
+
+mock_response_document_links = """1. https://ted.europa.eu/en/notice/266375-2025/pdf"""
+
+mock_response_tender_pages = """
 1. https://ted.europa.eu/sv/notice/-/detail/266375-2025  
 2. https://ted.europa.eu/sv/notice/-/detail/266374-2025  
 3. https://ted.europa.eu/sv/notice/-/detail/266372-2025  
@@ -64,5 +74,4 @@ mock_response = """Here is the list of tender notice pages following the pattern
 48. https://ted.europa.eu/sv/notice/-/detail/266239-2025  
 49. https://ted.europa.eu/sv/notice/-/detail/266238-2025  
 50. https://ted.europa.eu/sv/notice/-/detail/266237-2025  
-
-Other URLs in the list relate to navigation, language options, legal pages, or EU institutional links and are excluded."""
+"""

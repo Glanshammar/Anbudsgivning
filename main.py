@@ -1,4 +1,6 @@
-from Data import DomainMain, Company, Consultant, TenderDocument, Calendar, Expertise, Page, GetLinks, PromptAI, mock_response
+from Data import (DomainMain, Company, Consultant, TenderDocument, Calendar, Expertise,
+                   Page, GetLinksFromPage, PromptAI,  mock_response_tender_pages, GetLinksFromResponse,
+                   mock_response_document_links)
 from Agents import AgentManager, AgentType
 import requests
 import json
@@ -22,29 +24,34 @@ if __name__ == "__main__":
         
         match command:
             case 'urls':
-                urls = GetLinks(ted_url)
+                # Get all the URLs from a tender portal (TED as example), and prompts the LLM which ones are tender pages.
+                urls = GetLinksFromPage(ted_url)
                 print(urls, '\n\n')
                 urls_string = "\n".join(urls)
-                prompt = urls_string + "\n\n Give me a list of links of tender pages from these links I give to you. There's a certain pattern to how the links look like."
+                prompt = urls_string + "\n\n Give me a list of links of tender pages from these links I give to you. There's a certain pattern to how the links look like. Make a list of only the links that you found and nothing else."
                 response = PromptAI(prompt=prompt)
                 print(response.choices[0].message.content)
-                response_text = response.choices[0].message.content
-                tender_pattern = r'https?://[^{}\s)>\]]+'
-                tender_urls = re.findall(tender_pattern, response_text)
+                response_string = response.choices[0].message.content
+                tender_urls = GetLinksFromResponse(response_text=response_string)
                 print('\n'.join(str(item) for item in tender_urls))
             case 'url2':
-                tender_pattern = r'https?://[^{}\s)>\]]+'
-                tender_urls = re.findall(tender_pattern, mock_response)
+                # Parses the links from the response from the AI. This test uses a mock response.
+                tender_urls = GetLinksFromResponse(response_text=mock_response_tender_pages)
                 print('\n'.join(str(item) for item in tender_urls))
             case 'doc':
-                prompt = """Analyze the following links and return all tender document links as a list (PDF, DOC, DOCX, PPT, TXT, etc.) that are explicitly marked as English."""
-                urls = GetLinks(tender_url)
+                # Get the links from a tender page and finds the document links
+                prompt = """Analyze the following links and return all tender document links as a list (PDF, DOC, DOCX, PPT, TXT, etc.) that are explicitly marked as English. Make a list of only the links that you found and nothing else."""
+                urls = GetLinksFromPage(tender_url)
                 urls_string = "\n".join(urls)
                 print(urls_string, '\n\n')
                 response = PromptAI(urls_string + '\n\n' + prompt)
                 print(response.choices[0].message.content)
-            case 'tender':
-                Page(url=tender_url)
+                response_string = response.choices[0].message.content
+                document_urls = GetLinksFromResponse(response_text=response_string)
+                print('\n'.join(str(item) for item in document_urls))
+            case 'doc2':
+                document_urls = GetLinksFromResponse(response_text=mock_response_document_links)
+                print('\n'.join(str(item) for item in document_urls))
             case 'status':
                 response = requests.get(f'{API_URL}/server-status')
                 print(response.status_code)
