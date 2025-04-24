@@ -65,9 +65,4 @@ mock_response = """Here is the list of tender notice pages following the pattern
 49. https://ted.europa.eu/sv/notice/-/detail/266238-2025  
 50. https://ted.europa.eu/sv/notice/-/detail/266237-2025  
 
-**Pattern Explanation**:  
-All tender pages follow the format:  
-`https://ted.europa.eu/{language}/notice/-/detail/{noticeID}-{year}`  
-(e.g., `266375-2025` is a unique notice identifier with the publication year).  
-
 Other URLs in the list relate to navigation, language options, legal pages, or EU institutional links and are excluded."""

@@ -30,18 +30,12 @@ if __name__ == "__main__":
                 print(response.choices[0].message.content)
                 response_text = response.choices[0].message.content
                 tender_pattern = r'https?://[^{}\s)>\]]+'
-                pattern_regex = r'https?://[^\s]*[{}][^\s]*'
                 tender_urls = re.findall(tender_pattern, response_text)
-                pattern = re.findall(pattern_regex, response_text)
                 print('\n'.join(str(item) for item in tender_urls))
-                print('\n', pattern)
             case 'url2':
                 tender_pattern = r'https?://[^{}\s)>\]]+'
-                pattern_regex = r'https?://[^\s]*[{}][^\s]*'
                 tender_urls = re.findall(tender_pattern, mock_response)
-                pattern = re.findall(pattern_regex, mock_response)
                 print('\n'.join(str(item) for item in tender_urls))
-                print('Pattern: ', pattern)
             case 'doc':
                 prompt = """Analyze the following links and return all tender document links as a list (PDF, DOC, DOCX, PPT, TXT, etc.) that are explicitly marked as English."""
                 urls = GetLinks(tender_url)
