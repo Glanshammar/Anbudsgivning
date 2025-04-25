@@ -2,7 +2,10 @@ from Data import (DomainMain, Company, Consultant, TenderDocument, Calendar, Exp
                    Page, GetLinksFromPage, PromptAI,  mock_response_tender_pages, GetLinksFromResponse,
                    mock_response_document_links)
 from Agents import AgentManager, AgentType
+from selenium import webdriver
 import requests
+from time import sleep
+import userpaths
 import json
 import os
 import re
@@ -11,11 +14,14 @@ from datetime import datetime, timedelta
 from Matching import IsTenderMatch
 from openai import OpenAI
 
-
+documents_folder = userpaths.get_my_documents()
+app_folder = os.path.join(documents_folder, 'AnbudApp')
+os.makedirs(app_folder, exist_ok=True)
 API_URL = 'http://127.0.0.1:5000'
-ted_url = 'https://ted.europa.eu/sv/search/result?classification-cpv=core&search-scope=ACTIVE'
-tender_url = 'https://ted.europa.eu/sv/notice/-/detail/266375-2025'
-cpv_list = ["30100000", "45000000", "72000000"]
+ted_portal = 'https://ted.europa.eu/en/search/result?classification-cpv=core&search-scope=ACTIVE'
+tender_url = 'https://ted.europa.eu/en/notice/-/detail/266375-2025'
+tendium_portal = 'https://tendium.ai/se/upphandlingar/'
+tendersontime_portal = 'https://www.tendersontime.com/sweden-tenders/'
 
 
 if __name__ == "__main__":
@@ -23,24 +29,37 @@ if __name__ == "__main__":
         command = input(">> ").lower()
         
         match command:
+            case 'pages':
+                Page(ted_portal)
+                Page(tender_url)
             case 'urls':
+                urls = GetLinksFromPage(tendersontime_portal)
+                for url in urls:
+                    print(url)
+            case 'tenders':
                 # Get all the URLs from a tender portal (TED as example), and prompts the LLM which ones are tender pages.
-                urls = GetLinksFromPage(ted_url)
-                print(urls, '\n\n')
+                urls = GetLinksFromPage(tendersontime_portal)
                 urls_string = "\n".join(urls)
-                prompt = urls_string + "\n\n Give me a list of links of tender pages from these links I give to you. There's a certain pattern to how the links look like. Make a list of only the links that you found and nothing else."
+                prompt = urls_string + """\n\n From the links I provide, extract only the URLs that lead to individual tender detail pages. By "tender detail page," I mean the specific page for a single procurement opportunity, which you access by clicking on a tender in a list or search results on a procurement website.
+                Only include links that match the pattern for tender detail pages. Output a list of these URLs only, and no duplicates."""
+
+                print('Waiting for LLM to answer...')
                 response = PromptAI(prompt=prompt)
                 print(response.choices[0].message.content)
                 response_string = response.choices[0].message.content
                 tender_urls = GetLinksFromResponse(response_text=response_string)
+                print("\n\nHere's a list of links to tender pages:")
                 print('\n'.join(str(item) for item in tender_urls))
-            case 'url2':
-                # Parses the links from the response from the AI. This test uses a mock response.
+            case 'tenders2':
+                # Parses the links from the response from the AI useing a mock response.
                 tender_urls = GetLinksFromResponse(response_text=mock_response_tender_pages)
                 print('\n'.join(str(item) for item in tender_urls))
+            case 'tenderinfo':
+                prompt = 'Find info about this tender'
             case 'doc':
-                # Get the links from a tender page and finds the document links
-                prompt = """Analyze the following links and return all tender document links as a list (PDF, DOC, DOCX, PPT, TXT, etc.) that are explicitly marked as English. Make a list of only the links that you found and nothing else."""
+                # Get the document links from a tender page and finds the document links.
+                language = input('What language do you want the documents?: ')
+                prompt = f"Analyze the following links and return all tender document links as a list (PDF, DOC, DOCX, TXT, etc.) that are either explicitly marked as {language} or are most likely to be in {language}. Make a list of only the links that you found and nothing else."
                 urls = GetLinksFromPage(tender_url)
                 urls_string = "\n".join(urls)
                 print(urls_string, '\n\n')
@@ -50,8 +69,21 @@ if __name__ == "__main__":
                 document_urls = GetLinksFromResponse(response_text=response_string)
                 print('\n'.join(str(item) for item in document_urls))
             case 'doc2':
+                # Get the document links from a tender page and finds the document links using a mock response.
                 document_urls = GetLinksFromResponse(response_text=mock_response_document_links)
                 print('\n'.join(str(item) for item in document_urls))
+                options = webdriver.ChromeOptions()
+                prefs = {
+                    "download.default_directory": app_folder,
+                    "download.prompt_for_download": False,
+                    "download.directory_upgrade": True,
+                    "safebrowsing.enabled": True
+                }
+                options.add_experimental_option("prefs", prefs)
+                driver = webdriver.Chrome(options=options)
+                driver.get(document_urls[0])
+                sleep(2)
+                driver.quit()
             case 'status':
                 response = requests.get(f'{API_URL}/server-status')
                 print(response.status_code)

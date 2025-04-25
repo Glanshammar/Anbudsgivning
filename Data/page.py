@@ -42,15 +42,15 @@ def fetch_page_html(url: str, timeout: int = 30) -> str:
     driver.quit()
     return html
 
-def chunk_html(html: str, max_chars: int = 4000) -> List[str]:
+def chunk_html(html: str, max_chars: int = 120000) -> List[str]:
     chunks = []
     total_len = len(html)
     if total_len <= max_chars:
         return [html]
-    num_chunks = math.ceil(total_len / max_chars)
-    print(f'Number of chunks: {num_chunks}.')
-    if num_chunks >= 10:
-        num_chunks = 10
+    num_chunks = math.ceil(total_len / 100000)
+    print(f'Number of chunks (100k context): {num_chunks}.')
+    num_chunks = math.ceil(total_len / 4000)
+    print(f'Number of chunks (4k context): {num_chunks}.')
     for i in range(num_chunks):
         start = i * max_chars
         end = start + max_chars
@@ -138,6 +138,7 @@ def Page(url: str, cpv_codes: List[str] = None):
     html = fetch_page_html(url)
     fragments = chunk_html(html)
     
+    '''
     all_results = []
     for frag in fragments:
         docs = prompt_extract_docs(frag)
@@ -152,6 +153,8 @@ def Page(url: str, cpv_codes: List[str] = None):
     print(f"Extracted {len(final_docs)} documents, {len(filtered_docs)} after filtering. Saved to {file}.")
     
     return filtered_docs
+    '''
+    
 
 def GetLinksFromPage(url:str):
     driver = webdriver.Chrome()

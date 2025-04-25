@@ -21,7 +21,7 @@ def GetLinksFromResponse(response_text:str):
     return urls
 
 
-mock_response_document_links = """1. https://ted.europa.eu/en/notice/266375-2025/pdf"""
+mock_response_document_links = "1. https://ted.europa.eu/en/notice/266375-2025/pdf"
 
 mock_response_tender_pages = """
 1. https://ted.europa.eu/sv/notice/-/detail/266375-2025  
