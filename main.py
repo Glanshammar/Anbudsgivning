@@ -29,6 +29,28 @@ if __name__ == "__main__":
         command = input(">> ").lower()
         
         match command:
+            case 'ted':
+                url = "https://api.ted.europa.eu/v3/notices/search"
+                ted_api_key = os.getenv("TED_API_KEY")
+
+                headers = {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                }
+
+                body = {
+                    "query": "software",
+                    "fields": ["ND", "PD", "TITLE"],
+                    "page": 1,
+                    "limit": 30
+                }
+
+                response = requests.post(url, headers=headers, data=json.dumps(body))
+                if response.status_code == 200:
+                    data = response.json()
+                    print(data)
+                else:
+                    print(f"Error: {response.status_code} - {response.text}")
             case 'pages':
                 Page(ted_portal)
                 Page(tender_url)
