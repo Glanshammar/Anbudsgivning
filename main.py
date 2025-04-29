@@ -8,6 +8,7 @@ import userpaths
 import json
 import os
 import re
+import pymupdf
 from datetime import datetime, timedelta
 from Matching import IsTenderMatch
 
@@ -74,8 +75,17 @@ if __name__ == "__main__":
                 tender_urls = GetLinksFromResponse(response_text=mock_response_tender_pages)
                 print('\n'.join(str(item) for item in tender_urls))
             case 'tenderinfo':
-                tender_info = 
-                prompt = 'Find info about this tender'
+                tender_document = os.path.join(app_folder, 'tender.pdf')
+                doc = pymupdf.open(tender_document)
+                text = ""
+                for page in doc:
+                    page_text = page.get_text()
+                    if page_text:
+                        text += page_text
+                tender_info = 'Give me info about this tender (The buyer, project details, procedures, award criteria, dates, additional info, etc.).\n\n' + text
+                print('Waiting for LLM to answer...')
+                response = PromptAI(tender_info)
+                print(response.choices[0].message.content)
             case 'doc':
                 # Get the document links from a tender page and finds the document links.
                 language = input('What language do you want the documents?: ')
