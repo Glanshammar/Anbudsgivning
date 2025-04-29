@@ -1,6 +1,5 @@
-from Data import (DomainMain, Company, Consultant, TenderDocument, Calendar, Expertise,
-                   Page, GetLinksFromPage, PromptAI,  mock_response_tender_pages, GetLinksFromResponse,
-                   mock_response_document_links)
+from Data import (Company, Consultant, TenderDocument, Calendar, Expertise, GetLinksFromResponse,
+                   Page, GetLinksFromPage, PromptAI,  mock_response_tender_pages, mock_response_document_links)
 from Agents import AgentManager, AgentType
 from selenium import webdriver
 import requests
@@ -9,10 +8,8 @@ import userpaths
 import json
 import os
 import re
-from zmq.auth import load_certificate
 from datetime import datetime, timedelta
 from Matching import IsTenderMatch
-from openai import OpenAI
 
 documents_folder = userpaths.get_my_documents()
 app_folder = os.path.join(documents_folder, 'AnbudApp')
@@ -77,6 +74,7 @@ if __name__ == "__main__":
                 tender_urls = GetLinksFromResponse(response_text=mock_response_tender_pages)
                 print('\n'.join(str(item) for item in tender_urls))
             case 'tenderinfo':
+                tender_info = 
                 prompt = 'Find info about this tender'
             case 'doc':
                 # Get the document links from a tender page and finds the document links.
@@ -170,8 +168,5 @@ if __name__ == "__main__":
                 print("Is Tender Match:", result)
             case 'exit':
                 break
-            case 'expertise':
-                response = requests.get(f'{API_URL}/expertise')
-                print(response.text)
             case _:
                 print("Invalid command. Please try again.")

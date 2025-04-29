@@ -5,36 +5,21 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(current_dir)
 sys.path.insert(0, root_dir)
 
-
 import firebase_admin
-from firebase_admin import credentials
-from firebase_admin import firestore
-from google.cloud.firestore_v1.document import DocumentReference
-from zmq.auth import Authenticator, create_certificates
-from enum import Enum, IntEnum
+from firebase_admin import credentials, firestore
+from zmq.auth import create_certificates
+from enum import IntEnum
 from Agents import *
-from Matching import IsTenderMatch
-from multiprocessing import Process
 import shutil
 import zmq
 import json
+import jwt
+from Backend.api import JWT_SECRET_KEY
+from Backend.db_app import db
 
 
 cred_file = os.path.join(root_dir, 'creds.json')
 master_agent = None
-db = None
-
-KEYS_DIR = os.path.join(root_dir, 'keys')
-SERVER_SECRET_KEY = os.path.join(KEYS_DIR, "server.key_secret")
-CLIENT_KEY_DIR = os.path.join(KEYS_DIR, "clients")
-
-os.makedirs(KEYS_DIR, exist_ok=True)
-os.makedirs(CLIENT_KEY_DIR, exist_ok=True)
-
-if not os.path.exists(SERVER_SECRET_KEY):
-    print("🔑 Generating server certificates...")
-    create_certificates(KEYS_DIR, "server")
-    print(f"✅ Server keys created in {KEYS_DIR}")
 
 
 class OpStatus(IntEnum):
@@ -118,19 +103,19 @@ def GetDocuments(collection_name):
         collection_ref = db.collection(collection_name)
         docs = list(collection_ref.stream())
         if not docs:
-            return "Error: No documents found in the collection."
+            return 'Error: No documents found in the collection.'
         documents = [str(doc.to_dict()) for doc in docs]
         return "\n".join(documents)
     except Exception as e:
-        return f"Error: Error getting documents: {str(e)}"
+        return f'Error: Error getting documents: {str(e)}'
 
 
 def UpdateDocument(collection_name, document_id, document_data, merge=True, add_section=False, section_key=None, section_data=None):
     if not collection_name or not document_id:
-        return "Error: Collection name and document ID cannot be empty."
+        return 'Error: Collection name and document ID cannot be empty.'
 
     if document_data is None and not add_section:
-        return "Error: No data provided for update."
+        return 'Error: No data provided for update.'
 
     try:
         # Fetch the collection and document reference
@@ -139,7 +124,7 @@ def UpdateDocument(collection_name, document_id, document_data, merge=True, add_
 
         # Check if the document exists
         if not doc_ref.get().exists:
-            return f"Error: Document '{document_id}' does not exist"
+            return f'Error: Document "{document_id}" does not exist'
 
         # If add_section is True, add or update the specified section
         if add_section and section_key and isinstance(section_data, dict):
@@ -153,17 +138,25 @@ def UpdateDocument(collection_name, document_id, document_data, merge=True, add_
 
         # Update the document with merged data
         doc_ref.set(document_data, merge=merge)
-        return f"Success: Document '{document_id}' updated successfully"
+        return f'Success: Document "{document_id}" updated successfully'
     except Exception as e:
-        return f"Error: Error updating document: {str(e)}"
+        return f'Error: Error updating document: {str(e)}'
 
 
 def DeleteDocument(document):
     try:
         document.delete()
-        return "Success: Document deleted successfully."
+        return 'Success: Document deleted successfully.'
     except Exception as e:
-        return f"Error: Error deleting document: {str(e)}"
+        return f'Error: Error deleting document: {str(e)}'
+
+
+def VerifyJWT(token):
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])
+        return True, payload
+    except Exception as e:
+        return False, str(e)
 
 
 operations = {
@@ -178,24 +171,24 @@ operations = {
 def ProcessCommand(command, args):
     func = operations.get(command.lower())
     if func:
-        return func(*args)
+        return func(args)
     else:
-        return f"Error: Unknown command '{command}'."
+        return f'Error: Unknown command "{command}".'
 
 
 if __name__ == '__main__':
     if not os.path.exists(cred_file):
-        print(f"Please place the '{cred_file}' in the same directory as this script.")
-        cred_path = input("Enter the full path to the credentials file: ").strip()
+        print(f'Please place the {cred_file} in the same directory as this script.')
+        cred_path = input('Enter the full path to the credentials file: ').strip()
 
         if os.path.exists(cred_path):
             shutil.copy(cred_path, cred_file)
-            print(f"✅ Credentials file copied to {cred_file}")
+            print(f'✅ Credentials file copied to {cred_file}')
         else:
-            print(f"⚠️ File not found at {cred_path}. Please check the path and try again.")
+            print(f'⚠️ File not found at {cred_path}. Please check the path and try again.')
             exit(1)
     else:
-        print("✅ Credentials found.")
+        print('✅ Credentials found.')
 
     if not firebase_admin._apps:
         cred = credentials.Certificate(cred_file)
@@ -204,45 +197,21 @@ if __name__ == '__main__':
     db = firestore.client()
     context = zmq.Context()
     
-    # Setup CURVE authentication
-    '''
-    auth = Authenticator(context)
-    auth.configure_curve(domain='*', location=CLIENT_KEY_DIR)
-    auth.start()
-    '''
-    
-    # Create ROUTER socket
-    '''
-    server = context.socket(zmq.ROUTER)
-    server.curve_server = True
-    server_secret, server_public = zmq.auth.load_certificate(SERVER_SECRET_KEY)
-    server.curve_secretkey = server_secret
-    server.curve_publickey = server_public
-    '''
-    
     server = context.socket(zmq.REP)
-    server.bind("tcp://0.0.0.0:5001")
-    print("ZeroMQ server is running on port 5001...")
-    
-    # Bind to port with encryption
-    '''
-    server.bind("tcp://0.0.0.0:5001")
-    print("🔒 Secure ZeroMQ server is running on port 5001...")
-    
-    import atexit
-    @atexit.register
-    def Cleanup():
-        auth.stop()
-        server.close()
-        context.term()
-    '''
-
+    server.bind('tcp://0.0.0.0:5001')
+    print('ZeroMQ server is running on port 5001...')
 
     while True:
         try:
             message = server.recv_json()
             command = message.get('command')
             params = message.get('params', {})
+
+            token = message.get('token')
+            valid, payload = VerifyJWT(token)
+            if not valid:
+                server.send_json({'error': 'Unauthorized', 'status_code': 401})
+                continue
 
             if command == 'exit':
                 break
@@ -260,28 +229,4 @@ if __name__ == '__main__':
                 }
             server.send_json(response_data)
         except (json.JSONDecodeError, KeyError) as e:
-            server.send_json({"error": f"Invalid request: {str(e)}"})
-
-    '''
-    while True:
-        try:
-            client_id, *msg_parts = server.recv_multipart()
-            message = json.loads(msg_parts[-1])
-            
-            command = message.get('command')
-            params = message.get('params', {})
-
-            if command == 'exit':
-                break
-
-            response = ProcessCommand(command, params)
-            
-            server.send_multipart([client_id, b'', json.dumps(response).encode()])
-            
-        except Exception as e:
-            Cleanup()
-            server.send_multipart([client_id, b'', json.dumps({"error": str(e)}).encode()])
-            raise
-    
-    Cleanup()
-    '''
+            server.send_json({'error': f'Invalid request: {str(e)}'})
