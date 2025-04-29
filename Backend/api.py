@@ -19,8 +19,7 @@ from Data import Consultant, Company, Expertise
 from Agents import AgentType, AgentManager
 from Backend.db_app import *
 
-config = ApiConfig()
-app = CreateApp(config)
+app = CreateApp()
 context = zmq.Context()
 socket = context.socket(zmq.REQ)
 socket.connect("tcp://localhost:5001")
@@ -313,7 +312,7 @@ def ExpertiseRequest():
                               doc_id='Expertise')
 
 @app.route('/tender-portals', methods=['POST', 'GET'])
-def SetTenderPortals():
+def TenderPortals():
     if request.method == 'POST':
         return ProcessRequest(action='create',
                               collection_name=COMPANY_DATA,
