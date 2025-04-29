@@ -2,11 +2,13 @@ from faker import Faker
 import random
 from typing import List
 from datetime import datetime, timedelta, date
+import userpaths
 
 fake = Faker()
 Faker.seed(42)
 
-with open("/home/mondus/Documents/expertise.txt", "r") as file:
+documents_folder = userpaths.get_my_documents()
+with open(f"{documents_folder}/expertise.txt", "r") as file:
     lines = [line.strip() for line in file.readlines()]
 
 Expertise = {index: value for index, value in enumerate(lines)}
