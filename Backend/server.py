@@ -14,12 +14,12 @@ import shutil
 import zmq
 import json
 import jwt
-from Backend.api import JWT_SECRET_KEY
 from Backend.db_app import db
 
 
-cred_file = os.path.join(root_dir, 'creds.json')
+cred_file = os.path.join(root_dir, 'credentials.json')
 master_agent = None
+
 
 
 class OpStatus(IntEnum):
@@ -151,14 +151,6 @@ def DeleteDocument(document):
         return f'Error: Error deleting document: {str(e)}'
 
 
-def VerifyJWT(token):
-    try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])
-        return True, payload
-    except Exception as e:
-        return False, str(e)
-
-
 operations = {
     'create': CreateDocument,
     'read': ReadDocument,
@@ -206,12 +198,6 @@ if __name__ == '__main__':
             message = server.recv_json()
             command = message.get('command')
             params = message.get('params', {})
-
-            token = message.get('token')
-            valid, payload = VerifyJWT(token)
-            if not valid:
-                server.send_json({'error': 'Unauthorized', 'status_code': 401})
-                continue
 
             if command == 'exit':
                 break
