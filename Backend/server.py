@@ -15,8 +15,10 @@ import zmq
 import json
 import jwt
 from Backend.db_app import db
+from dotenv import load_dotenv
 
 
+load_dotenv()
 cred_file = os.path.join(root_dir, 'credentials.json')
 master_agent = None
 
