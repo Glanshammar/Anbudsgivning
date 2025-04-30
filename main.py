@@ -11,7 +11,10 @@ import re
 import pymupdf
 from datetime import datetime, timedelta
 from Matching import IsTenderMatch
+from dotenv import load_dotenv
 
+
+load_dotenv()
 documents_folder = userpaths.get_my_documents()
 app_folder = os.path.join(documents_folder, 'AnbudApp')
 os.makedirs(app_folder, exist_ok=True)

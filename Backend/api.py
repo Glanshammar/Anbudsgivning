@@ -15,10 +15,12 @@ import bcrypt
 import re
 from functools import wraps
 from httpcodes import *
-from Data import Consultant, Company, Expertise
+from Data import Consultant, Company, Expertise, TenderDocument, TenderPortal
 from Agents import AgentType, AgentManager
 from Backend.db_app import *
+from dotenv import load_dotenv
 
+load_dotenv()
 app = CreateApp()
 context = zmq.Context()
 socket = context.socket(zmq.REQ)
@@ -68,7 +70,6 @@ def ApiKeyRequired(f):
     return decorated
 # ------------------------------------------------------------------------------------------------------------- #
 # --------------------------------------------- Request Functions --------------------------------------------- #
-
 def ProcessRequest(action: str =None, collection_name: str =None, data: dict =None, doc_id:str =None):
     try:
         command = {
@@ -216,7 +217,7 @@ def Login():
 
 @app.route('/company', methods=['POST', 'GET'])
 @ValidateModel(Company)
-def Company():
+def Companies():
     if request.method == 'POST':
         return ProcessRequest(
             action='create', 
@@ -311,18 +312,31 @@ def ExpertiseRequest():
                               data=request.get_json(),
                               doc_id='Expertise')
 
-@app.route('/tender-portals', methods=['POST', 'GET'])
+@app.route('/tender-portals', methods=['POST', 'GET', 'PUT'])
 def TenderPortals():
     if request.method == 'POST':
+        portals_data = request.get_json().get('portals', [])
+        validated_portals = []
+        for portal in portals_data:
+            portal_obj = TenderPortal(**portal)
+            validated_portals.append(portal_obj.to_dict())
         return ProcessRequest(action='create',
-                              collection_name=COMPANY_DATA,
-                              data=request.get_json(),
-                              doc_id='TenderPortals')
+                             collection_name=COMPANY_DATA,
+                             data={"portals": validated_portals},
+                             doc_id='TenderPortals')
+    
+    if request.method == 'PUT':
+        return ProcessRequest(action='update',
+                             collection_name=COMPANY_DATA,
+                             data=request.get_json(),
+                             doc_id='TenderPortals')
+    
     if request.method == 'GET':
         return ProcessRequest(action='read',
-                              collection_name=COMPANY_DATA,
-                              data=None,
-                              doc_id='TenderPortals')
+                             collection_name=COMPANY_DATA,
+                             data=None,
+                             doc_id='TenderPortals')
+
 # ------------------------------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------------------------------- #
 
