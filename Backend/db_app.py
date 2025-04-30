@@ -11,18 +11,19 @@ from firebase_admin import credentials, firestore
 from flask import Flask
 from .jwt_authentication import JWT_SECRET_KEY
 
-db = None
-
 def InitDB(cred_path):
-    cred = credentials.Certificate(cred_path)
-    firebase_admin.initialize_app(cred)
+    if not firebase_admin._apps:  # Check if already initialized
+        cred = credentials.Certificate(cred_path)
+        firebase_admin.initialize_app(cred)
     return firestore.client()
 
 def CreateApp(config=None):
-    global db
     app = Flask(__name__)
-    if config is not None:
+    
+    if config:
         app.config.from_object(config)
-    app.db = InitDB(f'{root_dir}/credentials.json')
-    db = app.db
+    
+    # Initialize Firebase and assign to app context
+    app.db = InitDB(f'{os.path.dirname(os.path.dirname(__file__))}/credentials.json')
+    
     return app
