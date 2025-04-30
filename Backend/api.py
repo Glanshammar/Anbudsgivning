@@ -15,12 +15,14 @@ import bcrypt
 import re
 from functools import wraps
 from httpcodes import *
-from Data import Consultant, Company, Expertise
+from Data import Consultant, Company, Expertise, TenderDocument, TenderPortal
 from Agents import AgentType, AgentManager
 from Backend.db_app import *
 import firebase_admin
 from firebase_admin import credentials
+from dotenv import load_dotenv
 
+load_dotenv()
 app = CreateApp()
 if not firebase_admin._apps:
     cred = credentials.Certificate(os.path.join(root_dir, 'credentials.json'))
@@ -74,11 +76,17 @@ def ApiKeyRequired(f):
     return decorated
 # ------------------------------------------------------------------------------------------------------------- #
 # --------------------------------------------- Request Functions --------------------------------------------- #
-
-def ProcessRequest(action: str =None, collection_name: str =None, data: dict =None, doc_id:str =None):
+def ProcessRequest(collection_name: str = None, data: dict = None, doc_id: str = None):
     try:
+        method_to_command = {
+            'POST': 'create',
+            'GET': 'read',
+            'PUT': 'update',
+            'DELETE': 'delete'
+        }
+        command_type = method_to_command.get(request.method)
         command = {
-            'command': action,
+            'command': command_type,
             'params': {
                 'collection_name': collection_name,
                 'document_data': data,
@@ -222,42 +230,33 @@ def Login():
 
 @app.route('/company', methods=['POST', 'GET'])
 @ValidateModel(Company)
-def Company():
+def Companies():
     if request.method == 'POST':
-        return ProcessRequest(
-            action='create', 
-            collection_name=COMPANY_DATA, 
-            data=request.get_json(), 
-            doc_id='Info')
+        return ProcessRequest(collection_name=COMPANY_DATA, 
+                              data=request.get_json(), 
+                              doc_id='Info')
     elif request.method == 'GET':
-        return ProcessRequest(action='read', 
-                              collection_name='CompanyList', 
+        return ProcessRequest(collection_name='CompanyList', 
                               data=None, 
                               doc_id=request.args.get('id'))
 
 
 @app.route('/consultant/<string:doc_id>', methods=['PUT'])
 def UpdateConsultant(doc_id):
-    data = request.get_json()
-    return ProcessRequest(
-        action="update",
-        collection_name=CONSULTANTS,
-        data=data,
-        doc_id=doc_id
-    )
+    return ProcessRequest(collection_name=CONSULTANTS,
+                          data=request.get_json(),
+                          doc_id=doc_id)
 
 
 @app.route('/consultants', methods=['POST', 'GET'])
 @ValidateModel(Consultant)
 def ConsultantsRequest():
     if request.method == 'POST':
-        return ProcessRequest(action='create', 
-                            collection_name=CONSULTANTS,
+        return ProcessRequest(collection_name=CONSULTANTS,
                             data=request.get_json(),
                             doc_id=request.args.get('id'))
     elif request.method == 'GET':
-        return ProcessRequest(action='read',
-                            collection_name=CONSULTANTS,
+        return ProcessRequest(collection_name=CONSULTANTS,
                             data=None,
                             doc_id=None)
 
@@ -267,68 +266,86 @@ def BusinessCalendar():
     if request.method == 'POST':
         data = request.get_json()
         availability = data.get("availability")
-        
+
         if not isinstance(availability, dict):
             return http_400("Invalid input: 'availability' must be a dictionary.")
 
-        return ProcessRequest(
-            action='create',
-            collection_name=COMPANY_DATA,
-            data=availability,
-            doc_id='ConsultantCalendar'
-        )
+        return ProcessRequest(collection_name=COMPANY_DATA,
+                              data=availability,
+                              doc_id='ConsultantCalendar')
     
     if request.method == 'GET':
-        return ProcessRequest(
-            action='read',
-            collection_name=COMPANY_DATA,
-            data=None,
-            doc_id='ConsultantCalendar'
-        )
+        return ProcessRequest(collection_name=COMPANY_DATA,
+                              data=None,
+                              doc_id='ConsultantCalendar')
 
 
 @app.route('/tenders', methods=['GET', 'POST'])
 def TendersRequest():
     if request.method == 'GET':
-        return ProcessRequest(action='read',
-                            collection_name=TENDERS,
+        return ProcessRequest(collection_name=TENDERS,
                             data=None,
                             doc_id=request.args.get('tender_id'))
     if request.method == 'POST':
-        return ProcessRequest(action='create',
-                              collection_name=TENDERS)
+        return ProcessRequest(collection_name=TENDERS,
+                              data=request.get_json(),
+                              doc_id=request.args.get('tender_id'))
 
 
 @app.route('/expertise', methods=['POST', 'GET', 'PUT'])
 def ExpertiseRequest():
     if request.method == 'POST':
-        return ProcessRequest(action='create',
-                              collection_name=COMPANY_DATA,
+        return ProcessRequest(collection_name=COMPANY_DATA,
                               data=request.get_json(),
                               doc_id='Expertise')
     elif request.method == 'GET':
-        return ProcessRequest(action='read',
-                              collection_name=COMPANY_DATA,
+        return ProcessRequest(collection_name=COMPANY_DATA,
                               data=None,
                               doc_id='Expertise')
     elif request.method == 'PUT':
-        return ProcessRequest(action='update',
-                              collection_name=COMPANY_DATA,
+        return ProcessRequest(collection_name=COMPANY_DATA,
                               data=request.get_json(),
                               doc_id='Expertise')
 
-@app.route('/tender-portals', methods=['POST', 'GET'])
+@app.route('/tender-portals', methods=['POST', 'GET', 'PUT'])
 def TenderPortals():
+    # API JSON format for POST
+    """
+    {
+        "portals": [
+            {
+            "url": "https://tenderportal1.example.com",
+            "username": "username1",
+            "password": "password1"
+            },
+            {
+            "url": "https://tenderportal2.example.com",
+            "username": "username2",
+            "password": "password2"
+            }
+        ]
+    }
+    """
     if request.method == 'POST':
-        return ProcessRequest(action='create',
-                              collection_name=COMPANY_DATA,
-                              data=request.get_json(),
-                              doc_id='TenderPortals')
+        portals_data = request.get_json().get('portals', [])
+        validated_portals = []
+        for portal in portals_data:
+            portal_obj = TenderPortal(**portal)
+            validated_portals.append(portal_obj.to_dict())
+        return ProcessRequest(collection_name=COMPANY_DATA,
+                             data={"portals": validated_portals},
+                             doc_id='TenderPortals')
+    
+    if request.method == 'PUT':
+        return ProcessRequest(collection_name=COMPANY_DATA,
+                             data=request.get_json(),
+                             doc_id='TenderPortals')
+    
     if request.method == 'GET':
-        return ProcessRequest(action='read',
-                              collection_name=COMPANY_DATA,
-                              data=None,
-                              doc_id='TenderPortals')
+        return ProcessRequest(collection_name=COMPANY_DATA,
+                             data=None,
+                             doc_id='TenderPortals')
+
 # ------------------------------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------------------------------- #
 

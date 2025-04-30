@@ -4,6 +4,8 @@ from typing import List
 from datetime import datetime, timedelta, date
 import userpaths
 import os
+from cryptography.fernet import Fernet
+from dotenv import load_dotenv
 
 fake = Faker()
 Faker.seed(42)
@@ -14,6 +16,25 @@ with open(os.path.join(root_dir, "expertise.txt"), "r") as file:
     lines = [line.strip() for line in file.readlines()]
 
 Expertise = {index: value for index, value in enumerate(lines)}
+
+
+class TenderPortal:
+    def __init__(self, url:str, username:str, password:str):
+        if not all(isinstance(arg, str) for arg in [url, username, password]):
+            raise TypeError("All arguments (url, username, password) must be of type str")
+        self.url = url
+        self.username = username
+        self.password = password
+
+    def __str__(self):
+        return f"Tender Portal: {self.url}\nUsername: {self.username}\nPassword: {self.password}"
+    
+    def to_dict(self):
+        return {
+            'url': self.url,
+            'username': self.username,
+            'password': self.password
+        }
 
 
 class Company:
