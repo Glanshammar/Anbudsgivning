@@ -18,10 +18,16 @@ from httpcodes import *
 from Data import Consultant, Company, Expertise, TenderDocument, TenderPortal
 from Agents import AgentType, AgentManager
 from Backend.db_app import *
+import firebase_admin
+from firebase_admin import credentials
 from dotenv import load_dotenv
 
 load_dotenv()
 app = CreateApp()
+if not firebase_admin._apps:
+    cred = credentials.Certificate(os.path.join(root_dir, 'credentials.json'))
+    firebase_admin.initialize_app(cred)
+db = firestore.client()
 context = zmq.Context()
 socket = context.socket(zmq.REQ)
 socket.connect("tcp://localhost:5001")
