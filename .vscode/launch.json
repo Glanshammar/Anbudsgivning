@@ -33,6 +33,16 @@
             "console": "integratedTerminal",
             "envFile": "${workspaceFolder}/.env"
         },
+        {
+            "name": "Website",
+            "type": "pwa-node",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/frontend",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": ["start"],
+            "console": "integratedTerminal"
+        }
+        
     ],
     "compounds": [
         {

@@ -14,7 +14,6 @@ import shutil
 import zmq
 import json
 import jwt
-from Backend.db_app import db
 from dotenv import load_dotenv
 
 

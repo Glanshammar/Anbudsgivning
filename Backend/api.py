@@ -5,7 +5,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(current_dir)
 sys.path.insert(0, root_dir)
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, current_app
 from werkzeug.exceptions import BadRequest
 from jwt_authentication import *
 from google.cloud import firestore
@@ -24,10 +24,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 app = CreateApp()
-if not firebase_admin._apps:
-    cred = credentials.Certificate(os.path.join(root_dir, 'credentials.json'))
-    firebase_admin.initialize_app(cred)
-db = firestore.client()
 context = zmq.Context()
 socket = context.socket(zmq.REQ)
 socket.connect("tcp://localhost:5001")
@@ -46,7 +42,7 @@ def StoreApiKeys(user_id: str, permissions: list):
     raw_key = GenerateApiKey()
     hashed_key = bcrypt.hashpw(raw_key.encode(), bcrypt.gensalt()).decode()
     
-    db.collection('api_keys').add({
+    current_app.db.collection('api_keys').add({
         'user_id': user_id,
         'key_hash': hashed_key,
         'permissions': permissions,
@@ -65,7 +61,7 @@ def ApiKeyRequired(f):
         if not api_key:
             return jsonify(error="Missing API key"), 401
 
-        docs = db.collection('api_keys').where('is_active', '==', True).stream()
+        docs = current_app.db.collection('api_keys').where('is_active', '==', True).stream()
         for doc in docs:
             key_data = doc.to_dict()
             if bcrypt.checkpw(api_key.encode(), key_data['key_hash'].encode()):
@@ -143,7 +139,7 @@ def CreateKey():
 
 @app.route('/keys/<key_id>', methods=['DELETE'])
 def RevokeKey(key_id):
-    db.collection('api_keys').document(key_id).update({'is_active': False})
+    current_app.db.collection('api_keys').document(key_id).update({'is_active': False})
     return jsonify(status="revoked"), 200
 
 
@@ -181,7 +177,7 @@ def Register():
         return http_400("Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.")
 
     # Check if user already exists
-    users_ref = db.collection('Users')
+    users_ref = current_app.db.collection('Users')
     existing_users = list(users_ref.where('username', '==', username).stream())
     if existing_users:
         return http_409("Username already exists.")
@@ -209,7 +205,7 @@ def Login():
         return http_401("Username and password required.")
 
     # Query Firestore for user document
-    users_ref = db.collection('Users')
+    users_ref = current_app.db.collection('Users')
     user_query = users_ref.where('username', '==', username).limit(1).stream()
     user_doc = next(user_query, None)
 
