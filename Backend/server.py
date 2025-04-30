@@ -8,18 +8,19 @@ sys.path.insert(0, root_dir)
 import firebase_admin
 from firebase_admin import credentials, firestore
 from zmq.auth import create_certificates
-from enum import IntEnum
+from enum import IntEnum, Enum
 from Agents import *
 import shutil
 import zmq
 import json
 import jwt
 from Backend.db_app import db
+from dotenv import load_dotenv
 
 
+load_dotenv()
 cred_file = os.path.join(root_dir, 'credentials.json')
 master_agent = None
-
 
 
 class OpStatus(IntEnum):
@@ -110,7 +111,15 @@ def GetDocuments(collection_name):
         return f'Error: Error getting documents: {str(e)}'
 
 
-def UpdateDocument(collection_name, document_id, document_data, merge=True, add_section=False, section_key=None, section_data=None):
+def UpdateDocument(params):
+    collection_name = params.get('collection_name')
+    document_id = params.get('document_id')
+    document_data = params.get('document_data')
+    merge = params.get('merge', True)
+    add_section = params.get('add_section', False)
+    section_key = params.get('section_key', None)
+    section_data = params.get('section_data', None)
+    
     if not collection_name or not document_id:
         return 'Error: Collection name and document ID cannot be empty.'
 
