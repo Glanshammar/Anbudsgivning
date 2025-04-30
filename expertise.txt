@@ -1,0 +1,5 @@
+Python
+React
+Project Management
+Database Design
+Cloud Computing
