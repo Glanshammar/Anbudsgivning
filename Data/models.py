@@ -3,12 +3,14 @@ import random
 from typing import List
 from datetime import datetime, timedelta, date
 import userpaths
+import os
 
 fake = Faker()
 Faker.seed(42)
 
-documents_folder = userpaths.get_my_documents()
-with open(f"{documents_folder}/expertise.txt", "r") as file:
+current_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.dirname(current_dir)
+with open(os.path.join(root_dir, "expertise.txt"), "r") as file:
     lines = [line.strip() for line in file.readlines()]
 
 Expertise = {index: value for index, value in enumerate(lines)}
