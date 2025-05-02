@@ -9,7 +9,7 @@ sys.path.insert(0, current_dir)
 import firebase_admin
 from firebase_admin import credentials, firestore
 from flask import Flask
-from .jwt_authentication import JWT_SECRET_KEY
+import datetime
 
 def InitDB(cred_path):
     if not firebase_admin._apps:  # Check if already initialized
@@ -23,7 +23,11 @@ def CreateApp(config=None):
     if config:
         app.config.from_object(config)
     
-    # Initialize Firebase and assign to app context
+    app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
+    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = datetime.timedelta(minutes=30)
+    app.config["JWT_REFRESH_TOKEN_EXPIRES"] = datetime.timedelta(days=7)
+
     app.db = InitDB(f'{os.path.dirname(os.path.dirname(__file__))}/credentials.json')
-    
+    from flask_jwt_extended import JWTManager
+    jwt = JWTManager(app)
     return app
