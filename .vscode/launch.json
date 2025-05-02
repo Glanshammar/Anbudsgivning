@@ -59,6 +59,11 @@
             "name": "Server+API+Main",
             "configurations": ["Server", "API", "Main"],
             "stopAll": true
+        },
+        {
+            "name": "Server+API+Website",
+            "configurations": ["Server", "API", "Website"],
+            "stopAll": true
         }
     ]
 }
