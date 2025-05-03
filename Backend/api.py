@@ -13,7 +13,7 @@ import bcrypt
 import re
 from functools import wraps
 from httpcodes import *
-from Data import Consultant, Company, Expertise, TenderDocument, TenderPortal
+from Data import Consultant, CompanyProfile, Expertise, TenderDocument, TenderPortal
 from Agents import AgentType, AgentManager
 from Backend.db_app import *
 from dotenv import load_dotenv
@@ -81,9 +81,9 @@ def ValidateModel(model_class):
     return decorator
 # ------------------------------------------------------------------------------------------------------------- #
 # ---------------------------------------------- Route Functions ---------------------------------------------- #
-@app.route('/api/protected', methods=['GET'])
+@app.route('/api/verify_user', methods=['GET'])
 @jwt_required()
-def Protected():
+def VerifyUser():
     current_user = get_jwt_identity()
     return jsonify(logged_in_as=current_user), 200
 
@@ -180,37 +180,29 @@ def Refresh():
     return jsonify(access_token=new_access_token), 200
 
 
-@app.route('/api/company', methods=['POST', 'GET'])
-@ValidateModel(Company)
-def Companies():
-    if request.method == 'POST':
-        return ProcessRequest(collection_name=COMPANY_DATA, 
-                              data=request.get_json(), 
-                              doc_id='Info')
-    elif request.method == 'GET':
-        return ProcessRequest(collection_name='CompanyList', 
-                              data=None, 
-                              doc_id=request.args.get('id'))
-
-
-@app.route('/api/consultant/<string:doc_id>', methods=['PUT'])
-def UpdateConsultant(doc_id):
-    return ProcessRequest(collection_name=CONSULTANTS,
-                          data=request.get_json(),
-                          doc_id=doc_id)
-
-
-@app.route('/api/consultants', methods=['POST', 'GET'])
+@app.route('/api/consultants', methods=['POST', 'GET', 'PUT'])
 @ValidateModel(Consultant)
-def ConsultantsRequest():
-    if request.method == 'POST':
-        return ProcessRequest(collection_name=CONSULTANTS,
-                            data=request.get_json(),
-                            doc_id=request.args.get('id'))
+def Consultants():
+    doc_id = request.args.get('id')
+    
+    if request.method == 'PUT':
+        return ProcessRequest(
+            collection_name=CONSULTANTS,
+            data=request.get_json(),
+            doc_id=doc_id
+        )
+    elif request.method == 'POST':
+        return ProcessRequest(
+            collection_name=CONSULTANTS,
+            data=request.get_json(),
+            doc_id=doc_id
+        )
     elif request.method == 'GET':
-        return ProcessRequest(collection_name=CONSULTANTS,
-                            data=None,
-                            doc_id=None)
+        return ProcessRequest(
+            collection_name=CONSULTANTS,
+            data=None,
+            doc_id=doc_id
+        )
 
 
 @app.route('/api/calendar', methods=['POST', 'GET'])
@@ -259,6 +251,7 @@ def ExpertiseRequest():
                               data=request.get_json(),
                               doc_id='Expertise')
 
+
 @app.route('/api/tender_portals', methods=['POST', 'GET', 'PUT'])
 def TenderPortals():
     # JSON format
@@ -298,6 +291,27 @@ def TenderPortals():
                              data=None,
                              doc_id='TenderPortals')
 
+
+@app.route('/api/company_profile', methods=['POST', 'GET'])
+@ValidateModel(CompanyProfile)
+def CompanyProfiles():
+    # JSON format
+    """
+    {
+        "name": "Example Corp",
+        "country": "United States",
+        "industry": "Construction"
+    }
+    """
+    if request.method == 'POST':
+        return ProcessRequest(collection_name=COMPANY_DATA,
+                             data=request.get_json(),
+                             doc_id='CompanyProfile')
+    
+    if request.method == 'GET':
+        return ProcessRequest(collection_name=COMPANY_DATA,
+                             data=None,
+                             doc_id='CompanyProfile')
 # ------------------------------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------------------------------- #
 
