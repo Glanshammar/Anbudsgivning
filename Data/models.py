@@ -37,18 +37,27 @@ class TenderPortal:
         }
 
 
-class Company:
-    def __init__(self, name: str ='ACME AB'):
+class CompanyProfile:
+    def __init__(self, name:str, country:str, industry:str):
         if not isinstance(name, str):
             raise ValueError("Name must be a string")
+        if not isinstance(country, str):
+            raise ValueError("Country must be a string")
+        if not isinstance(industry, str):
+            raise ValueError("Industry must be a string")
+
         self.name = name
+        self.country = country
+        self.industry = industry
 
     def __str__(self):
-        return f"Company(name={self.name}"
+        return f"CompanyProfile(name={self.name}, country={self.country}, industry={self.industry})"
 
     def to_dict(self):
         return {
             'name': self.name,
+            'country': self.country,
+            'industry': self.industry,
         }
 
 
