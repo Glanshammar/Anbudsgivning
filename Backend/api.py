@@ -21,9 +21,18 @@ from Backend.db_app import *
 import firebase_admin
 from firebase_admin import credentials
 from dotenv import load_dotenv
+from flask_cors import CORS
+
 
 load_dotenv()
 app = CreateApp()
+CORS(app, resources={
+    r"/*": {
+        "origins": ["http://localhost:3000"],
+        "methods": ["GET", "POST", "PUT", "DELETE"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 context = zmq.Context()
 socket = context.socket(zmq.REQ)
 socket.connect("tcp://localhost:5001")
@@ -303,7 +312,7 @@ def ExpertiseRequest():
                               data=request.get_json(),
                               doc_id='Expertise')
 
-@app.route('/tender-portals', methods=['POST', 'GET', 'PUT'])
+@app.route('/api/tender_portals', methods=['POST', 'GET', 'PUT'])
 def TenderPortals():
     # API JSON format for POST
     """
