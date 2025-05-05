@@ -9,6 +9,5 @@ export const getPortals = async () => {
     if (!response.ok) {
         throw new Error("Failed to fetch portals");
     }
-    console.log(data);
     return Array.isArray(data.portals) ? data.portals : [];
 }
