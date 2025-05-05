@@ -1,178 +1,161 @@
 import os
 import sys
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.dirname(current_dir)
+sys.path.insert(0, root_dir)
+
 import zmq
 import time
-import multiprocessing
 from enum import Enum
 from Logger import GetLogger
 from multiprocessing import Process
+from .webcrawler import WebCrawler
 
 STATUS_PORT = 5600
 COMMAND_PORT = 5500
 
 class AgentType(Enum):
     WEB_CRAWLER = "WebCrawler"
-    OTHER = "Other"
+
 
 class Agent(Process):
-    def __init__(self, agent_id, role):
+    def __init__(self, agent_id):
         super().__init__()
         self.agent_id = agent_id
-        self.role = role
         self.running = False
         self.context = zmq.Context()
         self.logger = GetLogger()
+        self.command_socket = None
+        self.status_socket = None
     
     def __str__(self):
-        return f"Agent ID: {self.agent_id} \nRole: {self.role} \nRunning: {self.running}"
+        return f"Agent ID: {self.agent_id} \nRunning: {self.running}"
 
-    def Close(self):
-        if hasattr(self, 'command_socket'):
-            try:
-                self.command_socket.close()
-            except zmq.error.ZMQError as e:
-                self.logger.error(f"Failed to close command socket: {e}")
-        if hasattr(self, 'status_socket'):
-            try:
-                self.status_socket.close()
-            except zmq.error.ZMQError as e:
-                self.logger.error(f"Failed to close status socket: {e}")
-        if hasattr(self, 'context'):
-            try:
-                self.context.term()
-            except zmq.error.ZMQError as e:
-                self.logger.error(f"Failed to terminate context: {e}")
+    def Close(self):  
+        if self.command_socket:  
+            self.command_socket.close(linger=0)
+        if self.status_socket:
+            self.status_socket.close(linger=0)
+        self.context.term()
 
-    def Run(self):
+    def run(self):
         self.running = True
 
-        # Create REP socket for commands
-        try:
-            command_socket = self.context.socket(zmq.REP)
-            command_socket.bind(f"tcp://127.0.0.1:{self.agent_id + COMMAND_PORT}")
-            self.command_socket = command_socket
-        except zmq.error.ZMQError as e:
-            print(f"Failed to create or bind REP socket: {e}")
-            return
+        # Setup command socket (bind)
+        self.command_socket = self.context.socket(zmq.REP) # Reply socket (to recieve commands)
+        self.command_socket.bind(f"tcp://*:{self.agent_id + COMMAND_PORT}")
 
-        # Create PUB socket for status updates
-        try:
-            status_socket = self.context.socket(zmq.PUB)
-            status_socket.bind(f"tcp://127.0.0.1:{self.agent_id + STATUS_PORT}")
-            self.status_socket = status_socket
-        except zmq.error.ZMQError as e:
-            print(f"Failed to create or bind PUB socket: {e}")
-            return
+        # Setup status socket (connect to manager's PUB)
+        self.status_socket = self.context.socket(zmq.PUB) # Publish socket (to give status updates, e.g. 'crawling url X')
+        self.status_socket.connect(f"tcp://localhost:{STATUS_PORT}")
+
+        poller = zmq.Poller()
+        poller.register(self.command_socket, zmq.POLLIN)
 
         while self.running:
-            try:
-                command = command_socket.recv_string()
-                if command == "stop":
-                    self.Stop()
-                else:
-                    print(f"Agent {self.agent_id} received unknown command: {command}")
-                command_socket.send(b"Command received.")
-            except zmq.error.Again:
-                print("No response received within the timeout period.")
-                command_socket.send(b"Command failed.")
-            except Exception as e:
-                print(f"Error receiving message: {e}")
-                command_socket.send(b"Command failed.")
-                self.close()
-                break
-            finally:
-                status_socket.send_string(f"Agent {self.agent_id} is running")
+            # Poll for commands with timeout (500ms)
+            socks = dict(poller.poll(500))
 
-        self.close()
+            if self.command_socket in socks:
+                try:
+                    command = self.command_socket.recv_string(zmq.NOBLOCK)
+                    if command == "stop":
+                        self.command_socket.send_string("Stopping")
+                        self.Stop()
+                    else:
+                        self.command_socket.send_string(f"Unknown command: {command}")
+                except zmq.Again:
+                    # No command received
+                    pass
+
+            # Send periodic status update
+            self.status_socket.send_multipart([
+                str(self.agent_id).encode(),
+                f"Agent {self.agent_id} is running".encode()
+            ])
+
+            time.sleep(1)
+        self.Close()
 
     def Stop(self):
         self.running = False
         self.close()
 
 
-class WebCrawlerAgent(Agent):
-    def __init__(self, agent_id, role, urls_to_crawl):
-        super().__init__(agent_id, role)
-        self.urls_to_crawl = urls_to_crawl
-
-
-class OtherAgent(Agent):
-    def __init__(self, agent_id, role):
-        super().__init__(agent_id, role)
-
-
 class AgentManager(Process):
     def __init__(self):
         super().__init__()
-        self.agents = {}
-        self.processes = {}
-    
-    def __str__(self):
-        return f"Agents: {self.agents if self.agents else 'empty'}"
-    
-    def Create(self, agent_type, role, **kwargs):
-        agent_id = len(self.agents) + 1
+        self.agents = {}  # Stores agent configurations
+        self.processes = {}  # Tracks running processes
+        self.context = zmq.Context()
+        self.status_socket = self.context.socket(zmq.SUB)
+        self.status_socket.setsockopt(zmq.SUBSCRIBE, b'')
+        self.status_socket.bind("tcp://*:5600")
+        
+    def run(self):
+        # Main manager loop handling status updates and cleanup
+        poller = zmq.Poller()
+        poller.register(self.status_socket, zmq.POLLIN)
+        
+        while True:
+            # Process status messages
+            socks = dict(poller.poll(500))  # 500ms timeout
+            if self.status_socket in socks:
+                agent_id, status = self.status_socket.recv_multipart()
+                print(f"[{agent_id.decode()}] {status.decode()}")
+            
+            # Periodic cleanup
+            self.CleanupProcesses()
+
+    def Create(self, agent_type: AgentType, **kwargs):
+        """Create new agent instance"""
+        agent_id = max(self.agents.keys(), default=0) + 1
         if agent_type == AgentType.WEB_CRAWLER:
-            agent = WebCrawlerAgent(agent_id, role, **kwargs)
-        elif agent_type == AgentType.OTHER:
-            agent = OtherAgent(agent_id, role)
-        else:
-            raise ValueError("Invalid agent type")
+            agent = WebCrawler(agent_id, **kwargs)
         self.agents[agent_id] = agent
         return agent
 
-    def Start(self, agent_or_id):
-        agent_id = agent_or_id.agent_id if isinstance(agent_or_id, Agent) else agent_or_id
-        
+    def Start(self, agent_id: int):
+        """Start an agent process"""
         if agent_id not in self.agents:
-            print(f"Agent {agent_id} not found")
-            return
-        
-        agent = self.agents[agent_id]
-        
-        if agent_id in self.processes and self.processes[agent_id].is_alive():
-            print(f"Agent {agent_id} is already running")
-            return
-        
-        try:
-            agent.Run()
-            self.processes[agent_id] = agent
-            print(f"Agent {agent_id} started successfully")
-        except Exception as e:
-            print(f"Failed to start Agent {agent_id}: {str(e)}")
-
-    def Stop(self, agent_or_id):
-        agent_id = agent_or_id.agent_id if isinstance(agent_or_id, Agent) else agent_or_id
-        
-        if agent_id in self.processes and self.processes[agent_id].is_alive():
-            stop_socket = zmq.Context().socket(zmq.REQ)
-            stop_socket.connect(f"tcp://127.0.0.1:{agent_id + COMMAND_PORT}")
+            raise ValueError(f"Agent {agent_id} not found")
             
-            try:
-                stop_socket.send_string("stop")
-                stop_socket.recv_string()
-                print(f"Agent {agent_id} stopped successfully")
-            except zmq.error.Again:
-                print(f"Failed to stop Agent {agent_id} due to timeout.")
-            except Exception as e:
-                print(f"Error stopping Agent {agent_id}: {str(e)}")
-            finally:
-                stop_socket.close()
+        if agent_id in self.processes:
+            if self.processes[agent_id].is_alive():
+                print(f"Agent {agent_id} already running")
+                return
+                
+        agent = self.agents[agent_id]
+        agent.start()  # Start the process
+        self.processes[agent_id] = agent
+        print(f"Agent {agent_id} started")
+
+    def Stop(self, agent_id: int):
+        """Gracefully stop an agent"""
+        if agent_id not in self.processes:
+            print(f"Agent {agent_id} not running")
+            return
+            
+        # Send stop command via ZeroMQ
+        ctx = zmq.Context()
+        sock = ctx.socket(zmq.REQ)
+        sock.connect(f"tcp://localhost:{COMMAND_PORT + agent_id}")
+        sock.send_string("stop")
+        sock.close()
+        ctx.term()
+        
+        # Wait for process termination
+        self.processes[agent_id].join(timeout=5)
+        if self.processes[agent_id].is_alive():
+            print(f"Force-terminating agent {agent_id}")
+            self.processes[agent_id].terminate()
 
     def CleanupProcesses(self):
-        dead_agents = [
-            agent_id 
-            for agent_id, process in self.processes.items() 
-            if not process.is_alive()
-        ]
-        
-        for agent_id in dead_agents:
-            del self.processes[agent_id]
-        
-        if dead_agents:
-            print(f"Cleaned up {len(dead_agents)} dead agents")
-
-    def ManagerLoop(self):
-        while True:
-            time.sleep(5)
-            self.CleanupProcesses()
+        """Remove terminated agents"""
+        dead = [aid for aid, p in self.processes.items() if not p.is_alive()]
+        for aid in dead:
+            del self.processes[aid]
+            del self.agents[aid]
+        if dead:
+            print(f"Cleaned {len(dead)} terminated agents")
