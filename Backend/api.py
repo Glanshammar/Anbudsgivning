@@ -6,20 +6,16 @@ root_dir = os.path.dirname(current_dir)
 sys.path.insert(0, root_dir)
 
 from flask import Flask, request, jsonify, current_app
-from werkzeug.exceptions import BadRequest
-from jwt_authentication import *
-from google.cloud import firestore
+from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
+from google.cloud.firestore_v1.base_query import FieldFilter
 import zmq
-import secrets
 import bcrypt
 import re
 from functools import wraps
 from httpcodes import *
-from Data import Consultant, Company, Expertise, TenderDocument, TenderPortal
+from Data import Consultant, CompanyProfile, Expertise, TenderDocument, TenderPortal
 from Agents import AgentType, AgentManager
 from Backend.db_app import *
-import firebase_admin
-from firebase_admin import credentials
 from dotenv import load_dotenv
 from flask_cors import CORS
 
@@ -41,44 +37,6 @@ socket.connect("tcp://localhost:5001")
 COMPANY_DATA = 'CompanyData'
 TENDERS = 'Tenders'
 CONSULTANTS = 'Consultants'
-# ------------------------------------------------------------------------------------------------------------- #
-# --------------------------------------------- API Key Functions --------------------------------------------- #
-def GenerateApiKey():
-    return f"sk_{secrets.token_urlsafe(32)}"
-
-
-def StoreApiKeys(user_id: str, permissions: list):
-    raw_key = GenerateApiKey()
-    hashed_key = bcrypt.hashpw(raw_key.encode(), bcrypt.gensalt()).decode()
-    
-    current_app.db.collection('api_keys').add({
-        'user_id': user_id,
-        'key_hash': hashed_key,
-        'permissions': permissions,
-        'created_at': firestore.SERVER_TIMESTAMP,
-        'last_used': None,
-        'is_active': True
-        })
-    return raw_key
-
-
-def ApiKeyRequired(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        api_key = request.headers.get('Authorization', '').replace('Bearer ', '')
-        
-        if not api_key:
-            return jsonify(error="Missing API key"), 401
-
-        docs = current_app.db.collection('api_keys').where('is_active', '==', True).stream()
-        for doc in docs:
-            key_data = doc.to_dict()
-            if bcrypt.checkpw(api_key.encode(), key_data['key_hash'].encode()):
-                request.key_meta = key_data
-                return f(*args, **kwargs)
-        
-        return jsonify(error="Invalid API key"), 401
-    return decorated
 # ------------------------------------------------------------------------------------------------------------- #
 # --------------------------------------------- Request Functions --------------------------------------------- #
 def ProcessRequest(collection_name: str = None, data: dict = None, doc_id: str = None):
@@ -132,27 +90,14 @@ def ValidateModel(model_class):
     return decorator
 # ------------------------------------------------------------------------------------------------------------- #
 # ---------------------------------------------- Route Functions ---------------------------------------------- #
-@app.route('/protected', methods=['GET'])
+@app.route('/api/verify_user', methods=['GET'])
 @jwt_required()
-def Protected():
+def VerifyUser():
     current_user = get_jwt_identity()
     return jsonify(logged_in_as=current_user), 200
 
 
-@app.route('/keys', methods=['POST'])
-def CreateKey():
-    user_id = get_jwt_identity()
-    raw_key = StoreApiKeys(user_id, permissions=['read:basic'])
-    return jsonify(api_key=raw_key), 201
-
-
-@app.route('/keys/<key_id>', methods=['DELETE'])
-def RevokeKey(key_id):
-    current_app.db.collection('api_keys').document(key_id).update({'is_active': False})
-    return jsonify(status="revoked"), 200
-
-
-@app.route('/server-status', methods=['GET'])
+@app.route('/api/server', methods=['GET'])
 def ServerStatus():
     socket.send_json({
         'command': 'status'
@@ -161,12 +106,12 @@ def ServerStatus():
     return jsonify(response), status_code
 
 
-@app.route('/api-status', methods=['GET'])
+@app.route('/api/status', methods=['GET'])
 def ApiStatus():
     return http_200('API is Online!')
 
 
-@app.route('/register', methods=['POST'])
+@app.route('/api/register', methods=['POST'])
 def Register():
     def ValidatePassword(password):
         # Minimum 8 characters, at least one uppercase, one lowercase, one digit, one special character
@@ -187,7 +132,7 @@ def Register():
 
     # Check if user already exists
     users_ref = current_app.db.collection('Users')
-    existing_users = list(users_ref.where('username', '==', username).stream())
+    existing_users = list(users_ref.where(filter=FieldFilter('username', '==', username)).limit(1).stream())
     if existing_users:
         return http_409("Username already exists.")
 
@@ -204,7 +149,7 @@ def Register():
     return http_201("User registered successfully.")
 
 
-@app.route('/login', methods=['POST'])
+@app.route('/api/login', methods=['POST'])
 def Login():
     data = request.get_json()
     username = data.get("username")
@@ -215,8 +160,8 @@ def Login():
 
     # Query Firestore for user document
     users_ref = current_app.db.collection('Users')
-    user_query = users_ref.where('username', '==', username).limit(1).stream()
-    user_doc = next(user_query, None)
+    user_docs = users_ref.where(filter=FieldFilter('username', '==', username)).limit(1).stream()
+    user_doc = next(user_docs, None)
 
     if not user_doc:
         return http_401("Invalid credentials.")
@@ -228,45 +173,48 @@ def Login():
     if not bcrypt.checkpw(password.encode(), stored_hash.encode()):
         return http_401("Invalid credentials.")
 
-    # Generate JWT with user ID or username (never include password)
-    token = GenerateJWT(user_id=user_doc.id)
-    return jsonify(token=token), 200
+    access_token = create_access_token(identity=user_doc.id, fresh=True)
+    refresh_token = create_refresh_token(identity=user_doc.id)
+    return jsonify(
+        access_token=access_token,
+        refresh_token=refresh_token
+    ), 200
 
 
-@app.route('/company', methods=['POST', 'GET'])
-@ValidateModel(Company)
-def Companies():
-    if request.method == 'POST':
-        return ProcessRequest(collection_name=COMPANY_DATA, 
-                              data=request.get_json(), 
-                              doc_id='Info')
-    elif request.method == 'GET':
-        return ProcessRequest(collection_name='CompanyList', 
-                              data=None, 
-                              doc_id=request.args.get('id'))
+@app.route('/api/refresh', methods=['POST'])
+@jwt_required(refresh=True)
+def Refresh():
+    current_user = get_jwt_identity()
+    new_access_token = create_access_token(identity=current_user, fresh=False)
+    return jsonify(access_token=new_access_token), 200
 
 
-@app.route('/consultant/<string:doc_id>', methods=['PUT'])
-def UpdateConsultant(doc_id):
-    return ProcessRequest(collection_name=CONSULTANTS,
-                          data=request.get_json(),
-                          doc_id=doc_id)
-
-
-@app.route('/consultants', methods=['POST', 'GET'])
+@app.route('/api/consultants', methods=['POST', 'GET', 'PUT'])
 @ValidateModel(Consultant)
-def ConsultantsRequest():
-    if request.method == 'POST':
-        return ProcessRequest(collection_name=CONSULTANTS,
-                            data=request.get_json(),
-                            doc_id=request.args.get('id'))
+def Consultants():
+    doc_id = request.args.get('id')
+    
+    if request.method == 'PUT':
+        return ProcessRequest(
+            collection_name=CONSULTANTS,
+            data=request.get_json(),
+            doc_id=doc_id
+        )
+    elif request.method == 'POST':
+        return ProcessRequest(
+            collection_name=CONSULTANTS,
+            data=request.get_json(),
+            doc_id=doc_id
+        )
     elif request.method == 'GET':
-        return ProcessRequest(collection_name=CONSULTANTS,
-                            data=None,
-                            doc_id=None)
+        return ProcessRequest(
+            collection_name=CONSULTANTS,
+            data=None,
+            doc_id=doc_id
+        )
 
 
-@app.route('/calendar', methods=['POST', 'GET'])
+@app.route('/api/calendar', methods=['POST', 'GET'])
 def BusinessCalendar():
     if request.method == 'POST':
         data = request.get_json()
@@ -285,7 +233,7 @@ def BusinessCalendar():
                               doc_id='ConsultantCalendar')
 
 
-@app.route('/tenders', methods=['GET', 'POST'])
+@app.route('/api/tenders', methods=['GET', 'POST'])
 def TendersRequest():
     if request.method == 'GET':
         return ProcessRequest(collection_name=TENDERS,
@@ -297,7 +245,7 @@ def TendersRequest():
                               doc_id=request.args.get('tender_id'))
 
 
-@app.route('/expertise', methods=['POST', 'GET', 'PUT'])
+@app.route('/api/expertise', methods=['POST', 'GET', 'PUT'])
 def ExpertiseRequest():
     if request.method == 'POST':
         return ProcessRequest(collection_name=COMPANY_DATA,
@@ -312,9 +260,10 @@ def ExpertiseRequest():
                               data=request.get_json(),
                               doc_id='Expertise')
 
+
 @app.route('/api/tender_portals', methods=['POST', 'GET', 'PUT'])
 def TenderPortals():
-    # API JSON format for POST
+    # JSON format
     """
     {
         "portals": [
@@ -351,6 +300,27 @@ def TenderPortals():
                              data=None,
                              doc_id='TenderPortals')
 
+
+@app.route('/api/company_profile', methods=['POST', 'GET'])
+@ValidateModel(CompanyProfile)
+def CompanyProfiles():
+    # JSON format
+    """
+    {
+        "name": "Example Corp",
+        "country": "United States",
+        "industry": "Construction"
+    }
+    """
+    if request.method == 'POST':
+        return ProcessRequest(collection_name=COMPANY_DATA,
+                             data=request.get_json(),
+                             doc_id='CompanyProfile')
+    
+    if request.method == 'GET':
+        return ProcessRequest(collection_name=COMPANY_DATA,
+                             data=None,
+                             doc_id='CompanyProfile')
 # ------------------------------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------------------------------- #
 
