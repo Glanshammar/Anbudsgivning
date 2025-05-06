@@ -20,12 +20,30 @@ class WebCrawler(Agent):
         self.urls_to_crawl = self.UpdateURLs()
 
     def UpdateURLs(self):
-        tender_portals_response = requests.get('http://127.0.0.1:5000/api/tender_portals')
-        tender_portals = json.loads(tender_portals_response.text)
-        portals = tender_portals['portals']
-        with open(os.path.join(current_dir, 'urls.json'), 'w') as f:
-            json.dump(portals, f, indent=4)
-        return portals
+        try:
+            tender_portals_response = requests.get('http://127.0.0.1:5000/api/tender_portals')
+            if tender_portals_response.status_code != 200:
+                print(f"Failed to get tender portals. Status code: {tender_portals_response.status_code}")
+                return []
+            
+            tender_portals = tender_portals_response.json()
+            if not isinstance(tender_portals, dict) or 'data' not in tender_portals:
+                print("Invalid response format from tender portals API")
+                return []
+            
+            portals = tender_portals['data'].get('portals', [])
+            if not portals:
+                print("No portals found in the response")
+                return []
+            
+            # Save to file for debugging
+            with open(os.path.join(current_dir, 'urls.json'), 'w') as f:
+                json.dump(portals, f, indent=4)
+            
+            return portals
+        except Exception as e:
+            print(f"Error updating URLs: {str(e)}")
+            return []
 
 
     def run(self):

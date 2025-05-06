@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(current_dir)
@@ -161,24 +162,26 @@ def StartAgent(params):
         manager = MasterAgent()
         agent_type = None
         for member in AgentType:
-            if member.value == agent_type_str:
+            if member.value.lower() == agent_type_str.lower():
                 agent_type = member
                 break
-        
-        print(f'Agent type: {agent_type}')
 
-        if agent_type is not None:
-            agent = manager.Create(agent_type=agent_type)
-            manager.Start(agent.agent_id)
-            return {
-                'agent_id': agent.agent_id,
-                'type': agent_type_str,
-                'status': 'running',
-                'port': COMMAND_PORT + agent.agent_id
-            }, 201
-        raise KeyError(f"No enum member matches {agent_type_str}")
-    except KeyError:
-        return f"Invalid agent type: {agent_type_str}", 400
+        if agent_type is None:
+            return f"Invalid agent type: {agent_type_str}", 400
+
+        agent = manager.Create(agent_type=agent_type)
+        manager.Start(agent.agent_id)
+        
+        # Wait a short moment for the process to start and get its PID
+        time.sleep(0.1)
+        
+        return {
+            'agent_id': agent.agent_id,
+            'type': agent_type_str,
+            'status': 'running',
+            'port': COMMAND_PORT + agent.agent_id,
+            'pid': agent.pid if hasattr(agent, 'pid') else None
+        }, 201
     except Exception as e:
         return f"Agent creation failed: {str(e)}", 500
 
@@ -191,7 +194,8 @@ def GetAgents(params):
             'id': agent_id,
             'type': agent.__class__.__name__,
             'status': 'running' if agent.is_alive() else 'stopped',
-            'port': COMMAND_PORT + agent_id
+            'port': COMMAND_PORT + agent_id,
+            'pid': agent.pid if hasattr(agent, 'pid') else None
         })
     return agents, 200
 
