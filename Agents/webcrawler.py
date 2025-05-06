@@ -11,11 +11,22 @@ from enum import Enum
 from Logger import GetLogger
 from multiprocessing import Process
 from .agents import Agent, COMMAND_PORT, STATUS_PORT
+import requests
+import json
 
 class WebCrawler(Agent):
-    def __init__(self, agent_id, urls_to_crawl=None):
+    def __init__(self, agent_id):
         super().__init__(agent_id)
-        self.urls_to_crawl = urls_to_crawl or []
+        self.urls_to_crawl = self.UpdateURLs()
+
+    def UpdateURLs(self):
+        tender_portals_response = requests.get('http://127.0.0.1:5000/api/tender_portals')
+        tender_portals = json.loads(tender_portals_response.text)
+        portals = tender_portals['portals']
+        with open(os.path.join(current_dir, 'urls.json'), 'w') as f:
+            json.dump(portals, f, indent=4)
+        return portals
+
 
     def run(self):
         self.running = True

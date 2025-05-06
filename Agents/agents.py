@@ -92,7 +92,10 @@ class AgentManager(Process):
         self.status_socket = self.context.socket(zmq.SUB)
         self.status_socket.setsockopt(zmq.SUBSCRIBE, b'')
         self.status_socket.bind("tcp://*:5600")
-        
+    
+    def is_running(self):
+        return self.is_alive()
+    
     def run(self):
         # Main manager loop handling status updates and cleanup
         poller = zmq.Poller()
@@ -108,12 +111,12 @@ class AgentManager(Process):
             # Periodic cleanup
             self.CleanupProcesses()
 
-    def Create(self, agent_type: AgentType, **kwargs):
+    def Create(self, agent_type: AgentType):
         """Create new agent instance"""
         agent_id = max(self.agents.keys(), default=0) + 1
         if agent_type == AgentType.WEB_CRAWLER:
             from .webcrawler import WebCrawler
-            agent = WebCrawler(agent_id, **kwargs)
+            agent = WebCrawler(agent_id)
         self.agents[agent_id] = agent
         return agent
 
