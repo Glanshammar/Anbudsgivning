@@ -10,7 +10,7 @@ import time
 from enum import Enum
 from Logger import GetLogger
 from multiprocessing import Process
-from .webcrawler import WebCrawler
+
 
 STATUS_PORT = 5600
 COMMAND_PORT = 5500
@@ -112,6 +112,7 @@ class AgentManager(Process):
         """Create new agent instance"""
         agent_id = max(self.agents.keys(), default=0) + 1
         if agent_type == AgentType.WEB_CRAWLER:
+            from .webcrawler import WebCrawler
             agent = WebCrawler(agent_id, **kwargs)
         self.agents[agent_id] = agent
         return agent
