@@ -156,22 +156,29 @@ def DeleteDocument(document):
 
 
 def StartAgent(params):
-    agent_type = params.get('agent_type')
-    agent_params = params.get('agent_params', {})
-    
+    agent_type_str = params.get('agent_type')
     try:
         manager = MasterAgent()
-        agent = manager.Create(AgentType[agent_type])
-        manager.Start(agent.agent_id)
+        agent_type = None
+        for member in AgentType:
+            if member.value == agent_type_str:
+                agent_type = member
+                break
         
-        return {
-            'agent_id': agent.agent_id,
-            'type': agent_type,
-            'status': 'running',
-            'port': COMMAND_PORT + agent.agent_id
-        }, 201
+        print(f'Agent type: {agent_type}')
+
+        if agent_type is not None:
+            agent = manager.Create(agent_type=agent_type)
+            manager.Start(agent.agent_id)
+            return {
+                'agent_id': agent.agent_id,
+                'type': agent_type_str,
+                'status': 'running',
+                'port': COMMAND_PORT + agent.agent_id
+            }, 201
+        raise KeyError(f"No enum member matches {agent_type_str}")
     except KeyError:
-        return f"Invalid agent type: {agent_type}", 400
+        return f"Invalid agent type: {agent_type_str}", 400
     except Exception as e:
         return f"Agent creation failed: {str(e)}", 500
 
