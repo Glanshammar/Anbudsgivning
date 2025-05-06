@@ -1,6 +1,7 @@
-from Data import (Company, Consultant, TenderDocument, Calendar, Expertise, GetLinksFromResponse,
+from Data import (CompanyProfile, Consultant, TenderDocument, Calendar, Expertise, GetLinksFromResponse,
                    Page, GetLinksFromPage, PromptAI,  mock_response_tender_pages, mock_response_document_links)
-from Agents import AgentManager, AgentType
+from Agents import AgentManager, AgentType, WebCrawler, COMMAND_PORT, STATUS_PORT
+import zmq
 from selenium import webdriver
 import requests
 from time import sleep
@@ -30,6 +31,17 @@ if __name__ == "__main__":
         command = input(">> ").lower()
         
         match command:
+            case 'agent':
+                manager = AgentManager()
+                manager.start()
+                web_crawler = manager.Create(AgentType.WEB_CRAWLER, urls_to_crawl=[ted_portal, tendium_portal, tendersontime_portal])
+                manager.Start(web_crawler.agent_id)
+                ctx = zmq.Context()
+                sock = ctx.socket(zmq.REQ)
+                sock.connect(f"tcp://localhost:{COMMAND_PORT + web_crawler.agent_id}")
+                sock.send_string("test")
+                response = sock.recv_string()
+                print("Response:", response)
             case 'ted':
                 url = "https://api.ted.europa.eu/v3/notices/search"
                 ted_api_key = os.getenv("TED_API_KEY")

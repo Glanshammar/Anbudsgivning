@@ -13,6 +13,10 @@ from multiprocessing import Process
 from .agents import Agent, COMMAND_PORT, STATUS_PORT
 
 class WebCrawler(Agent):
+    def __init__(self, agent_id, urls_to_crawl=None):
+        super().__init__(agent_id)
+        self.urls_to_crawl = urls_to_crawl or []
+
     def run(self):
         self.running = True
 
@@ -39,7 +43,7 @@ class WebCrawler(Agent):
                         self.Stop()
                         continue
                     if command == "test":
-                        print("This is a web crawler test.")
+                        self.command_socket.send_string("Test received")
                     else:
                         self.command_socket.send_string(f"Unknown command: {command}")
                 except zmq.Again:
