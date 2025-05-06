@@ -33,14 +33,10 @@ class OpStatus(IntEnum):
 
 def MasterAgent():
     global master_agent
-    if master_agent is None:
-        print('Starting master agent...')
+    if master_agent is None or not master_agent.is_alive():
         master_agent = AgentManager()
-        return master_agent.__str__()
-    elif isinstance(master_agent, AgentManager):
-        return master_agent.__str__()
-    else:
-        return "Something went wrong. Couldn't start or recognize Master Agent."
+        master_agent.start()
+    return master_agent
 
 
 def GetCollection(collection_name):
@@ -159,13 +155,59 @@ def DeleteDocument(document):
         return f'Error: Error deleting document: {str(e)}'
 
 
+def StartAgent(params):
+    agent_type = params.get('agent_type')
+    agent_params = params.get('agent_params', {})
+    
+    try:
+        manager = MasterAgent()
+        agent = manager.Create(AgentType[agent_type])
+        manager.Start(agent.agent_id)
+        
+        return {
+            'agent_id': agent.agent_id,
+            'type': agent_type,
+            'status': 'running',
+            'port': COMMAND_PORT + agent.agent_id
+        }, 201
+    except KeyError:
+        return f"Invalid agent type: {agent_type}", 400
+    except Exception as e:
+        return f"Agent creation failed: {str(e)}", 500
+
+
+def GetAgents(params):
+    manager = MasterAgent()
+    agents = []
+    for agent_id, agent in manager.agents.items():
+        agents.append({
+            'id': agent_id,
+            'type': agent.__class__.__name__,
+            'status': 'running' if agent.is_alive() else 'stopped',
+            'port': COMMAND_PORT + agent_id
+        })
+    return agents, 200
+
+
+def StopAgent(params):
+    agent_id = params.get('agent_id')
+    try:
+        manager = MasterAgent()
+        manager.Stop(agent_id)
+        return f"Agent {agent_id} stopped", 200
+    except Exception as e:
+        return f"Failed to stop agent: {str(e)}", 500
+
+
 operations = {
     'create': CreateDocument,
     'read': ReadDocument,
     'update': UpdateDocument,
     'delete': DeleteDocument,
     'status': lambda params: 'Server is online!',
-    'agent': lambda params: MasterAgent()
+    'start_agent': StartAgent,
+    'get_agents': GetAgents,
+    'stop_agent': StopAgent
 }
 
 def ProcessCommand(command, args):
