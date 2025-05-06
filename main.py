@@ -17,6 +17,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 documents_folder = userpaths.get_my_documents()
+current_dir = os.path.dirname(os.path.abspath(__file__))
+agent_dir = os.path.join(current_dir, 'Agents')
 app_folder = os.path.join(documents_folder, 'AnbudApp')
 os.makedirs(app_folder, exist_ok=True)
 API_URL = 'http://127.0.0.1:5000'
@@ -31,6 +33,14 @@ if __name__ == "__main__":
         command = input(">> ").lower()
         
         match command:
+            case 'portals':
+                tender_portals_response = requests.get('http://127.0.0.1:5000/api/tender_portals')
+                tender_portals = json.loads(tender_portals_response.text)
+                portals = tender_portals['portals']
+                for portal in portals:
+                    print(f"URL: {portal['url']}, Username: {portal['username']}, Password: {portal['password']}")
+                with open(os.path.join(agent_dir, 'urls.json'), 'w') as f:
+                    json.dump(portals, f, indent=4)
             case 'agent':
                 manager = AgentManager()
                 manager.start()
@@ -42,6 +52,8 @@ if __name__ == "__main__":
                 sock.send_string("test")
                 response = sock.recv_string()
                 print("Response:", response)
+                sock.close()
+                ctx.term()
             case 'ted':
                 url = "https://api.ted.europa.eu/v3/notices/search"
                 ted_api_key = os.getenv("TED_API_KEY")
