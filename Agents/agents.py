@@ -112,16 +112,15 @@ class AgentManager(Process):
             self.CleanupProcesses()
 
     def Create(self, agent_type: AgentType):
-        """Create new agent instance"""
-        agent_id = max(self.agents.keys(), default=0) + 1
+        agent_id = len(self.agents) + 1
         if agent_type == AgentType.WEB_CRAWLER:
             from .webcrawler import WebCrawler
             agent = WebCrawler(agent_id)
-        self.agents[agent_id] = agent
-        return agent
+            self.agents[agent_id] = agent
+            return agent
+        raise ValueError(f"Unsupported agent type: {agent_type}")
 
     def Start(self, agent_id: int):
-        """Start an agent process"""
         if agent_id not in self.agents:
             raise ValueError(f"Agent {agent_id} not found")
             
@@ -136,7 +135,6 @@ class AgentManager(Process):
         print(f"Agent {agent_id} started")
 
     def Stop(self, agent_id: int):
-        """Gracefully stop an agent"""
         if agent_id not in self.processes:
             print(f"Agent {agent_id} not running")
             return
@@ -156,7 +154,6 @@ class AgentManager(Process):
             self.processes[agent_id].terminate()
 
     def CleanupProcesses(self):
-        """Remove terminated agents"""
         dead = [aid for aid, p in self.processes.items() if not p.is_alive()]
         for aid in dead:
             del self.processes[aid]
