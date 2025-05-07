@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { logout, isAuthenticated } from "@/utils/auth";
-import { getPortals } from "@/services/portals";
+import { getPortals } from "@/services/api/portals";
 
 interface Portal {
   url: string;
