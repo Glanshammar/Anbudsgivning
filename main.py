@@ -1,6 +1,7 @@
 from Data import (CompanyProfile, Consultant, TenderDocument, Calendar, Expertise, GetLinksFromResponse,
                    Page, GetLinksFromPage, PromptAI,  mock_response_tender_pages, mock_response_document_links)
 from Agents import AgentManager, AgentType, WebCrawler, COMMAND_PORT, STATUS_PORT
+from Logger.logger_tests import run_logger_tests
 import zmq
 from selenium import webdriver
 import requests
@@ -203,6 +204,10 @@ if __name__ == "__main__":
                     calendar=calendar
                 )
                 print("Is Tender Match:", result)
+            case 'logger':
+                # Create logs directory if it doesn't exist
+                os.makedirs('logs', exist_ok=True)
+                run_logger_tests()
             case 'exit':
                 break
             case _:
