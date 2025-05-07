@@ -137,5 +137,7 @@ cython_debug/
 creds.json
 credentials.json
 
-# Logs
+# Etc
 logs/
+crawl_results/
+Agents/urls.json
