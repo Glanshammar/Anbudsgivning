@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { logout, isAuthenticated } from "@/utils/auth";
-import { getTenders, Tender } from "@/services/tenders";
+import { getTenders, Tender } from "@/services/api/tenders";
 
 // Default dashboard page with inbox of tenders
 
