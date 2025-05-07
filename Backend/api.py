@@ -354,4 +354,9 @@ def AgentManagement():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/api/agent/command', methods=['POST'])
+def AgentCommand():
+        return ServerRequest(command='agent_command', params=request.get_json())
+
+
 app.run(host='0.0.0.0', port=5000, threaded=True)

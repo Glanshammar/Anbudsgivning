@@ -193,7 +193,8 @@ def GetAgents(params):
         agents.append({
             'id': agent_id,
             'type': agent.__class__.__name__,
-            'status': 'running' if agent.is_alive() else 'stopped',
+            'alive': agent.is_alive(),
+            'status': agent.status,
             'port': COMMAND_PORT + agent_id,
             'pid': agent.pid if hasattr(agent, 'pid') else None
         })
@@ -210,6 +211,31 @@ def StopAgent(params):
         return f"Failed to stop agent: {str(e)}", 500
 
 
+def AgentCommand(params):
+    if not params or 'agent_id' not in params or 'command' not in params:
+            return {
+                'status': 'error',
+                'message': 'Missing required fields: agent_id and command'
+            }, 400
+    try:
+        agent_id = params.get('agent_id')
+        command = params.get('command')
+        return master_agent.SendCommand(agent_id, command)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'message': f'Error sending command: {str(e)}'
+        }, 500
+
+
+def ProcessCommand(command, params):
+    func = operations.get(command.lower())
+    if func:
+        return func(params)
+    else:
+        return f'Error: Unknown command "{command}".'
+
+
 operations = {
     'create': CreateDocument,
     'read': ReadDocument,
@@ -218,15 +244,9 @@ operations = {
     'status': lambda params: 'Server is online!',
     'start_agent': StartAgent,
     'get_agents': GetAgents,
-    'stop_agent': StopAgent
+    'stop_agent': StopAgent,
+    'agent_command': AgentCommand
 }
-
-def ProcessCommand(command, args):
-    func = operations.get(command.lower())
-    if func:
-        return func(args)
-    else:
-        return f'Error: Unknown command "{command}".'
 
 
 if __name__ == '__main__':
