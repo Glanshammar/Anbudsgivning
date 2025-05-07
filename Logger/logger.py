@@ -1,30 +1,143 @@
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+import sys
+from typing import Optional
+import json
+from datetime import datetime
 
+class StructuredLogFormatter(logging.Formatter):
+    """Custom formatter that outputs logs in a structured format"""
+    def format(self, record):
+        # Create a dictionary with all the log information
+        log_data = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'level': record.levelname,
+            'component': record.name,
+            'message': record.getMessage(),
+            'module': record.module,
+            'line': record.lineno
+        }
+        
+        # Add exception info if present
+        if record.exc_info:
+            log_data['exception'] = self.formatException(record.exc_info)
+            
+        # Add extra fields if present
+        if hasattr(record, 'extra'):
+            log_data.update(record.extra)
+            
+        return json.dumps(log_data)
+
+class LoggerManager:
+    _loggers = {}
+    _default_level = logging.INFO
+    _default_max_bytes = 10 * 1024 * 1024  # 10MB
+    _default_backup_count = 5
+
+    @classmethod
+    def get_logger(cls, 
+                  name: str = __name__, 
+                  filename: Optional[str] = None, 
+                  level: int = None,
+                  log_to_console: bool = False,
+                  max_bytes: int = None,
+                  backup_count: int = None) -> logging.Logger:
+        """
+        Get or create a logger with the specified configuration.
+        
+        Args:
+            name: Logger name (typically component name like 'api', 'agent', 'manager')
+            filename: Log file path. If None, will be generated based on component name
+            level: Logging level
+            log_to_console: Whether to also log to console
+            max_bytes: Maximum size of log file before rotation
+            backup_count: Number of backup files to keep
+        """
+        # Use cached logger if it exists
+        if name in cls._loggers:
+            return cls._loggers[name]
+
+        # Set defaults if not provided
+        level = level or cls._default_level
+        max_bytes = max_bytes or cls._default_max_bytes
+        backup_count = backup_count or cls._default_backup_count
+
+        # Generate filename if not provided
+        if filename is None:
+            module_path = os.path.relpath(name).replace('.', '_') + '.log'
+            filename = os.path.join('logs', module_path)
+
+        # Create logger
+        logger = logging.getLogger(name)
+        logger.setLevel(level)
+
+        # Remove any existing handlers
+        logger.handlers.clear()
+
+        try:
+            # Create log directory if it doesn't exist
+            log_dir = os.path.dirname(filename)
+            os.makedirs(log_dir, exist_ok=True)
+
+            # Create and configure file handler
+            file_handler = RotatingFileHandler(
+                filename,
+                maxBytes=max_bytes,
+                backupCount=backup_count,
+                encoding='utf-8'
+            )
+            file_handler.setLevel(level)
+
+            # Create formatters
+            json_formatter = StructuredLogFormatter()
+            file_handler.setFormatter(json_formatter)
+
+            # Add file handler
+            logger.addHandler(file_handler)
+
+            # Add console handler if requested
+            if log_to_console:
+                console_handler = logging.StreamHandler(sys.stdout)
+                console_handler.setLevel(level)
+                # Use a more readable format for console
+                console_formatter = logging.Formatter(
+                    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+                )
+                console_handler.setFormatter(console_formatter)
+                logger.addHandler(console_handler)
+
+            # Cache the logger
+            cls._loggers[name] = logger
+
+            return logger
+
+        except Exception as e:
+            # If file logging fails, fall back to console logging
+            fallback_logger = logging.getLogger(name)
+            fallback_logger.setLevel(level)
+            
+            console_handler = logging.StreamHandler(sys.stderr)
+            console_handler.setLevel(level)
+            console_handler.setFormatter(logging.Formatter(
+                'ERROR: Could not set up file logging. %(message)s'
+            ))
+            fallback_logger.addHandler(console_handler)
+            
+            fallback_logger.error(f"Failed to set up logging to {filename}: {str(e)}")
+            return fallback_logger
+
+    @classmethod
+    def set_default_level(cls, level: int) -> None:
+        """Set the default logging level for new loggers"""
+        cls._default_level = level
+
+    @classmethod
+    def set_default_rotation(cls, max_bytes: int, backup_count: int) -> None:
+        """Set the default rotation parameters for new loggers"""
+        cls._default_max_bytes = max_bytes
+        cls._default_backup_count = backup_count
+
+# For backward compatibility
 def GetLogger(name=__name__, filename=None, level=logging.INFO, log_to_console=False):
-    if filename is None:
-        module_path = os.path.relpath(name).replace('.', '_') + '.log'
-        filename = os.path.join('logs', module_path)
-
-    log_dir = os.path.dirname(filename)
-    os.makedirs(log_dir, exist_ok=True)
-
-    logger = logging.getLogger(name)
-    logger.setLevel(level)
-
-    file_handler = RotatingFileHandler(filename, maxBytes=10*1024*1024, backupCount=5) # 10MB maxBytes
-    file_handler.setLevel(level)
-
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(module)s:%(lineno)d - %(message)s')
-    file_handler.setFormatter(formatter)
-
-    logger.addHandler(file_handler)
-
-    if log_to_console:
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(level)
-        console_handler.setFormatter(formatter)
-        logger.addHandler(console_handler)
-
-    return logger
+    return LoggerManager.get_logger(name, filename, level, log_to_console)
