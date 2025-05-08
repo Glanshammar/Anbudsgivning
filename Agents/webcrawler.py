@@ -11,9 +11,11 @@ from enum import Enum
 from Logger import GetLogger
 from multiprocessing import Process
 from .agents import Agent, COMMAND_PORT, STATUS_PORT, AgentStatus
+from Backend.browser import Browser
 import requests
 import json
 from datetime import datetime, timedelta
+
 
 class WebCrawler(Agent):
     def __init__(self, agent_id):
@@ -22,12 +24,13 @@ class WebCrawler(Agent):
         self.portals_to_crawl = []
         self.results_dir = os.path.join(current_dir, 'crawl_results')
         self.cache_dir = os.path.join(current_dir, 'cache')
+        self.temp_dir = os.path.join(current_dir, 'temp')
         os.makedirs(self.results_dir, exist_ok=True)
         os.makedirs(self.cache_dir, exist_ok=True)
+        os.makedirs(self.temp_dir, exist_ok=True)
         self.logger.debug(f"Results directory: {self.results_dir}", extra={'agent_id': self.agent_id})
 
     def Initialize(self):
-        """Initialize the crawler after the agent is fully set up"""
         self.logger.info("Initializing crawler data", extra={'agent_id': self.agent_id})
         self.portals_to_crawl = self.UpdatePortals()
         self.logger.info(f"Initialized with {len(self.portals_to_crawl)} portals", extra={'agent_id': self.agent_id})
@@ -120,6 +123,7 @@ class WebCrawler(Agent):
             return self.ReadURLsFromFile()
 
     def Crawl(self):
+        from Data.ai import GetTenderLinksFromPortal, TenderInfo, FindDocumentLinks, DownloadDocument
         try:
             self.logger.info("Starting crawl operation", extra={'agent_id': self.agent_id})
             self.send_status("Starting crawl operation")
@@ -127,52 +131,85 @@ class WebCrawler(Agent):
             # Create a results file for this crawl session
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             results_file = os.path.join(self.results_dir, f'crawl_results_{timestamp}.json')
+            tender_links_file = os.path.join(self.results_dir, f'tender_links_{timestamp}.txt')
             self.logger.debug(f"Results will be saved to: {results_file}", extra={'agent_id': self.agent_id})
             
-            all_links = []
-            
-            # Simulate crawling each portal
-            for portal in self.portals_to_crawl:
-                portal_url = portal['url']
-                self.logger.info(f"Processing portal: {portal_url}", extra={'agent_id': self.agent_id})
-                self.send_status(f"Crawling portal: {portal_url}")
-                
-                # Simulate finding links (mock data)
-                mock_links = [
-                    {
-                        'url': f"{portal_url}/tender/1",
-                        'title': "Software Development Tender",
-                        'date': time.strftime("%Y-%m-%d"),
-                        'size_kb': 150.5,
-                        'cpv_code': "72000000"
-                    },
-                    {
-                        'url': f"{portal_url}/tender/2",
-                        'title': "IT Infrastructure Upgrade",
-                        'date': time.strftime("%Y-%m-%d"),
-                        'size_kb': 200.0,
-                        'cpv_code': "72200000"
-                    },
-                    {
-                        'url': f"{portal_url}/tender/3",
-                        'title': "Cloud Services Procurement",
-                        'date': time.strftime("%Y-%m-%d"),
-                        'size_kb': 175.3,
-                        'cpv_code': "72300000"
-                    }
-                ]
-                
-                all_links.extend(mock_links)
-                self.logger.info(f"Found {len(mock_links)} tenders in {portal_url}", extra={'agent_id': self.agent_id})
-                self.send_status(f"Found {len(mock_links)} tenders in {portal_url}")
+            all_tender_links = []
+            all_tender_info = []
+            all_document_links = []
 
-            # Save results to file
-            with open(results_file, 'w', encoding='utf-8') as f:
-                json.dump(all_links, f, ensure_ascii=False, indent=2)
-            
-            success_msg = f"Crawl completed. Found {len(all_links)} tenders total. Results saved to {results_file}"
-            self.logger.info(success_msg, extra={'agent_id': self.agent_id})
-            self.send_status(success_msg)
+            # Initialize a single browser instance for all operations
+            browser = Browser()
+            try:
+                # First phase: Get tender links from all portals
+                for portal in self.portals_to_crawl:
+                    portal_url = portal['url']
+                    self.logger.info(f"Processing portal: {portal_url}", extra={'agent_id': self.agent_id})
+                    self.send_status(f"Crawling portal: {portal_url}")
+                    
+                    try:
+                        tender_links = GetTenderLinksFromPortal(browser, portal_url)
+                        all_tender_links.extend(tender_links)
+                        self.logger.info(f"Found {len(tender_links)} tenders in {portal_url}", extra={'agent_id': self.agent_id})
+                        self.send_status(f"Found {len(tender_links)} tenders in {portal_url}")
+                    except Exception as e:
+                        error_msg = f"Error processing portal {portal_url}: {str(e)}"
+                        self.logger.error(error_msg, extra={'agent_id': self.agent_id})
+                        self.send_status(error_msg)
+                        continue
+
+                # Save tender links to file
+                with open(tender_links_file, 'w', encoding='utf-8') as f:
+                    for link in all_tender_links:
+                        f.write(f"{link}\n")
+
+                # Second phase: Process each tender page
+                for tender_url in all_tender_links[:3]:
+                    try:
+                        self.logger.info(f"Processing tender: {tender_url}", extra={'agent_id': self.agent_id})
+                        self.send_status(f"Processing tender: {tender_url}")
+
+                        # Get tender information
+                        tender_info = TenderInfo(browser, tender_url)
+                        all_tender_info.append(tender_info)
+
+                        # Get document links
+                        document_links = FindDocumentLinks(browser, tender_url)
+                        all_document_links.extend(document_links)
+
+                        self.logger.info(f"Found {len(document_links)} documents for tender {tender_url}", 
+                                       extra={'agent_id': self.agent_id})
+                        self.send_status(f"Found {len(document_links)} documents for tender {tender_url}")
+
+                    except Exception as e:
+                        error_msg = f"Error processing tender {tender_url}: {str(e)}"
+                        self.logger.error(error_msg, extra={'agent_id': self.agent_id})
+                        self.send_status(error_msg)
+                        continue
+
+                # Save all results to JSON file
+                results = {
+                    'timestamp': timestamp,
+                    'tender_links': all_tender_links,
+                    'tender_info': all_tender_info,
+                    'document_links': all_document_links
+                }
+                
+                with open(results_file, 'w', encoding='utf-8') as f:
+                    json.dump(results, f, ensure_ascii=False, indent=2)
+                
+                success_msg = f"""Crawl completed successfully:
+                - Found {len(all_tender_links)} tender pages
+                - Processed {len(all_tender_info)} tender details
+                - Found {len(all_document_links)} document links
+                Results saved to {results_file}"""
+                
+                self.logger.info(success_msg, extra={'agent_id': self.agent_id})
+                self.send_status(success_msg)
+
+            finally:
+                # Ensure browser is closed even if an error occurs
+                browser.Quit()
             
         except Exception as e:
             error_msg = f"Error during crawl: {str(e)}"
