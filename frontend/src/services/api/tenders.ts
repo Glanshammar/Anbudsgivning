@@ -1,30 +1,38 @@
 export interface Tender {
+    project_name: string;
+    branch: string;
+    deadline: string;
     end_date: string;
     qualifications: number[];
-    start_date: string;
-    workforce: number;    
+    start_date: string; 
 }
 
 const USE_DUMMY = true;
 
 const dummyTenders: Tender[] = [
         {
+            project_name: "Projekt 1",
+            branch: "Bygg & Anläggning",
+            deadline: "2025-06-05",
             end_date: "2025-06-05",
             qualifications: [1, 4, 5],
             start_date: "2025-05-04",
-            workforce: 6,
         },
         {
+            project_name: "Projekt 2",
+            branch: "Energi",
+            deadline: "2025-06-05",
             end_date: "2025-05-15",
             qualifications: [2, 3, 4],
             start_date: "2025-05-08",
-            workforce: 4,
         },
         {
+            project_name: "Projekt 3",
+            branch: "Fastighetsskötsel",
+            deadline: "2025-06-05",
             end_date: "2025-05-25",
             qualifications: [1, 2, 3],
             start_date: "2025-05-20",
-            workforce: 23,
         }
 ];
 

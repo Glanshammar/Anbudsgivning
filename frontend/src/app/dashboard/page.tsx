@@ -44,43 +44,6 @@ export default function Dashboard() {
               <h2 className="text-lg font-medium text-gray-900 mb-4">
                 Senaste upphandlingar
               </h2>
-              <div className="space-y-4">
-                {tenders.length === 0 ? (
-                  <p className="text-gray-500">
-                    Inga upphandlingar tillgängliga
-                  </p>
-                ) : (
-                  <ul className="divide-y divide-gray-200">
-                    {tenders.map((tender, idx) => (
-                      <li key={idx} className="py-4">
-                        <div className="flex flex-col gap-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium text-purple-600">
-                              Upphandling #{idx + 1}
-                            </span>
-                            <span className="text-sm text-gray-500">
-                              {tender.start_date} - {tender.end_date}
-                            </span>
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            Arbetskraft: {tender.workforce} personer
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {tender.qualifications.map((qual, qIdx) => (
-                              <span
-                                key={qIdx}
-                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800"
-                              >
-                                Kvalifikation #{qual}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
             </div>
           </div>
         </div>

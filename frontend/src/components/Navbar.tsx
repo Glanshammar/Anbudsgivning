@@ -43,6 +43,10 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
               />
             </svg>
           </button>
+
+          <span className="text-black text-xl font-medium mx-4">
+            DASHBOARD
+          </span>
           <span className="ml-2 text-gray-700 text-sm font-medium">
             Hej {username}! 👋
           </span>

@@ -38,10 +38,10 @@ export default function InboxPage() {
             <ul className="divide-y divide-gray-200">
               {tenders.map((tender, idx) => (
                 <li key={idx} className="px-4 py-4">
+                  <div>{tender.project_name}</div>
                   <div>Start: {tender.start_date}</div>
-                  <div>Slut: {tender.end_date}</div>
-                  <div>Anställda: {tender.workforce}</div>
-                  <div>Kvalifikationer: {tender.qualifications.join(", ")}</div>
+                  <div>Deadline: {tender.deadline}</div>
+                  <div>Bransch: {tender.branch}</div>
                 </li>
               ))}
             </ul>
