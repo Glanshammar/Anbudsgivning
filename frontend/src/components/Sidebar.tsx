@@ -74,7 +74,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
                 className={`flex items-center px-4 py-3 rounded-lg transition-colors
                   ${
                     pathname === item.path
-                      ? "bg-purple-600 text-white"
+                      ? "bg-indigo-600 text-white"
                       : "text-gray-500 hover:bg-gray-100"
                   }`}
               >

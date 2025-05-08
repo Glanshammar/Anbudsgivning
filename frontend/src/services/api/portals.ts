@@ -17,3 +17,19 @@ export const getPortals = async () => {
   }
   return Array.isArray(data.portals) ? data.portals : [];
 };
+
+export const setTenderPortals = async (portals: Portal[]) => {
+  const response = await fetch("http://localhost:5000/api/tender_portals", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ portals }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to create portals");
+  }
+
+  return await response.json();
+};
