@@ -9,7 +9,7 @@ import zmq
 import time
 from enum import Enum
 from Logger import GetLogger
-from multiprocessing import Process
+from multiprocessing import Process, Value, Lock
 
 
 STATUS_PORT = 5600
@@ -19,7 +19,6 @@ class AgentStatus(Enum):
     IDLE = "Idle"
     RUNNING = "Running"
     STOPPED = "Stopped"
-    ERROR = "Error"
     CRAWLING = "Crawling"
 
 
@@ -32,12 +31,26 @@ class Agent(Process):
         super().__init__()
         self.agent_id = agent_id
         self.running = False
-        self.status = AgentStatus.IDLE
-        self.context = zmq.Context()
+        self._status = Value('i', 0)  # Shared integer value for status
+        self._status_lock = Lock()    # Lock for thread-safe status updates
         self.logger = GetLogger(f'agent_{agent_id}', log_to_console=True)
+        self.context = None
         self.command_socket = None
         self.status_socket = None
     
+    @property
+    def status(self):
+        with self._status_lock:
+            return AgentStatus(self._status.value)
+    
+    def set_status(self, status):
+        with self._status_lock:
+            self._status.value = status.value
+            self.send_status(f"Status changed to {status.value}")
+    
+    def get_status(self):
+        return self.status
+
     def __str__(self):
         return f"Agent ID: {self.agent_id} \nRunning: {self.running} \nStatus: {self.status}"
 
@@ -46,7 +59,8 @@ class Agent(Process):
             self.command_socket.close(linger=0)
         if self.status_socket:
             self.status_socket.close(linger=0)
-        self.context.term()
+        if self.context:
+            self.context.term()
         self.logger.info("Agent closed", extra={'agent_id': self.agent_id})
 
     def send_status(self, message):
@@ -65,6 +79,9 @@ class Agent(Process):
         self.running = True
         self.logger.info("Agent starting", extra={'agent_id': self.agent_id})
 
+        # Initialize ZMQ context and sockets in the child process
+        self.context = zmq.Context()
+        
         # Setup command socket (bind)
         self.command_socket = self.context.socket(zmq.REP) # Reply socket (to recieve commands)
         self.command_socket.bind(f"tcp://*:{self.agent_id + COMMAND_PORT}")
@@ -127,65 +144,43 @@ class Agent(Process):
 
 
 class AgentManager(Process):
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(AgentManager, cls).__new__(cls)
+        return cls._instance
+    
     def __init__(self):
-        super().__init__()
-        self.agents = {}  # Stores agent configurations
-        self.processes = {}  # Tracks running processes
-        self.context = zmq.Context()
-        self.status_socket = self.context.socket(zmq.SUB)
-        self.status_socket.setsockopt(zmq.SUBSCRIBE, b'')  # Subscribe to all messages
-        self.status_socket.bind("tcp://*:5600")
-        self.logger = GetLogger('agent_manager', log_to_console=True)
-        self.logger.info("AgentManager initialized with status socket bound to port 5600")
+        if not hasattr(self, 'initialized'):
+            super().__init__()
+            self._agents = {}  # Store agent info
+            self._processes = {}  # Store process info
+            self.context = None
+            self.status_socket = None
+            self.logger = GetLogger('agent_manager', log_to_console=True)
+            self.initialized = True
     
-    def is_running(self):
-        return self.is_alive()
+    @property
+    def agents(self):
+        return self._agents
     
-    def run(self):
-        # Main manager loop handling status updates and cleanup
-        poller = zmq.Poller()
-        poller.register(self.status_socket, zmq.POLLIN)
-        
-        self.logger.info("AgentManager started and listening for messages...")
-        
-        while True:
-            try:
-                # Process status messages
-                socks = dict(poller.poll(500))  # 500ms timeout
-                if self.status_socket in socks:
-                    try:
-                        agent_id, status = self.status_socket.recv_multipart()
-                        agent_id = agent_id.decode()
-                        status = status.decode()
-                        
-                        # Format the message with timestamp and agent info
-                        formatted_message = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Agent {agent_id}: {status}"
-                        
-                        # Log to file
-                        self.logger.info(formatted_message)
-                        
-                        # Print to console with color (if supported)
-                        print(f"\033[92m{formatted_message}\033[0m")  # Green color for visibility
-                        
-                    except Exception as e:
-                        error_msg = f"Error processing message: {str(e)}"
-                        self.logger.error(error_msg)
-                        print(f"\033[91m{error_msg}\033[0m")  # Red color for errors
-                
-                # Periodic cleanup
-                self.CleanupProcesses()
-            except Exception as e:
-                error_msg = f"Error in AgentManager main loop: {str(e)}"
-                self.logger.error(error_msg)
-                print(f"\033[91m{error_msg}\033[0m")  # Red color for errors
-                time.sleep(1)  # Prevent tight loop in case of errors
-
+    @property
+    def processes(self):
+        return self._processes
+    
     def Create(self, agent_type: AgentType):
         agent_id = len(self.agents) + 1
         if agent_type == AgentType.WEB_CRAWLER:
             from .webcrawler import WebCrawler
             agent = WebCrawler(agent_id)
-            self.agents[agent_id] = agent
+            # Store only essential information about the agent
+            self.agents[agent_id] = {
+                'id': agent_id,
+                'type': agent_type.value,
+                'class_name': agent.__class__.__name__,
+                'status': AgentStatus.IDLE.value
+            }
             return agent
         raise ValueError(f"Unsupported agent type: {agent_type}")
 
@@ -195,17 +190,21 @@ class AgentManager(Process):
             
         if agent_id in self.processes:
             if self.processes[agent_id].is_alive():
-                print(f"Agent {agent_id} already running")
+                self.logger.info(f"Agent {agent_id} already running")
                 return
                 
-        agent = self.agents[agent_id]
-        agent.start()  # Start the process
-        self.processes[agent_id] = agent
-        print(f"Agent {agent_id} started")
+        # Create a new agent instance
+        if self.agents[agent_id]['type'] == AgentType.WEB_CRAWLER.value:
+            from .webcrawler import WebCrawler
+            agent = WebCrawler(agent_id)
+            agent.start()
+            self.processes[agent_id] = agent
+            self.agents[agent_id]['status'] = AgentStatus.IDLE.value
+            self.logger.info(f"Agent {agent_id} started")
 
     def Stop(self, agent_id: int):
         if agent_id not in self.processes:
-            print(f"Agent {agent_id} not running")
+            self.logger.warning(f"Agent {agent_id} not running")
             return
             
         # Send stop command via ZeroMQ
@@ -219,16 +218,20 @@ class AgentManager(Process):
         # Wait for process termination
         self.processes[agent_id].join(timeout=5)
         if self.processes[agent_id].is_alive():
-            print(f"Force-terminating agent {agent_id}")
+            self.logger.warning(f"Force-terminating agent {agent_id}")
             self.processes[agent_id].terminate()
+        
+        # Update agent status
+        self.agents[agent_id]['status'] = AgentStatus.STOPPED.value
 
     def CleanupProcesses(self):
         dead = [aid for aid, p in self.processes.items() if not p.is_alive()]
         for aid in dead:
             del self.processes[aid]
-            del self.agents[aid]
+            if aid in self.agents:
+                self.agents[aid]['status'] = AgentStatus.STOPPED.value
         if dead:
-            print(f"Cleaned {len(dead)} terminated agents")
+            self.logger.info(f"Cleaned {len(dead)} terminated agents")
 
     def SendCommand(self, agent_id: int, command: str) -> dict:
         """

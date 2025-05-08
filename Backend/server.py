@@ -34,7 +34,7 @@ class OpStatus(IntEnum):
 
 def MasterAgent():
     global master_agent
-    if master_agent is None or not master_agent.is_alive():
+    if master_agent is None:
         master_agent = AgentManager()
         master_agent.start()
     return master_agent
@@ -175,12 +175,14 @@ def StartAgent(params):
         # Wait a short moment for the process to start and get its PID
         time.sleep(0.1)
         
+        process = manager.processes.get(agent.agent_id)
         return {
             'agent_id': agent.agent_id,
             'type': agent_type_str,
-            'status': 'running',
+            'status': manager.agents[agent.agent_id]['status'],
             'port': COMMAND_PORT + agent.agent_id,
-            'pid': agent.pid if hasattr(agent, 'pid') else None
+            'pid': process.pid if process else None,
+            'alive': process.is_alive() if process else False
         }, 201
     except Exception as e:
         return f"Agent creation failed: {str(e)}", 500
@@ -189,15 +191,20 @@ def StartAgent(params):
 def GetAgents(params):
     manager = MasterAgent()
     agents = []
-    for agent_id, agent in manager.agents.items():
-        agents.append({
-            'id': agent_id,
-            'type': agent.__class__.__name__,
-            'alive': agent.is_alive(),
-            'status': agent.status,
-            'port': COMMAND_PORT + agent_id,
-            'pid': agent.pid if hasattr(agent, 'pid') else None
-        })
+    for agent_id, agent_info in manager.agents.items():
+        try:
+            process = manager.processes.get(agent_id)
+            agents.append({
+                'id': agent_id,
+                'type': agent_info['type'],
+                'alive': process.is_alive() if process else False,
+                'status': agent_info['status'],
+                'port': COMMAND_PORT + agent_id,
+                'pid': process.pid if process else None
+            })
+        except Exception as e:
+            # Skip agents that can't be accessed
+            continue
     return agents, 200
 
 
