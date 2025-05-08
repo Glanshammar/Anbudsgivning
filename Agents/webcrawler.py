@@ -13,6 +13,7 @@ from multiprocessing import Process
 from .agents import Agent, COMMAND_PORT, STATUS_PORT, AgentStatus
 import requests
 import json
+from datetime import datetime, timedelta
 
 class WebCrawler(Agent):
     def __init__(self, agent_id):
@@ -20,7 +21,9 @@ class WebCrawler(Agent):
         self.logger.info("Initializing WebCrawler", extra={'agent_id': self.agent_id})
         self.portals_to_crawl = []
         self.results_dir = os.path.join(current_dir, 'crawl_results')
+        self.cache_dir = os.path.join(current_dir, 'cache')
         os.makedirs(self.results_dir, exist_ok=True)
+        os.makedirs(self.cache_dir, exist_ok=True)
         self.logger.debug(f"Results directory: {self.results_dir}", extra={'agent_id': self.agent_id})
 
     def Initialize(self):
@@ -47,8 +50,34 @@ class WebCrawler(Agent):
             self.send_status(error_msg)
             return []
 
+    def ShouldUpdatePortals(self):
+        timestamp_file = os.path.join(self.cache_dir, 'last_update.txt')
+        if not os.path.exists(timestamp_file):
+            return True
+        
+        try:
+            with open(timestamp_file, 'r') as f:
+                last_update = datetime.fromisoformat(f.read().strip())
+            return datetime.now() - last_update > timedelta(hours=24)
+        except Exception as e:
+            self.logger.error(f"Error reading timestamp file: {str(e)}", extra={'agent_id': self.agent_id})
+            return True
+
+    def UpdateTimestamp(self):
+        timestamp_file = os.path.join(self.cache_dir, 'last_update.txt')
+        try:
+            with open(timestamp_file, 'w') as f:
+                f.write(datetime.now().isoformat())
+        except Exception as e:
+            self.logger.error(f"Error updating timestamp file: {str(e)}", extra={'agent_id': self.agent_id})
+
     def UpdatePortals(self):
         try:
+            # Check if we need to update the portals
+            if not self.ShouldUpdatePortals():
+                self.logger.info("Using cached portals data", extra={'agent_id': self.agent_id})
+                return self.ReadURLsFromFile()
+
             self.logger.info("Updating portals from API", extra={'agent_id': self.agent_id})
             tender_portals_response = requests.get('http://127.0.0.1:5000/api/tender_portals')
             if tender_portals_response.status_code != 200:
@@ -75,23 +104,14 @@ class WebCrawler(Agent):
                 self.send_status("Falling back to urls.json...")
                 return self.ReadURLsFromFile()
             
-            # Strip sensitive information and create a clean copy
-            clean_portals = []
-            for portal in portals:
-                clean_portal = {
-                    'url': portal.get('url', ''),
-                    'username': portal.get('username', ''),
-                    'password': portal.get('password', '')
-                }
-                clean_portals.append(clean_portal)
-            
-            # Save to file for future use
+            # Save to URL file for future use
             file_path = os.path.join(current_dir, 'urls.json')
             with open(file_path, 'w') as f:
-                json.dump(clean_portals, f, indent=4)
+                json.dump(portals, f, indent=4)
             
-            self.logger.info(f"Successfully updated {len(clean_portals)} portals", extra={'agent_id': self.agent_id})
-            return clean_portals
+            self.UpdateTimestamp()
+            self.logger.info(f"Successfully updated {len(portals)} portals", extra={'agent_id': self.agent_id})
+            return portals
         except Exception as e:
             error_msg = f"Error updating URLs: {str(e)}"
             self.logger.error(error_msg, extra={'agent_id': self.agent_id})
