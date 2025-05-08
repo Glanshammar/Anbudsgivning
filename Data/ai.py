@@ -1,25 +1,152 @@
-from openai import OpenAI
 import os
+import sys
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.dirname(current_dir)
+sys.path.insert(0, root_dir)
+
+from openai import OpenAI
 import re
+from Backend.browser import Browser
+import pymupdf
+import requests
+from typing import List, Dict, Optional
 
-def PromptAI(prompt:str):
-    client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=os.getenv("AI_API_KEY")
-    )
-    response = client.chat.completions.create(
-        model="microsoft/mai-ds-r1:free",
-        messages=[{"role": "user",
-                    "content": prompt}]
-    )
-    return response
+# Global variables
+language = "English"  # Default language, can be changed as needed
+app_folder = os.path.join(current_dir, 'temp')  # Folder for temporary files
+os.makedirs(app_folder, exist_ok=True)
 
+def PromptAI(prompt: str) -> Optional[str]:
+    """Send a prompt to the AI and get a response."""
+    try:
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=os.getenv("AI_API_KEY")
+        )
+        response = client.chat.completions.create(
+            model="microsoft/mai-ds-r1:free",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        if not response or not response.choices:
+            print("Warning: Empty response from AI")
+            return None
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"Error in PromptAI: {str(e)}")
+        return None
 
-def GetLinksFromResponse(response_text:str):
+def GetLinksFromResponse(response_text: str) -> List[str]:
+    """Extract URLs from AI response text."""
+    if not response_text:
+        return []
     pattern = r'https?://[^{}\s)>\]]+'
     urls = re.findall(pattern, response_text)
-    return urls
+    return list(set(urls))  # Remove duplicates
 
+def GetTenderLinksFromPortal(browser: Browser, portal_url: str) -> List[str]:
+    """Get tender detail page links from a portal using AI."""
+    try:
+        urls = browser.GetLinksFromPage(portal_url)
+        if not urls:
+            print(f"Warning: No links found on portal {portal_url}")
+            return []
+            
+        urls_string = "\n".join(urls)
+        
+        prompt = f"""From the following links, identify only the URLs that lead to individual tender detail pages. 
+        A tender detail page is a specific page for a single procurement opportunity, typically accessed by clicking on a tender in a list or search results.
+        Only include links that match the pattern for tender detail pages.
+        Output a list of these URLs only, with one URL per line.
+        
+        Links to analyze:
+        {urls_string}"""
+
+        response = PromptAI(prompt)
+        if not response:
+            print(f"Warning: No AI response for portal {portal_url}")
+            return []
+            
+        return GetLinksFromResponse(response)
+    except Exception as e:
+        print(f"Error in GetTenderLinksFromPortal: {str(e)}")
+        return []
+
+def DownloadDocument(url: str, filename: str) -> bool:
+    """Download a document from a URL."""
+    try:
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        
+        filepath = os.path.join(app_folder, filename)
+        with open(filepath, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+        return True
+    except Exception as e:
+        print(f"Error downloading document: {str(e)}")
+        return False
+
+def TenderInfo(browser: Browser, tender_url: str) -> Dict:
+    """Extract information from a tender page."""
+    try:
+        browser.OpenPage(tender_url)
+        
+        # Get the page content
+        page_content = browser.driver.page_source
+        if not page_content:
+            print(f"Warning: Empty page content for tender {tender_url}")
+            return {"url": tender_url, "info": "No content available"}
+        
+        prompt = f"""Analyze this tender page and extract the following information in a structured format:
+        1. Buyer/Organization
+        2. Project Title
+        3. Project Description
+        4. Procedure Type
+        5. Award Criteria
+        6. Important Dates
+        7. Additional Information
+        
+        Page content:
+        {page_content}"""
+        
+        response = PromptAI(prompt)
+        if not response:
+            print(f"Warning: No AI response for tender {tender_url}")
+            return {"url": tender_url, "info": "Failed to analyze tender"}
+            
+        return {"url": tender_url, "info": response}
+    except Exception as e:
+        print(f"Error in TenderInfo: {str(e)}")
+        return {"url": tender_url, "info": f"Error analyzing tender: {str(e)}"}
+
+def FindDocumentLinks(browser: Browser, tender_url: str) -> List[str]:
+    """Find document links on a tender page."""
+    try:
+        urls = browser.GetLinksFromPage(tender_url)
+        if not urls:
+            print(f"Warning: No links found on tender page {tender_url}")
+            return []
+            
+        urls_string = "\n".join(urls)
+        
+        prompt = f"""Analyze the following pages and identify all document links (PDF, DOC, DOCX, TXT, etc.) 
+        that are either explicitly marked as {language} or are most likely to be in {language}.
+        Output only the document URLs, one per line.
+        
+        Links to analyze:
+        {urls_string}"""
+        
+        response = PromptAI(prompt)
+        if not response:
+            print(f"Warning: No AI response for tender documents {tender_url}")
+            return []
+            
+        return GetLinksFromResponse(response)
+    except Exception as e:
+        print(f"Error in TenderDocuments: {str(e)}")
+        return []
 
 mock_response_document_links = "1. https://ted.europa.eu/en/notice/266375-2025/pdf"
 
