@@ -1,19 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { isAuthenticated } from "@/utils/auth";
-import { getPortals } from "@/services/api/portals";
+import { getTenders, Tender } from "@/services/api/tenders";
 
-interface Portal {
-  url: string;
-  username: string;
-  password: string;
-}
-
-export default function TenderPortalsPage() {
-  const [portals, setPortals] = useState<Portal[]>([]);
+export default function InboxPage() {
   const router = useRouter();
+  const [tenders, setTenders] = useState<Tender[]>([]);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -22,15 +16,15 @@ export default function TenderPortalsPage() {
   }, [router]);
 
   useEffect(() => {
-    const fetchPortals = async () => {
+    const fetchTenders = async () => {
       try {
-        const portals = await getPortals();
-        setPortals(portals);
+        const data = await getTenders();
+        setTenders(data);
       } catch (error) {
-        console.error("Error fetching portals:", error);
+        console.error("Error fetching tenders:", error);
       }
     };
-    fetchPortals();
+    fetchTenders();
   }, []);
 
   return (
@@ -38,16 +32,16 @@ export default function TenderPortalsPage() {
       <div className="max-w-7xl mx-auto">
         <div className="bg-white rounded-lg shadow">
           <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
-            <h1 className="text-lg font-medium text-gray-900">
-              Tender Portals
-            </h1>
+            <h3 className="text-lg font-medium text-gray-900">Upphandlingar</h3>
           </div>
           <div className="border-t border-gray-200">
             <ul className="divide-y divide-gray-200">
-              {portals.map((portal, idx) => (
+              {tenders.map((tender, idx) => (
                 <li key={idx} className="px-4 py-4">
-                  <div>{portal.url}</div>
-                  <div>{portal.username}</div>
+                  <div>Start: {tender.start_date}</div>
+                  <div>Slut: {tender.end_date}</div>
+                  <div>Anställda: {tender.workforce}</div>
+                  <div>Kvalifikationer: {tender.qualifications.join(", ")}</div>
                 </li>
               ))}
             </ul>

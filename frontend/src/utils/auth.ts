@@ -19,11 +19,13 @@ export const login = async (credentials: LoginCredentials) => {
 
   const data = await response.json();
   localStorage.setItem("token", data.access_token);
+  localStorage.setItem("username", credentials.username);
   return data;
 };
 
 export const logout = () => {
   localStorage.removeItem("token");
+  localStorage.removeItem("username");
 };
 
 export const isAuthenticated = (): boolean => {
@@ -44,4 +46,9 @@ export const isAuthenticated = (): boolean => {
 export const getToken = (): string | null => {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("token");
+};
+
+export const getUsername = (): string | null => {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("username");
 };
