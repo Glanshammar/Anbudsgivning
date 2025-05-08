@@ -10,105 +10,78 @@ import { getTenders, Tender } from "@/services/api/tenders";
 
 export default function Dashboard() {
   const router = useRouter();
+  const [tenders, setTenders] = useState<Tender[]>([]);
 
   useEffect(() => {
-    // Redirect to login page if not authenticated
     if (!isAuthenticated()) {
       router.push("/");
     }
   }, [router]);
-
-  const handleLogout = () => {
-    logout();
-    router.push("/");
-  };
-
-  const [tenders, setTenders] = useState<Tender[]>([]);
 
   useEffect(() => {
     const fetchTenders = async () => {
       try {
         const data = await getTenders();
         setTenders(data);
-      } 
-      catch (error) {
+      } catch (error) {
         console.error("Error fetching tenders:", error);
       }
     };
     fetchTenders();
   }, []);
 
-
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <nav className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                <Link
-                  href="/dashboard"
-                  className="border-blue-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  Inbox Upphandlingar
-                </Link>
-                <Link
-                  href="#"
-                  className="text-gray-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 text-sm font-medium"
-                >
-                  Mina anbud
-                </Link>
-                <Link
-                  href="/dashboard/tender-portals"
-                  className="text-gray-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 text-sm font-medium"
-                >
-                  Tender Portaler
-                </Link>
-                <Link
-                  href="#"
-                  className="text-gray-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 text-sm font-medium"
-                >
-                  Kompetenser
-                </Link>
-                <Link
-                  href="#"
-                  className="text-gray-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 text-sm font-medium"
-                >
-                  Inställningar
-                </Link>
-              </div>
-            </div>
-            <div className="flex items-center">
-              <button
-                onClick={handleLogout}
-                className="text-gray-500 hover:text-gray-700 inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md hover:bg-gray-50"
-              >
-                Logga ut
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      {/* Dashboard Content */}
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        {/* Tenders*/}
+    <div className="p-8">
+      <div className="max-w-7xl mx-auto">
         <div className="bg-white rounded-lg shadow">
           <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
-            <h3 className="text-lg font-medium text-gray-900">Upphandlingar</h3>
+            <h1 className="text-xl font-semibold text-gray-900">
+              Välkommen till din Dashboard
+            </h1>
           </div>
           <div className="border-t border-gray-200">
-            <ul className="divide-y divide-gray-200">
-              {tenders.map((tender, idx) => (
-                <li key={idx} className="px-4 py-4">
-                  <div>Start: {tender.start_date}</div>
-                  <div>Slut: {tender.end_date}</div>
-                  <div>Anställda: {tender.workforce}</div>
-                  <div>Kvalifikationer: {tender.qualifications.join(", ")}</div>
-                </li>
-              ))}
-            </ul>
+            <div className="px-4 py-5 sm:p-6">
+              <h2 className="text-lg font-medium text-gray-900 mb-4">
+                Senaste upphandlingar
+              </h2>
+              <div className="space-y-4">
+                {tenders.length === 0 ? (
+                  <p className="text-gray-500">
+                    Inga upphandlingar tillgängliga
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-gray-200">
+                    {tenders.map((tender, idx) => (
+                      <li key={idx} className="py-4">
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-purple-600">
+                              Upphandling #{idx + 1}
+                            </span>
+                            <span className="text-sm text-gray-500">
+                              {tender.start_date} - {tender.end_date}
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            Arbetskraft: {tender.workforce} personer
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {tender.qualifications.map((qual, qIdx) => (
+                              <span
+                                key={qIdx}
+                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800"
+                              >
+                                Kvalifikation #{qual}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
