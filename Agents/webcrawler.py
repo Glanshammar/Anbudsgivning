@@ -161,9 +161,10 @@ class WebCrawler(Agent):
         
         # Setup command socket (bind)
         self.command_socket = self.context.socket(zmq.REP)
-        self.command_socket.bind(f"tcp://*:{self.agent_id + COMMAND_PORT}")
-        self.logger.debug(f"Command socket bound to port {self.agent_id + COMMAND_PORT}", extra={'agent_id': self.agent_id})
-        self.send_status(f"WebCrawler {self.agent_id} command socket bound to port {self.agent_id + COMMAND_PORT}")
+        port = int(self.agent_id) + COMMAND_PORT
+        self.command_socket.bind(f"tcp://*:{port}")
+        self.logger.debug(f"Command socket bound to port {port}", extra={'agent_id': self.agent_id})
+        self.send_status(f"WebCrawler {self.agent_id} command socket bound to port {port}")
 
         # Setup status socket (connect to manager's PUB)
         self.status_socket = self.context.socket(zmq.PUB)

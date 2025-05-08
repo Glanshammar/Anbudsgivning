@@ -11,7 +11,7 @@ class StructuredLogFormatter(logging.Formatter):
     def format(self, record):
         # Create a dictionary with all the log information
         log_data = {
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now().isoformat(),
             'level': record.levelname,
             'component': record.name,
             'message': record.getMessage(),
