@@ -16,10 +16,13 @@ STATUS_PORT = 5600
 COMMAND_PORT = 5500
 
 class AgentStatus(Enum):
-    IDLE = "Idle"
-    RUNNING = "Running"
-    STOPPED = "Stopped"
-    CRAWLING = "Crawling"
+    IDLE = 0
+    RUNNING = 1
+    STOPPED = 2
+    CRAWLING = 3
+
+    def __str__(self):
+        return self.name
 
 
 class AgentType(Enum):
@@ -46,13 +49,14 @@ class Agent(Process):
     def set_status(self, status):
         with self._status_lock:
             self._status.value = status.value
-            self.send_status(f"Status changed to {status.value}")
+            self.send_status(f"Status changed to {status.name}")
     
     def get_status(self):
-        return self.status
+        with self._status_lock:
+            return AgentStatus(self._status.value)
 
     def __str__(self):
-        return f"Agent ID: {self.agent_id} \nRunning: {self.running} \nStatus: {self.status}"
+        return f"Agent ID: {self.agent_id} \nRunning: {self.running} \nStatus: {self.status.name}"
 
     def Close(self):  
         if self.command_socket:  
@@ -179,7 +183,7 @@ class AgentManager(Process):
                 'id': agent_id,
                 'type': agent_type.value,
                 'class_name': agent.__class__.__name__,
-                'status': AgentStatus.IDLE.value
+                'status': AgentStatus.IDLE.name
             }
             return agent
         raise ValueError(f"Unsupported agent type: {agent_type}")
@@ -199,7 +203,7 @@ class AgentManager(Process):
             agent = WebCrawler(agent_id)
             agent.start()
             self.processes[agent_id] = agent
-            self.agents[agent_id]['status'] = AgentStatus.IDLE.value
+            self.agents[agent_id]['status'] = AgentStatus.IDLE.name
             self.logger.info(f"Agent {agent_id} started")
 
     def Stop(self, agent_id: int):
@@ -222,14 +226,14 @@ class AgentManager(Process):
             self.processes[agent_id].terminate()
         
         # Update agent status
-        self.agents[agent_id]['status'] = AgentStatus.STOPPED.value
+        self.agents[agent_id]['status'] = AgentStatus.STOPPED.name
 
     def CleanupProcesses(self):
         dead = [aid for aid, p in self.processes.items() if not p.is_alive()]
         for aid in dead:
             del self.processes[aid]
             if aid in self.agents:
-                self.agents[aid]['status'] = AgentStatus.STOPPED.value
+                self.agents[aid]['status'] = AgentStatus.STOPPED.name
         if dead:
             self.logger.info(f"Cleaned {len(dead)} terminated agents")
 

@@ -80,19 +80,22 @@ def ReadDocument(params):
     collection_name = params.get('collection_name')
     document_id = params.get('document_id')
     if not document_id or document_id.strip() == "": # Multiple docs
-        collection_ref = db.collection(collection_name)
-        docs = collection_ref.stream()
-        return {doc.id: doc.to_dict() for doc in docs}
+        try:
+            collection_ref = db.collection(collection_name)
+            docs = collection_ref.stream()
+            return {doc.id: doc.to_dict() for doc in docs}, 200
+        except Exception as e:
+            return {"error": f"Error reading documents: {str(e)}"}, 500
     try:
         collection_ref = db.collection(collection_name.strip())
         doc_ref = collection_ref.document(document_id.strip())
         doc = doc_ref.get()
         if doc.exists:
-            return doc.to_dict()
+            return doc.to_dict(), 200
         else:
-            return f"Error: Document '{document_id}' does not exist"
+            return {"error": f"Document '{document_id}' does not exist"}, 404
     except Exception as e:
-        return f"Error: Error reading document: {str(e)}"
+        return {"error": f"Error reading document: {str(e)}"}, 500
 
 
 def GetDocuments(collection_name):
