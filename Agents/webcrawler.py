@@ -18,10 +18,17 @@ class WebCrawler(Agent):
     def __init__(self, agent_id):
         super().__init__(agent_id)
         self.logger.info("Initializing WebCrawler", extra={'agent_id': self.agent_id})
-        self.portals_to_crawl = self.UpdatePortals()
+        self.portals_to_crawl = []
         self.results_dir = os.path.join(current_dir, 'crawl_results')
         os.makedirs(self.results_dir, exist_ok=True)
         self.logger.debug(f"Results directory: {self.results_dir}", extra={'agent_id': self.agent_id})
+
+    def Initialize(self):
+        """Initialize the crawler after the agent is fully set up"""
+        self.logger.info("Initializing crawler data", extra={'agent_id': self.agent_id})
+        self.portals_to_crawl = self.UpdatePortals()
+        self.logger.info(f"Initialized with {len(self.portals_to_crawl)} portals", extra={'agent_id': self.agent_id})
+        return True
 
     def ReadURLsFromFile(self):
         try:
@@ -45,21 +52,22 @@ class WebCrawler(Agent):
             self.logger.info("Updating portals from API", extra={'agent_id': self.agent_id})
             tender_portals_response = requests.get('http://127.0.0.1:5000/api/tender_portals')
             if tender_portals_response.status_code != 200:
-                error_msg = f"Failed to get tender portals. Status code: {tender_portals_response.status_code}"
+                error_msg = f"Failed to get tender portals. Status code: {tender_portals_response.status_code} {tender_portals_response.text}"
                 self.logger.error(error_msg, extra={'agent_id': self.agent_id})
                 self.send_status(error_msg)
                 self.send_status("Falling back to urls.json...")
                 return self.ReadURLsFromFile()
             
-            tender_portals = tender_portals_response.json()
-            if not isinstance(tender_portals, dict) or 'data' not in tender_portals:
+            response_data = tender_portals_response.json()
+            if not isinstance(response_data, dict):
                 error_msg = "Invalid response format from tender portals API"
                 self.logger.error(error_msg, extra={'agent_id': self.agent_id})
                 self.send_status(error_msg)
                 self.send_status("Falling back to urls.json...")
                 return self.ReadURLsFromFile()
             
-            portals = tender_portals['data'].get('portals', [])
+            # The API returns the data directly in the response
+            portals = response_data.get('portals', [])
             if not portals:
                 error_msg = "No portals found in the response"
                 self.logger.warning(error_msg, extra={'agent_id': self.agent_id})
@@ -156,6 +164,12 @@ class WebCrawler(Agent):
         self.logger.info(f"WebCrawler {self.agent_id} starting", extra={'agent_id': self.agent_id})
         self.send_status(f"WebCrawler {self.agent_id} started")
 
+        # Initialize the crawler data
+        if not self.Initialize():
+            self.logger.error("Failed to initialize crawler data", extra={'agent_id': self.agent_id})
+            self.send_status("Failed to initialize crawler data")
+            return
+
         # Initialize ZMQ context and sockets in the child process
         self.context = zmq.Context()
         
@@ -207,14 +221,14 @@ class WebCrawler(Agent):
                             ])
                             self.Stop()
                             continue
-                        if command == "test":
+                        elif command == "test":
                             self.logger.debug("Received test command", extra={'agent_id': self.agent_id})
                             self.command_socket.send_string("Test received")
                             self.status_socket.send_multipart([
                                 str(self.agent_id).encode(),
                                 "Test command received and acknowledged".encode()
                             ])
-                        if command == "crawl":
+                        elif command == "crawl":
                             self.logger.info("Received crawl command", extra={'agent_id': self.agent_id})
                             self.command_socket.send_string("Crawling")
                             self.status_socket.send_multipart([
@@ -222,7 +236,7 @@ class WebCrawler(Agent):
                                 "Crawling command received and acknowledged".encode()
                             ])
                             self.set_status(AgentStatus.CRAWLING)
-                            self.send_status(f'Agent {self.agent_id} status: {self.status.value}')
+                            self.send_status(f'Agent {self.agent_id} status: {self.get_status().name}')
                             self.logger.info("Starting crawl operation", extra={'agent_id': self.agent_id})
                             self.Crawl()
                             time.sleep(100)
