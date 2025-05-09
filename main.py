@@ -2,6 +2,8 @@ from Data import (CompanyProfile, Consultant, TenderDocument, Calendar, Expertis
                    Page, GetLinksFromPage, PromptAI,  mock_response_tender_pages, mock_response_document_links)
 from Agents import AgentManager, AgentType, WebCrawler, COMMAND_PORT, STATUS_PORT
 from Logger.logger_tests import run_logger_tests
+from Data.ai import DownloadDocument
+from Backend import Browser
 import zmq
 from selenium import webdriver
 import requests
@@ -26,6 +28,7 @@ API_URL = 'http://127.0.0.1:5000'
 ted_portal = 'https://ted.europa.eu/en/search/result?classification-cpv=core&search-scope=ACTIVE'
 tender_url = 'https://ted.europa.eu/en/notice/-/detail/266375-2025'
 tendium_portal = 'https://tendium.ai/se/upphandlingar/'
+tender_document = 'https://ted.europa.eu/en/notice/298174-2025/pdf'
 tendersontime_portal = 'https://www.tendersontime.com/sweden-tenders/'
 
 
@@ -34,6 +37,9 @@ if __name__ == "__main__":
         command = input(">> ").lower()
         
         match command:
+            case 'download':
+                browser = Browser()
+                DownloadDocument(browser, tender_document, save_dir=app_folder)
             case 'portals':
                 tender_portals_response = requests.get('http://127.0.0.1:5000/api/tender_portals')
                 tender_portals = json.loads(tender_portals_response.text)

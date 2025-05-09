@@ -140,5 +140,5 @@ credentials.json
 # Etc
 logs/
 crawl_results/
-urls.json
+portals.json
 cache/
