@@ -291,8 +291,26 @@ def TenderPortals():
                              doc_id='TenderPortals')
     
     if request.method == 'PUT':
+        # Get existing portals
+        existing_data = current_app.db.collection(COMPANY_DATA).document('TenderPortals').get()
+        existing_portals = existing_data.to_dict().get('portals', []) if existing_data.exists else []
+        
+        # Get new portals
+        new_portals_data = request.get_json().get('portals', [])
+        validated_new_portals = []
+        for portal in new_portals_data:
+            portal_obj = TenderPortal(**portal)
+            validated_new_portals.append(portal_obj.to_dict())
+        
+        # Combine existing and new portals, avoiding duplicates based on URL
+        existing_urls = {portal['url'] for portal in existing_portals}
+        combined_portals = existing_portals + [
+            portal for portal in validated_new_portals 
+            if portal['url'] not in existing_urls
+        ]
+        
         return DatabaseRequest(collection_name=COMPANY_DATA,
-                             data=request.get_json(),
+                             data={"portals": combined_portals},
                              doc_id='TenderPortals')
     
     if request.method == 'GET':
