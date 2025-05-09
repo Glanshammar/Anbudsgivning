@@ -20,14 +20,13 @@ from datetime import datetime, timedelta
 class WebCrawler(Agent):
     def __init__(self, agent_id):
         super().__init__(agent_id)
-        self.logger.info("Initializing WebCrawler", extra={'agent_id': self.agent_id})
         self.portals_to_crawl = []
         self.results_dir = os.path.join(current_dir, 'crawl_results')
         self.cache_dir = os.path.join(current_dir, 'cache')
-        self.temp_dir = os.path.join(current_dir, 'temp')
+        self.documents_dir = os.path.join(current_dir, f'documents')
+        os.makedirs(self.documents_dir, exist_ok=True)
         os.makedirs(self.results_dir, exist_ok=True)
         os.makedirs(self.cache_dir, exist_ok=True)
-        os.makedirs(self.temp_dir, exist_ok=True)
         self.logger.debug(f"Results directory: {self.results_dir}", extra={'agent_id': self.agent_id})
 
     def Initialize(self):
@@ -36,19 +35,19 @@ class WebCrawler(Agent):
         self.logger.info(f"Initialized with {len(self.portals_to_crawl)} portals", extra={'agent_id': self.agent_id})
         return True
 
-    def ReadURLsFromFile(self):
+    def ReadPortalsFromFile(self):
         try:
-            file_path = os.path.join(current_dir, 'urls.json')
-            self.logger.debug(f"Reading URLs from file: {file_path}", extra={'agent_id': self.agent_id})
+            file_path = os.path.join(current_dir, 'portals.json')
+            self.logger.debug(f"Reading portals from file: {file_path}", extra={'agent_id': self.agent_id})
             if os.path.exists(file_path):
                 with open(file_path, 'r') as f:
-                    urls = json.load(f)
-                self.logger.info(f"Successfully read {len(urls)} URLs from file", extra={'agent_id': self.agent_id})
-                return urls
-            self.logger.warning("urls.json file not found", extra={'agent_id': self.agent_id})
+                    portals = json.load(f)
+                self.logger.info(f"Successfully read {len(portals)} portals from file", extra={'agent_id': self.agent_id})
+                return portals
+            self.logger.warning("portals.json file not found", extra={'agent_id': self.agent_id})
             return []
         except Exception as e:
-            error_msg = f"Error reading urls.json: {str(e)}"
+            error_msg = f"Error reading portals.json: {str(e)}"
             self.logger.error(error_msg, extra={'agent_id': self.agent_id})
             self.send_status(error_msg)
             return []
@@ -79,7 +78,7 @@ class WebCrawler(Agent):
             # Check if we need to update the portals
             if not self.ShouldUpdatePortals():
                 self.logger.info("Using cached portals data", extra={'agent_id': self.agent_id})
-                return self.ReadURLsFromFile()
+                return self.ReadPortalsFromFile()
 
             self.logger.info("Updating portals from API", extra={'agent_id': self.agent_id})
             tender_portals_response = requests.get('http://127.0.0.1:5000/api/tender_portals')
@@ -87,16 +86,16 @@ class WebCrawler(Agent):
                 error_msg = f"Failed to get tender portals. Status code: {tender_portals_response.status_code} {tender_portals_response.text}"
                 self.logger.error(error_msg, extra={'agent_id': self.agent_id})
                 self.send_status(error_msg)
-                self.send_status("Falling back to urls.json...")
-                return self.ReadURLsFromFile()
+                self.send_status("Falling back to portals.json...")
+                return self.ReadPortalsFromFile()
             
             response_data = tender_portals_response.json()
             if not isinstance(response_data, dict):
                 error_msg = "Invalid response format from tender portals API"
                 self.logger.error(error_msg, extra={'agent_id': self.agent_id})
                 self.send_status(error_msg)
-                self.send_status("Falling back to urls.json...")
-                return self.ReadURLsFromFile()
+                self.send_status("Falling back to portals.json...")
+                return self.ReadPortalsFromFile()
             
             # The API returns the data directly in the response
             portals = response_data.get('portals', [])
@@ -104,11 +103,11 @@ class WebCrawler(Agent):
                 error_msg = "No portals found in the response"
                 self.logger.warning(error_msg, extra={'agent_id': self.agent_id})
                 self.send_status(error_msg)
-                self.send_status("Falling back to urls.json...")
-                return self.ReadURLsFromFile()
+                self.send_status("Falling back to portals.json...")
+                return self.ReadPortalsFromFile()
             
             # Save to URL file for future use
-            file_path = os.path.join(current_dir, 'urls.json')
+            file_path = os.path.join(current_dir, 'portals.json')
             with open(file_path, 'w') as f:
                 json.dump(portals, f, indent=4)
             
@@ -116,11 +115,11 @@ class WebCrawler(Agent):
             self.logger.info(f"Successfully updated {len(portals)} portals", extra={'agent_id': self.agent_id})
             return portals
         except Exception as e:
-            error_msg = f"Error updating URLs: {str(e)}"
+            error_msg = f"Error updating portals: {str(e)}"
             self.logger.error(error_msg, extra={'agent_id': self.agent_id})
             self.send_status(error_msg)
-            self.send_status("Falling back to urls.json...")
-            return self.ReadURLsFromFile()
+            self.send_status("Falling back to portals.json...")
+            return self.ReadPortalsFromFile()
 
     def Crawl(self):
         from Data.ai import GetTenderLinksFromPortal, TenderInfo, FindDocumentLinks, DownloadDocument
@@ -132,11 +131,13 @@ class WebCrawler(Agent):
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             results_file = os.path.join(self.results_dir, f'crawl_results_{timestamp}.json')
             tender_links_file = os.path.join(self.results_dir, f'tender_links_{timestamp}.txt')
+            
             self.logger.debug(f"Results will be saved to: {results_file}", extra={'agent_id': self.agent_id})
             
             all_tender_links = []
             all_tender_info = []
             all_document_links = []
+            downloaded_documents = []
 
             # Initialize a single browser instance for all operations
             browser = Browser()
@@ -163,15 +164,11 @@ class WebCrawler(Agent):
                     for link in all_tender_links:
                         f.write(f"{link}\n")
 
-                # Second phase: Process each tender page
+                # Second phase: Find document links for each tender
                 for tender_url in all_tender_links[:3]:
                     try:
-                        self.logger.info(f"Processing tender: {tender_url}", extra={'agent_id': self.agent_id})
-                        self.send_status(f"Processing tender: {tender_url}")
-
-                        # Get tender information
-                        tender_info = TenderInfo(browser, tender_url)
-                        all_tender_info.append(tender_info)
+                        self.logger.info(f"Finding documents for tender: {tender_url}", extra={'agent_id': self.agent_id})
+                        self.send_status(f"Finding documents for tender: {tender_url}")
 
                         # Get document links
                         document_links = FindDocumentLinks(browser, tender_url)
@@ -182,7 +179,56 @@ class WebCrawler(Agent):
                         self.send_status(f"Found {len(document_links)} documents for tender {tender_url}")
 
                     except Exception as e:
-                        error_msg = f"Error processing tender {tender_url}: {str(e)}"
+                        error_msg = f"Error finding documents for tender {tender_url}: {str(e)}"
+                        self.logger.error(error_msg, extra={'agent_id': self.agent_id})
+                        self.send_status(error_msg)
+                        continue
+
+                # Third phase: Download all documents
+                for doc_link in all_document_links:
+                    try:
+                        self.logger.info(f"Downloading document: {doc_link}", extra={'agent_id': self.agent_id})
+                        self.send_status(f"Downloading document: {doc_link}")
+                        
+                        doc_path = DownloadDocument(browser, doc_link, self.documents_dir)
+                        if doc_path:
+                            downloaded_documents.append({
+                                'url': doc_link,
+                                'local_path': doc_path
+                            })
+                            self.logger.info(f"Successfully downloaded document to: {doc_path}", 
+                                           extra={'agent_id': self.agent_id})
+                            self.send_status(f"Successfully downloaded document to: {doc_path}")
+                    except Exception as e:
+                        error_msg = f"Error downloading document {doc_link}: {str(e)}"
+                        self.logger.error(error_msg, extra={'agent_id': self.agent_id})
+                        self.send_status(error_msg)
+                        continue
+
+                # Fourth phase: Process downloaded documents
+                for doc in downloaded_documents:
+                    try:
+                        self.logger.info(f"Processing document: {doc['local_path']}", extra={'agent_id': self.agent_id})
+                        self.send_status(f"Processing document: {doc['local_path']}")
+                        
+                        # Process the downloaded document instead of the tender page
+                        tender_info = TenderInfo(browser, doc['local_path'], is_document=True)
+                        
+                        # Parse the JSON response from the AI
+                        try:
+                            parsed_info = json.loads(tender_info['info'])
+                            tender_info['info'] = parsed_info
+                        except json.JSONDecodeError as e:
+                            self.logger.error(f"Failed to parse tender info JSON: {str(e)}", extra={'agent_id': self.agent_id})
+                            self.send_status(f"Warning: Could not parse tender info as JSON for {doc['local_path']}")
+                        
+                        all_tender_info.append(tender_info)
+                        
+                        self.logger.info(f"Successfully processed document: {doc['local_path']}", 
+                                       extra={'agent_id': self.agent_id})
+                        self.send_status(f"Successfully processed document: {doc['local_path']}")
+                    except Exception as e:
+                        error_msg = f"Error processing document {doc['local_path']}: {str(e)}"
                         self.logger.error(error_msg, extra={'agent_id': self.agent_id})
                         self.send_status(error_msg)
                         continue
@@ -192,7 +238,8 @@ class WebCrawler(Agent):
                     'timestamp': timestamp,
                     'tender_links': all_tender_links,
                     'tender_info': all_tender_info,
-                    'document_links': all_document_links
+                    'document_links': all_document_links,
+                    'downloaded_documents': downloaded_documents
                 }
                 
                 with open(results_file, 'w', encoding='utf-8') as f:
@@ -200,9 +247,11 @@ class WebCrawler(Agent):
                 
                 success_msg = f"""Crawl completed successfully:
                 - Found {len(all_tender_links)} tender pages
-                - Processed {len(all_tender_info)} tender details
                 - Found {len(all_document_links)} document links
-                Results saved to {results_file}"""
+                - Downloaded {len(downloaded_documents)} documents
+                - Processed {len(all_tender_info)} tender details
+                Results saved to {results_file}
+                Documents saved to {self.documents_dir}"""
                 
                 self.logger.info(success_msg, extra={'agent_id': self.agent_id})
                 self.send_status(success_msg)
@@ -294,10 +343,9 @@ class WebCrawler(Agent):
                             ])
                             self.set_status(AgentStatus.CRAWLING)
                             self.send_status(f'Agent {self.agent_id} status: {self.get_status().name}')
-                            self.logger.info("Starting crawl operation", extra={'agent_id': self.agent_id})
                             self.Crawl()
-                            time.sleep(100)
                             self.set_status(AgentStatus.IDLE)
+                            self.send_status(f'Agent {self.agent_id} status: {self.get_status().name}')
                         else:
                             error_msg = f"Received unknown command: {command}"
                             self.logger.warning(error_msg, extra={'agent_id': self.agent_id})
