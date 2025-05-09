@@ -32,7 +32,7 @@ class Browser:
             try:
                 self.driver = webdriver.Chrome(options=self.options)
                 self.driver.maximize_window()
-                self.driver.set_page_load_timeout(30)  # Set page load timeout
+                self.driver.set_page_load_timeout(30)
             except Exception as e:
                 print(f"Error starting browser: {str(e)}")
                 raise
@@ -59,7 +59,7 @@ class Browser:
             self.Quit()
             self.Start()
 
-    def OpenPage(self, url: str, wait_time: int = 7):
+    def OpenPage(self, url: str, wait_time: int = 5):
         """Open a page with retry logic."""
         for attempt in range(self.max_retries):
             try:
