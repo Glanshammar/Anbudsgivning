@@ -37,13 +37,13 @@ export default function TenderPortalsPage() {
 
   const validateUrl = (url: string): boolean => {
     try {
-      // Lägg till https:// om det saknas
+      // Add https:// if missing
       const urlWithProtocol =
         url.startsWith("http://") || url.startsWith("https://")
           ? url
           : `https://${url}`;
       const parsed = new URL(urlWithProtocol);
-      // Kontrollera att hosten innehåller minst en punkt och slutar på minst två bokstäver
+      // Check that the host contains at least one dot and ends with at least two letters
       const domainRegex = /\.[a-zA-Z]{2,}$/;
       if (!domainRegex.test(parsed.hostname)) {
         return false;
@@ -71,7 +71,7 @@ export default function TenderPortalsPage() {
       return;
     }
 
-    // Lägg till https:// om det saknas
+    // Add https:// if missing
     const urlWithProtocol =
       newPortal.url.startsWith("http://") ||
       newPortal.url.startsWith("https://")
