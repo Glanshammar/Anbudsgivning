@@ -39,7 +39,24 @@ TENDERS = 'Tenders'
 CONSULTANTS = 'Consultants'
 # ------------------------------------------------------------------------------------------------------------- #
 # --------------------------------------------- Request Functions --------------------------------------------- #
-def ProcessRequest(collection_name: str = None, data: dict = None, doc_id: str = None):
+def ServerRequest(command: str = None, params: dict = None):
+    try:
+        # Build the command object
+        command_obj = {
+            'command': command,
+            'params': params if params is not None else {}
+        }
+        
+        # Send the command to the server
+        socket.send_json(command_obj)
+        backend_response = socket.recv_json()
+        
+        return jsonify(backend_response["data"]), backend_response.get("status_code", 200)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+
+def DatabaseRequest(collection_name: str = None, data: dict = None, doc_id: str = None):
     try:
         method_to_command = {
             'POST': 'create',
@@ -47,28 +64,15 @@ def ProcessRequest(collection_name: str = None, data: dict = None, doc_id: str =
             'PUT': 'update',
             'DELETE': 'delete'
         }
-        command_type = method_to_command.get(request.method)
-        command = {
-            'command': command_type,
-            'params': {
-                'collection_name': collection_name,
-                'document_data': data,
-                'document_id': doc_id
-            }
+        command = method_to_command.get(request.method)
+        params = {
+            'collection_name': collection_name,
+            'document_data': data,
+            'document_id': doc_id
         }
-        socket.send_json(command)
-        backend_response = socket.recv_json()
-        return jsonify(backend_response["data"]), backend_response.get("status_code", 200)
+        return ServerRequest(command, params)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
-def Response():
-    try:
-        response = socket.recv_json()
-        return response['data'], response.get('status_code', 200)
-    except zmq.error.Again:
-        raise TimeoutError("The operation timed out")
 
 
 def ValidateModel(model_class):
@@ -99,11 +103,7 @@ def VerifyUser():
 
 @app.route('/api/server', methods=['GET'])
 def ServerStatus():
-    socket.send_json({
-        'command': 'status'
-    })
-    response, status_code = Response()
-    return jsonify(response), status_code
+    return ServerRequest('status')
 
 
 @app.route('/api/status', methods=['GET'])
@@ -195,19 +195,19 @@ def Consultants():
     doc_id = request.args.get('id')
     
     if request.method == 'PUT':
-        return ProcessRequest(
+        return DatabaseRequest(
             collection_name=CONSULTANTS,
             data=request.get_json(),
             doc_id=doc_id
         )
     elif request.method == 'POST':
-        return ProcessRequest(
+        return DatabaseRequest(
             collection_name=CONSULTANTS,
             data=request.get_json(),
             doc_id=doc_id
         )
     elif request.method == 'GET':
-        return ProcessRequest(
+        return DatabaseRequest(
             collection_name=CONSULTANTS,
             data=None,
             doc_id=doc_id
@@ -223,12 +223,12 @@ def BusinessCalendar():
         if not isinstance(availability, dict):
             return http_400("Invalid input: 'availability' must be a dictionary.")
 
-        return ProcessRequest(collection_name=COMPANY_DATA,
+        return DatabaseRequest(collection_name=COMPANY_DATA,
                               data=availability,
                               doc_id='ConsultantCalendar')
     
     if request.method == 'GET':
-        return ProcessRequest(collection_name=COMPANY_DATA,
+        return DatabaseRequest(collection_name=COMPANY_DATA,
                               data=None,
                               doc_id='ConsultantCalendar')
 
@@ -236,11 +236,11 @@ def BusinessCalendar():
 @app.route('/api/tenders', methods=['GET', 'POST'])
 def TendersRequest():
     if request.method == 'GET':
-        return ProcessRequest(collection_name=TENDERS,
+        return DatabaseRequest(collection_name=TENDERS,
                             data=None,
                             doc_id=request.args.get('tender_id'))
     if request.method == 'POST':
-        return ProcessRequest(collection_name=TENDERS,
+        return DatabaseRequest(collection_name=TENDERS,
                               data=request.get_json(),
                               doc_id=request.args.get('tender_id'))
 
@@ -248,15 +248,15 @@ def TendersRequest():
 @app.route('/api/expertise', methods=['POST', 'GET', 'PUT'])
 def ExpertiseRequest():
     if request.method == 'POST':
-        return ProcessRequest(collection_name=COMPANY_DATA,
+        return DatabaseRequest(collection_name=COMPANY_DATA,
                               data=request.get_json(),
                               doc_id='Expertise')
     elif request.method == 'GET':
-        return ProcessRequest(collection_name=COMPANY_DATA,
+        return DatabaseRequest(collection_name=COMPANY_DATA,
                               data=None,
                               doc_id='Expertise')
     elif request.method == 'PUT':
-        return ProcessRequest(collection_name=COMPANY_DATA,
+        return DatabaseRequest(collection_name=COMPANY_DATA,
                               data=request.get_json(),
                               doc_id='Expertise')
 
@@ -286,17 +286,35 @@ def TenderPortals():
         for portal in portals_data:
             portal_obj = TenderPortal(**portal)
             validated_portals.append(portal_obj.to_dict())
-        return ProcessRequest(collection_name=COMPANY_DATA,
+        return DatabaseRequest(collection_name=COMPANY_DATA,
                              data={"portals": validated_portals},
                              doc_id='TenderPortals')
     
     if request.method == 'PUT':
-        return ProcessRequest(collection_name=COMPANY_DATA,
-                             data=request.get_json(),
+        # Get existing portals
+        existing_data = current_app.db.collection(COMPANY_DATA).document('TenderPortals').get()
+        existing_portals = existing_data.to_dict().get('portals', []) if existing_data.exists else []
+        
+        # Get new portals
+        new_portals_data = request.get_json().get('portals', [])
+        validated_new_portals = []
+        for portal in new_portals_data:
+            portal_obj = TenderPortal(**portal)
+            validated_new_portals.append(portal_obj.to_dict())
+        
+        # Combine existing and new portals, avoiding duplicates based on URL
+        existing_urls = {portal['url'] for portal in existing_portals}
+        combined_portals = existing_portals + [
+            portal for portal in validated_new_portals 
+            if portal['url'] not in existing_urls
+        ]
+        
+        return DatabaseRequest(collection_name=COMPANY_DATA,
+                             data={"portals": combined_portals},
                              doc_id='TenderPortals')
     
     if request.method == 'GET':
-        return ProcessRequest(collection_name=COMPANY_DATA,
+        return DatabaseRequest(collection_name=COMPANY_DATA,
                              data=None,
                              doc_id='TenderPortals')
 
@@ -313,15 +331,50 @@ def CompanyProfiles():
     }
     """
     if request.method == 'POST':
-        return ProcessRequest(collection_name=COMPANY_DATA,
+        return DatabaseRequest(collection_name=COMPANY_DATA,
                              data=request.get_json(),
                              doc_id='CompanyProfile')
     
     if request.method == 'GET':
-        return ProcessRequest(collection_name=COMPANY_DATA,
+        return DatabaseRequest(collection_name=COMPANY_DATA,
                              data=None,
                              doc_id='CompanyProfile')
 # ------------------------------------------------------------------------------------------------------------- #
-# ------------------------------------------------------------------------------------------------------------- #
+# --------------------------------------------- Agent Management ---------------------------------------------- #
+@app.route('/api/agent', methods=['POST', 'GET', 'DELETE'])
+def AgentManagement():
+    try:
+        if request.method == 'POST':
+            # JSON example
+            """
+            {
+                agent_type: "WebCrawler"
+            }
+            """
+            return ServerRequest(command='start_agent', params=request.get_json())
+
+        elif request.method == 'GET':
+            return ServerRequest(command='get_agents')
+
+        elif request.method == 'DELETE':
+            agent_id = request.args.get('agent_id')
+            if not agent_id:
+                return http_400("Missing agent_id parameter")
+            
+            command = {
+                'command': 'stop_agent',
+                'params': {'agent_id': int(agent_id)}
+            }
+            socket.send_json(command)
+            response = socket.recv_json()
+            return jsonify(response['data']), response['status_code']
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/agent/command', methods=['POST'])
+def AgentCommand():
+        return ServerRequest(command='agent_command', params=request.get_json())
+
 
 app.run(host='0.0.0.0', port=5000, threaded=True)

@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(current_dir)
@@ -34,13 +35,9 @@ class OpStatus(IntEnum):
 def MasterAgent():
     global master_agent
     if master_agent is None:
-        print('Starting master agent...')
         master_agent = AgentManager()
-        return master_agent.__str__()
-    elif isinstance(master_agent, AgentManager):
-        return master_agent.__str__()
-    else:
-        return "Something went wrong. Couldn't start or recognize Master Agent."
+        master_agent.start()
+    return master_agent
 
 
 def GetCollection(collection_name):
@@ -83,19 +80,22 @@ def ReadDocument(params):
     collection_name = params.get('collection_name')
     document_id = params.get('document_id')
     if not document_id or document_id.strip() == "": # Multiple docs
-        collection_ref = db.collection(collection_name)
-        docs = collection_ref.stream()
-        return {doc.id: doc.to_dict() for doc in docs}
+        try:
+            collection_ref = db.collection(collection_name)
+            docs = collection_ref.stream()
+            return {doc.id: doc.to_dict() for doc in docs}, 200
+        except Exception as e:
+            return {"error": f"Error reading documents: {str(e)}"}, 500
     try:
         collection_ref = db.collection(collection_name.strip())
         doc_ref = collection_ref.document(document_id.strip())
         doc = doc_ref.get()
         if doc.exists:
-            return doc.to_dict()
+            return doc.to_dict(), 200
         else:
-            return f"Error: Document '{document_id}' does not exist"
+            return {"error": f"Document '{document_id}' does not exist"}, 404
     except Exception as e:
-        return f"Error: Error reading document: {str(e)}"
+        return {"error": f"Error reading document: {str(e)}"}, 500
 
 
 def GetDocuments(collection_name):
@@ -159,21 +159,104 @@ def DeleteDocument(document):
         return f'Error: Error deleting document: {str(e)}'
 
 
+def StartAgent(params):
+    agent_type_str = params.get('agent_type')
+    try:
+        manager = MasterAgent()
+        agent_type = None
+        for member in AgentType:
+            if member.value.lower() == agent_type_str.lower():
+                agent_type = member
+                break
+
+        if agent_type is None:
+            return f"Invalid agent type: {agent_type_str}", 400
+
+        agent = manager.Create(agent_type=agent_type)
+        manager.Start(agent.agent_id)
+        
+        # Wait a short moment for the process to start and get its PID
+        time.sleep(0.1)
+        
+        process = manager.processes.get(agent.agent_id)
+        return {
+            'agent_id': agent.agent_id,
+            'type': agent_type_str,
+            'status': manager.agents[agent.agent_id]['status'],
+            'port': COMMAND_PORT + agent.agent_id,
+            'pid': process.pid if process else None,
+            'alive': process.is_alive() if process else False
+        }, 201
+    except Exception as e:
+        return f"Agent creation failed: {str(e)}", 500
+
+
+def GetAgents(params):
+    manager = MasterAgent()
+    agents = []
+    for agent_id, agent_info in manager.agents.items():
+        try:
+            process = manager.processes.get(agent_id)
+            agents.append({
+                'id': agent_id,
+                'type': agent_info['type'],
+                'alive': process.is_alive() if process else False,
+                'status': agent_info['status'],
+                'port': COMMAND_PORT + agent_id,
+                'pid': process.pid if process else None
+            })
+        except Exception as e:
+            # Skip agents that can't be accessed
+            continue
+    return agents, 200
+
+
+def StopAgent(params):
+    agent_id = params.get('agent_id')
+    try:
+        manager = MasterAgent()
+        manager.Stop(agent_id)
+        return f"Agent {agent_id} stopped", 200
+    except Exception as e:
+        return f"Failed to stop agent: {str(e)}", 500
+
+
+def AgentCommand(params):
+    if not params or 'agent_id' not in params or 'command' not in params:
+            return {
+                'status': 'error',
+                'message': 'Missing required fields: agent_id and command'
+            }, 400
+    try:
+        agent_id = params.get('agent_id')
+        command = params.get('command')
+        return master_agent.SendCommand(agent_id, command)
+    except Exception as e:
+        return {
+            'status': 'error',
+            'message': f'Error sending command: {str(e)}'
+        }, 500
+
+
+def ProcessCommand(command, params):
+    func = operations.get(command.lower())
+    if func:
+        return func(params)
+    else:
+        return f'Error: Unknown command "{command}".'
+
+
 operations = {
     'create': CreateDocument,
     'read': ReadDocument,
     'update': UpdateDocument,
     'delete': DeleteDocument,
     'status': lambda params: 'Server is online!',
-    'agent': lambda params: MasterAgent()
+    'start_agent': StartAgent,
+    'get_agents': GetAgents,
+    'stop_agent': StopAgent,
+    'agent_command': AgentCommand
 }
-
-def ProcessCommand(command, args):
-    func = operations.get(command.lower())
-    if func:
-        return func(args)
-    else:
-        return f'Error: Unknown command "{command}".'
 
 
 if __name__ == '__main__':

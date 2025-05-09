@@ -1,6 +1,10 @@
-from Data import (Company, Consultant, TenderDocument, Calendar, Expertise, GetLinksFromResponse,
+from Data import (CompanyProfile, Consultant, TenderDocument, Calendar, Expertise, GetLinksFromResponse,
                    Page, GetLinksFromPage, PromptAI,  mock_response_tender_pages, mock_response_document_links)
-from Agents import AgentManager, AgentType
+from Agents import AgentManager, AgentType, WebCrawler, COMMAND_PORT, STATUS_PORT
+from Logger.logger_tests import run_logger_tests
+from Data.ai import DownloadDocument
+from Backend import Browser
+import zmq
 from selenium import webdriver
 import requests
 from time import sleep
@@ -16,12 +20,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 documents_folder = userpaths.get_my_documents()
+current_dir = os.path.dirname(os.path.abspath(__file__))
+agent_dir = os.path.join(current_dir, 'Agents')
 app_folder = os.path.join(documents_folder, 'AnbudApp')
 os.makedirs(app_folder, exist_ok=True)
 API_URL = 'http://127.0.0.1:5000'
 ted_portal = 'https://ted.europa.eu/en/search/result?classification-cpv=core&search-scope=ACTIVE'
 tender_url = 'https://ted.europa.eu/en/notice/-/detail/266375-2025'
 tendium_portal = 'https://tendium.ai/se/upphandlingar/'
+tender_document = 'https://ted.europa.eu/en/notice/298174-2025/pdf'
 tendersontime_portal = 'https://www.tendersontime.com/sweden-tenders/'
 
 
@@ -30,6 +37,30 @@ if __name__ == "__main__":
         command = input(">> ").lower()
         
         match command:
+            case 'download':
+                browser = Browser()
+                DownloadDocument(browser, tender_document, save_dir=app_folder)
+            case 'portals':
+                tender_portals_response = requests.get('http://127.0.0.1:5000/api/tender_portals')
+                tender_portals = json.loads(tender_portals_response.text)
+                portals = tender_portals['portals']
+                for portal in portals:
+                    print(f"URL: {portal['url']}, Username: {portal['username']}, Password: {portal['password']}")
+                with open(os.path.join(agent_dir, 'urls.json'), 'w') as f:
+                    json.dump(portals, f, indent=4)
+            case 'agent':
+                manager = AgentManager()
+                manager.start()
+                web_crawler = manager.Create(AgentType.WEB_CRAWLER, urls_to_crawl=[ted_portal, tendium_portal, tendersontime_portal])
+                manager.Start(web_crawler.agent_id)
+                ctx = zmq.Context()
+                sock = ctx.socket(zmq.REQ)
+                sock.connect(f"tcp://localhost:{COMMAND_PORT + web_crawler.agent_id}")
+                sock.send_string("test")
+                response = sock.recv_string()
+                print("Response:", response)
+                sock.close()
+                ctx.term()
             case 'ted':
                 url = "https://api.ted.europa.eu/v3/notices/search"
                 ted_api_key = os.getenv("TED_API_KEY")
@@ -179,6 +210,10 @@ if __name__ == "__main__":
                     calendar=calendar
                 )
                 print("Is Tender Match:", result)
+            case 'logger':
+                # Create logs directory if it doesn't exist
+                os.makedirs('logs', exist_ok=True)
+                run_logger_tests()
             case 'exit':
                 break
             case _:
