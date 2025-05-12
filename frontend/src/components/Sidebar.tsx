@@ -21,10 +21,6 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
       path: "/dashboard/my-tenders",
     },
     {
-      label: "Tender Portaler",
-      path: "/dashboard/tender-portals",
-    },
-    {
       label: "Kompetenser",
       path: "/dashboard/competencies",
     },
