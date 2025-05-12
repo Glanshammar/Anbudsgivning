@@ -142,3 +142,4 @@ logs/
 crawl_results/
 portals.json
 cache/
+documents/
