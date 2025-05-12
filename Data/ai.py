@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import json
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(current_dir)
@@ -84,26 +85,40 @@ def DownloadDocument(browser: Browser, url: str, save_dir: str) -> Optional[str]
         
         filepath = os.path.join(save_dir, filename)
         
-        # Configure download settings
-        browser.driver.execute_cdp_cmd('Page.setDownloadBehavior', {
-            'behavior': 'allow',
-            'downloadPath': save_dir
-        })
+        # Configure download settings for Playwright
+        browser.page.context.set_default_timeout(60000)  # 60 seconds for download
         
-        # Use browser to download the file
-        browser.driver.get(url)
-        time.sleep(3)  # Wait for download to start
+        # Setup download event handler
+        with browser.page.expect_download() as download_info:
+            browser.page.goto(url)
+        
+        download = download_info.value
+        # Wait for the download to complete
+        download_path = download.path()
+        
+        # Move the file to the specified directory
+        final_path = os.path.join(save_dir, filename)
+        os.rename(download_path, final_path)
         
         # Check if file exists
-        if os.path.exists(filepath):
-            return filepath
+        if os.path.exists(final_path):
+            return final_path
         return None
     except Exception as e:
         print(f"Error downloading document: {str(e)}")
         return None
 
 def TenderInfo(browser: Browser, source: str, is_document: bool = False) -> Dict:
-    """Extract information from a tender document."""
+    """Extract information from a tender document or webpage.
+    
+    Args:
+        browser: Browser instance for web page navigation
+        source: Either a URL (for webpages) or a file path (for documents)
+        is_document: Flag indicating if source is a document file path
+        
+    Returns:
+        Dictionary with tender information in standardized JSON format
+    """
     try:
         if is_document:
             # Process local document
@@ -114,67 +129,102 @@ def TenderInfo(browser: Browser, source: str, is_document: bool = False) -> Dict
                 if page_text:
                     text += page_text
             content = text
+            
+            # Document-specific prompt
+            prompt = f"""Analyze this tender document and extract the structured information about the tender.
+            Look for key tender details typically found in procurement notices such as the buyer organization, project details, 
+            deadlines, requirements, and any contact information, etc. Anything related to the procurement process.
+            
+            Format your response exactly like this JSON structure (replace the values with actual information from the document):
+
+            {{
+                "buyer": {{
+                    "name": "Organization name"
+                }},
+                "project": {{
+                    "title": "Project title",
+                    "description": "Brief project description"
+                }},
+                "timeline": {{
+                    "publication_date": "Date when tender was published",
+                    "deadline": "Submission deadline",
+                    "start_date": "Project start date if available",
+                    "end_date": "Project end date if available"
+                }}
+            }}
+
+            Content to analyze:
+            {content}"""
         else:
             # Process webpage
             browser.OpenPage(source)
-            content = browser.driver.page_source
+            content = browser.page.content()
+            
+            # Webpage-specific prompt
+            prompt = f"""Analyze this tender webpage and extract the structured information about the tender.
+            Look for key tender details typically found in procurement notices such as the buyer organization, project details, 
+            deadlines, requirements, and any contact information, etc. Anything related to the procurement process.
+            
+            Format your response exactly like this JSON structure (replace the values with actual information from the webpage):
+
+            {{
+                "buyer": {{
+                    "name": "Organization name"
+                }},
+                "project": {{
+                    "title": "Project title",
+                    "description": "Brief project description"
+                }},
+                "timeline": {{
+                    "publication_date": "Date when tender was published",
+                    "deadline": "Submission deadline",
+                    "start_date": "Project start date if available",
+                    "end_date": "Project end date if available"
+                }}
+            }}
+            
+            If you cannot find enough information to determine this is a tender notice, respond with:
+            {{
+                "error": "insufficient_info",
+                "message": "This does not appear to be a tender notice page"
+            }}
+
+            Content to analyze:
+            {content}"""
         
         if not content:
             print(f"Warning: Empty content for source {source}")
-            return {"url": source, "info": "No content available"}
-        
-        prompt = f"""Analyze this tender document and extract the following information in a structured format.
-        Format your response exactly like this JSON structure (replace the values with actual information from the content):
-
-        {{
-            "buyer": {{
-                "name": "Organization name",
-                "contact": "Contact information if available"
-            }},
-            "project": {{
-                "title": "Project title",
-                "description": "Detailed project description",
-                "estimated_value": "Estimated value if available",
-                "currency": "Currency if available"
-            }},
-            "procedure": {{
-                "type": "Procedure type (e.g., Open, Restricted, etc.)",
-                "reference_number": "Reference number if available"
-            }},
-            "award_criteria": {{
-                "main_criteria": ["List of main award criteria"],
-                "weighting": "Information about criteria weighting if available"
-            }},
-            "timeline": {{
-                "publication_date": "Date when tender was published",
-                "deadline": "Submission deadline",
-                "start_date": "Project start date if available",
-                "end_date": "Project end date if available"
-            }},
-            "requirements": {{
-                "technical": ["List of technical requirements"],
-                "financial": ["List of financial requirements"],
-                "qualifications": ["List of required qualifications"]
-            }},
-            "additional_info": {{
-                "important_notes": ["List of important notes or conditions"],
-                "attachments": ["List of required attachments"],
-                "other": "Any other relevant information"
-            }}
-        }}
-
-        Content to analyze:
-        {content}"""
+            return {"url": source, "info": json.dumps({
+                "error": "no_content",
+                "message": "No content available to analyze"
+            })}
         
         response = PromptAI(prompt)
         if not response:
             print(f"Warning: No AI response for source {source}")
-            return {"url": source, "info": "Failed to analyze tender"}
+            return {"url": source, "info": json.dumps({
+                "error": "ai_no_response",
+                "message": "Failed to get AI response for tender analysis"
+            })}
+            
+        # Validate the response is proper JSON
+        try:
+            json.loads(response)
+        except json.JSONDecodeError:
+            print(f"Warning: AI response is not valid JSON for source {source}")
+            return {"url": source, "info": json.dumps({
+                "error": "invalid_json",
+                "message": "AI response was not in valid JSON format",
+                "raw_response": response[:500]  # Include truncated response for debugging
+            })}
             
         return {"url": source, "info": response}
     except Exception as e:
         print(f"Error in TenderInfo: {str(e)}")
-        return {"url": source, "info": f"Error analyzing tender: {str(e)}"}
+        return {"url": source, "info": json.dumps({
+            "error": "processing_error",
+            "message": f"Error analyzing tender: {str(e)}"
+        })}
 
 def FindDocumentLinks(browser: Browser, tender_url: str) -> List[str]:
     """Find document links on a tender page."""
