@@ -1,0 +1,36 @@
+{{
+    "buyer": {{
+        "name": "Organization name",
+        "contact": "Contact information if available"
+    }},
+    "project": {{
+        "title": "Project title",
+        "description": "Detailed project description",
+        "estimated_value": "Estimated value if available",
+        "currency": "Currency if available"
+    }},
+    "procedure": {{
+        "type": "Procedure type (e.g., Open, Restricted, etc.)",
+        "reference_number": "Reference number if available"
+    }},
+    "award_criteria": {{
+        "main_criteria": ["List of main award criteria"],
+        "weighting": "Information about criteria weighting if available"
+    }},
+    "timeline": {{
+        "publication_date": "Date when tender was published",
+        "deadline": "Submission deadline",
+        "start_date": "Project start date if available",
+        "end_date": "Project end date if available"
+    }},
+    "requirements": {{
+        "technical": ["List of technical requirements"],
+        "financial": ["List of financial requirements"],
+        "qualifications": ["List of required qualifications"]
+    }},
+    "additional_info": {{
+        "important_notes": ["List of important notes or conditions"],
+        "attachments": ["List of required attachments"],
+        "other": "Any other relevant information"
+    }}
+}}
