@@ -1,9 +1,9 @@
 from Data import (CompanyProfile, Consultant, TenderDocument, Calendar, Expertise, GetLinksFromResponse,
-                   Page, GetLinksFromPage, PromptAI,  mock_response_tender_pages, mock_response_document_links)
+                   mock_response_tender_pages, mock_response_document_links, PromptAI)
 from Agents import AgentManager, AgentType, WebCrawler, COMMAND_PORT, STATUS_PORT
 from Logger.logger_tests import run_logger_tests
 from Data.ai import DownloadDocument
-from Backend import Browser
+from Backend.browser import Browser
 import zmq
 from selenium import webdriver
 import requests
@@ -84,26 +84,38 @@ if __name__ == "__main__":
                 else:
                     print(f"Error: {response.status_code} - {response.text}")
             case 'pages':
-                Page(ted_portal)
-                Page(tender_url)
+                browser = Browser()
+                try:
+                    browser.OpenPage(ted_portal)
+                    browser.OpenPage(tender_url)
+                finally:
+                    browser.Quit()
             case 'urls':
-                urls = GetLinksFromPage(tendersontime_portal)
-                for url in urls:
-                    print(url)
+                browser = Browser()
+                try:
+                    urls = browser.GetLinksFromPage(tendersontime_portal)
+                    for url in urls:
+                        print(url)
+                finally:
+                    browser.Quit()
             case 'tenders':
                 # Get all the URLs from a tender portal (TED as example), and prompts the LLM which ones are tender pages.
-                urls = GetLinksFromPage(tendersontime_portal)
-                urls_string = "\n".join(urls)
-                prompt = urls_string + """\n\n From the links I provide, extract only the URLs that lead to individual tender detail pages. By "tender detail page," I mean the specific page for a single procurement opportunity, which you access by clicking on a tender in a list or search results on a procurement website.
-                Only include links that match the pattern for tender detail pages. Output a list of these URLs only, and no duplicates."""
+                browser = Browser()
+                try:
+                    urls = browser.GetLinksFromPage(tendersontime_portal)
+                    urls_string = "\n".join(urls)
+                    prompt = urls_string + """\n\n From the links I provide, extract only the URLs that lead to individual tender detail pages. By "tender detail page," I mean the specific page for a single procurement opportunity, which you access by clicking on a tender in a list or search results on a procurement website.
+                    Only include links that match the pattern for tender detail pages. Output a list of these URLs only, and no duplicates."""
 
-                print('Waiting for LLM to answer...')
-                response = PromptAI(prompt=prompt)
-                print(response.choices[0].message.content)
-                response_string = response.choices[0].message.content
-                tender_urls = GetLinksFromResponse(response_text=response_string)
-                print("\n\nHere's a list of links to tender pages:")
-                print('\n'.join(str(item) for item in tender_urls))
+                    print('Waiting for LLM to answer...')
+                    response = PromptAI(prompt=prompt)
+                    print(response.choices[0].message.content)
+                    response_string = response.choices[0].message.content
+                    tender_urls = GetLinksFromResponse(response_text=response_string)
+                    print("\n\nHere's a list of links to tender pages:")
+                    print('\n'.join(str(item) for item in tender_urls))
+                finally:
+                    browser.Quit()
             case 'tenders2':
                 # Parses the links from the response from the AI useing a mock response.
                 tender_urls = GetLinksFromResponse(response_text=mock_response_tender_pages)
@@ -124,14 +136,19 @@ if __name__ == "__main__":
                 # Get the document links from a tender page and finds the document links.
                 language = input('What language do you want the documents?: ')
                 prompt = f"Analyze the following links and return all tender document links as a list (PDF, DOC, DOCX, TXT, etc.) that are either explicitly marked as {language} or are most likely to be in {language}. Make a list of only the links that you found and nothing else."
-                urls = GetLinksFromPage(tender_url)
-                urls_string = "\n".join(urls)
-                print(urls_string, '\n\n')
-                response = PromptAI(urls_string + '\n\n' + prompt)
-                print(response.choices[0].message.content)
-                response_string = response.choices[0].message.content
-                document_urls = GetLinksFromResponse(response_text=response_string)
-                print('\n'.join(str(item) for item in document_urls))
+                
+                browser = Browser()
+                try:
+                    urls = browser.GetLinksFromPage(tender_url)
+                    urls_string = "\n".join(urls)
+                    print(urls_string, '\n\n')
+                    response = PromptAI(urls_string + '\n\n' + prompt)
+                    print(response.choices[0].message.content)
+                    response_string = response.choices[0].message.content
+                    document_urls = GetLinksFromResponse(response_text=response_string)
+                    print('\n'.join(str(item) for item in document_urls))
+                finally:
+                    browser.Quit()
             case 'doc2':
                 # Get the document links from a tender page and finds the document links using a mock response.
                 document_urls = GetLinksFromResponse(response_text=mock_response_document_links)
