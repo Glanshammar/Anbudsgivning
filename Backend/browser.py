@@ -4,6 +4,8 @@ import datetime
 from typing import List, Dict, Optional
 import os
 from time import sleep
+import re
+import time
 from playwright.sync_api import sync_playwright, Page, Browser as PlaywrightBrowser, ElementHandle, TimeoutError, Error
 
 
@@ -123,6 +125,63 @@ class Browser:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.Quit()
 
+    def ExtractVisibleText(self, url, output_dir="extracted_text"):
+        # Create output directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Generate a filename based on the URL
+        filename_base = SanitizeFilename(url)
+        
+        print(f"Extracting visible text from: {url}")
+        
+        try:
+            self.EnsureBrowserStarted()
+            self.OpenPage(url)
+            
+            # Extract text content of visible elements
+            visible_text = self.page.evaluate("""() => {
+                // Function to check if an element is visible
+                function isVisible(elem) {
+                    if (!elem) return false;
+                    const style = window.getComputedStyle(elem);
+                    return style.display !== 'none' && 
+                        style.visibility !== 'hidden' &&
+                        style.opacity !== '0' &&
+                        elem.offsetWidth > 0 &&
+                        elem.offsetHeight > 0;
+                }
+                
+                // Get text from all visible elements
+                const elements = document.querySelectorAll('body *');
+                let text = '';
+                
+                for (let elem of elements) {
+                    if (isVisible(elem) && 
+                        elem.childElementCount === 0 && 
+                        elem.textContent.trim().length > 0) {
+                        text += elem.textContent.trim() + '\\n';
+                    }
+                }
+                
+                return text;
+            }""")
+            
+            # Save only the visible text
+            visible_text_path = os.path.join(output_dir, f"{filename_base}.txt")
+            with open(visible_text_path, "w", encoding="utf-8") as f:
+                f.write(visible_text)
+            
+            print(f"\nExtraction complete. Visible text saved to: {visible_text_path}")
+            print(f"Text length: {len(visible_text)} characters")
+            
+            return {
+                "url": url,
+                "visible_text_length": len(visible_text),
+                "output_file": visible_text_path
+            }
+        finally:
+            self.Quit()
+
     def GetElementText(self, selector: str) -> str:
         """Get text content of an element."""
         for attempt in range(self.max_retries):
@@ -212,3 +271,16 @@ class Browser:
                 print(f"Attempt {attempt + 1} failed: {str(e)}")
                 sleep(self.retry_delay)
                 self.EnsureBrowserStarted()
+
+
+def SanitizeFilename(url):
+    parts = url.rstrip('/').split('/')
+    if len(parts) > 3:
+        name = parts[-1]
+        if not name or name.startswith('?'):
+            name = parts[-2]
+    else:
+        name = url.replace('://', '_').replace('/', '_')
+    name = name.split('?')[0]
+    name = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+    return f"{name}"
