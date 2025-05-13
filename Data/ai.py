@@ -109,122 +109,90 @@ def DownloadDocument(browser: Browser, url: str, save_dir: str) -> Optional[str]
         return None
 
 def TenderInfo(browser: Browser, source: str, is_document: bool = False) -> Dict:
-    """Extract information from a tender document or webpage.
-    
-    Args:
-        browser: Browser instance for web page navigation
-        source: Either a URL (for webpages) or a file path (for documents)
-        is_document: Flag indicating if source is a document file path
-        
-    Returns:
-        Dictionary with tender information in standardized JSON format
-    """
     try:
+        # Get content based on source type
         if is_document:
-            # Process local document
             doc = pymupdf.open(source)
-            text = ""
-            for page in doc:
-                page_text = page.get_text()
-                if page_text:
-                    text += page_text
-            content = text
-            
-            # Document-specific prompt
-            prompt = f"""Analyze this tender document and extract the structured information about the tender.
-            Look for key tender details typically found in procurement notices such as the buyer organization, project details, 
-            deadlines, requirements, and any contact information, etc. Anything related to the procurement process.
-            
-            Format your response exactly like this JSON structure (replace the values with actual information from the document):
-
-            {{
-                "buyer": {{
-                    "name": "Organization name"
-                }},
-                "project": {{
-                    "title": "Project title",
-                    "description": "Brief project description"
-                }},
-                "timeline": {{
-                    "publication_date": "Date when tender was published",
-                    "deadline": "Submission deadline",
-                    "start_date": "Project start date if available",
-                    "end_date": "Project end date if available"
-                }}
-            }}
-
-            Content to analyze:
-            {content}"""
+            content = "".join(page.get_text() for page in doc if page.get_text())
         else:
-            # Process webpage
             browser.OpenPage(source)
             content = browser.page.content()
-            
-            # Webpage-specific prompt
-            prompt = f"""Analyze this tender webpage and extract the structured information about the tender.
-            Look for key tender details typically found in procurement notices such as the buyer organization, project details, 
-            deadlines, requirements, and any contact information, etc. Anything related to the procurement process.
-            
-            Format your response exactly like this JSON structure (replace the values with actual information from the webpage):
-
-            {{
-                "buyer": {{
-                    "name": "Organization name"
-                }},
-                "project": {{
-                    "title": "Project title",
-                    "description": "Brief project description"
-                }},
-                "timeline": {{
-                    "publication_date": "Date when tender was published",
-                    "deadline": "Submission deadline",
-                    "start_date": "Project start date if available",
-                    "end_date": "Project end date if available"
-                }}
-            }}
-            
-            If you cannot find enough information to determine this is a tender notice, respond with:
-            {{
-                "error": "insufficient_info",
-                "message": "This does not appear to be a tender notice page"
-            }}
-
-            Content to analyze:
-            {content}"""
         
         if not content:
-            print(f"Warning: Empty content for source {source}")
-            return {"url": source, "info": json.dumps({
-                "error": "no_content",
-                "message": "No content available to analyze"
-            })}
+            return create_error_response(source, "no_content", "No content available to analyze")
         
+        # Common JSON structure for both document and webpage
+        json_structure = """
+        {
+            "buyer": {
+                "name": "Organization name"
+            },
+            "project": {
+                "title": "Project title",
+                "description": "Brief project description",
+                "branch": "Branch of the tender (construction, IT, etc.)"
+            },
+            "timeline": {
+                "publication_date": "Date when tender was published",
+                "deadline": "Submission deadline",
+                "start_date": "Project start date if available",
+                "end_date": "Project end date if available"
+            }
+        }"""
+        
+        # Set up prompt based on source type
+        source_type = "document" if is_document else "webpage"
+        prompt = f"""Analyze this tender {source_type} and extract the structured information about the tender.
+        Look for key tender details typically found in procurement notices such as the buyer organization, project details, 
+        deadlines, requirements, and any contact information, etc. Anything related to the procurement process.
+        
+        Format your response exactly like this JSON structure (replace the values with actual information from the {source_type}):
+        {json_structure}
+
+        You should translate the project description to English if it's not already in English and use the English version for the analysis.
+        """
+        
+        # Add error structure only for webpages
+        if not is_document:
+            prompt += """
+            If you cannot find enough information to determine this is a tender notice, respond with:
+            {
+                "error": "insufficient_info",
+                "message": "This does not appear to be a tender notice page"
+            }
+            """
+        
+        prompt += f"\nContent to analyze:\n{content}"
+        
+        # Get AI response
         response = PromptAI(prompt)
         if not response:
-            print(f"Warning: No AI response for source {source}")
-            return {"url": source, "info": json.dumps({
-                "error": "ai_no_response",
-                "message": "Failed to get AI response for tender analysis"
-            })}
+            return create_error_response(source, "ai_no_response", "Failed to get AI response for tender analysis")
             
         # Validate the response is proper JSON
         try:
             json.loads(response)
+            return {"url": source, "info": response}
         except json.JSONDecodeError:
-            print(f"Warning: AI response is not valid JSON for source {source}")
-            return {"url": source, "info": json.dumps({
-                "error": "invalid_json",
-                "message": "AI response was not in valid JSON format",
-                "raw_response": response[:500]  # Include truncated response for debugging
-            })}
-            
-        return {"url": source, "info": response}
+            return create_error_response(source, "invalid_json", 
+                                    "AI response was not in valid JSON format",
+                                    {"raw_response": response[:500]})
     except Exception as e:
-        print(f"Error in TenderInfo: {str(e)}")
-        return {"url": source, "info": json.dumps({
-            "error": "processing_error",
-            "message": f"Error analyzing tender: {str(e)}"
-        })}
+        return create_error_response(source, "processing_error", f"Error analyzing tender: {str(e)}")
+
+def create_error_response(source: str, error_code: str, message: str, extra_data: Dict = None) -> Dict:
+    """Helper function to create standardized error responses."""
+    print(f"Warning: {error_code} for source {source} - {message}")
+    
+    error_response = {
+        "error": error_code,
+        "message": message
+    }
+    
+    if extra_data:
+        error_response.update(extra_data)
+        
+    return {"url": source, "info": json.dumps(error_response)}
 
 def FindDocumentLinks(browser: Browser, tender_url: str) -> List[str]:
     """Find document links on a tender page."""
