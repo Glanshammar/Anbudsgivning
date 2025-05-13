@@ -1,7 +1,7 @@
 import json
 import math
 import datetime
-from typing import List, Dict
+from typing import List, Dict, Optional
 import os
 from time import sleep
 from playwright.sync_api import sync_playwright, Page, Browser as PlaywrightBrowser, ElementHandle, TimeoutError, Error
@@ -55,7 +55,6 @@ class Browser:
                 self.playwright = None
 
     def EnsureBrowserStarted(self):
-        """Ensure browser is started and session is valid."""
         if self.browser_instance is None or self.page is None:
             self.Start()
         try:
@@ -67,7 +66,6 @@ class Browser:
             self.Start()
 
     def OpenPage(self, url: str, wait_time: int = 5):
-        """Open a page with retry logic."""
         for attempt in range(self.max_retries):
             try:
                 self.EnsureBrowserStarted()
@@ -81,11 +79,16 @@ class Browser:
                 sleep(self.retry_delay)
                 self.EnsureBrowserStarted()
 
-    def GetLinks(self) -> List[str]:
-        """Get all links from current page with retry logic."""
+    def GetLinksFromPage(self, url: str = None) -> List[str]:
         for attempt in range(self.max_retries):
             try:
                 self.EnsureBrowserStarted()
+                
+                # If URL is provided, navigate to that page first
+                if url:
+                    self.OpenPage(url)
+                
+                # Extract links from the current page
                 link_elements = self.page.query_selector_all("a[href]")
                 links = []
                 for link in link_elements:
@@ -99,18 +102,6 @@ class Browser:
                 print(f"Attempt {attempt + 1} failed: {str(e)}")
                 sleep(self.retry_delay)
                 self.EnsureBrowserStarted()
-
-    def GetLinksFromPage(self, url: str) -> List[str]:
-        """Get all links from a specific page with retry logic."""
-        for attempt in range(self.max_retries):
-            try:
-                self.OpenPage(url)
-                return self.GetLinks()
-            except Error as e:
-                if attempt == self.max_retries - 1:
-                    raise
-                print(f"Attempt {attempt + 1} failed: {str(e)}")
-                sleep(self.retry_delay)
 
     def WaitForElement(self, selector: str, timeout: int = 10000):
         """Wait for an element with retry logic."""
