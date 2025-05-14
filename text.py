@@ -4,11 +4,74 @@ import json
 import os
 import re
 import time
-import argparse
 import sys
+import shutil
+import subprocess
+import datetime
+from pathlib import Path
+from typing import Optional, List, Dict, Any, Tuple
 
 # Import visible text extraction functionality from extract_text
 from extract_text import extract_visible_text
+
+def is_tesseract_installed() -> bool:
+    """Check if Tesseract OCR is installed on the system"""
+    try:
+        result = subprocess.run(['tesseract', '--version'], 
+                                stdout=subprocess.PIPE, 
+                                stderr=subprocess.PIPE, 
+                                text=True)
+        return result.returncode == 0
+    except FileNotFoundError:
+        return False
+
+def extract_text_from_images(image_paths: List[str]) -> str:
+    """
+    Extract text from images using Tesseract OCR
+    
+    Args:
+        image_paths: List of paths to image files
+        
+    Returns:
+        Extracted text from all images combined
+    """
+    try:
+        import pytesseract
+        from PIL import Image
+    except ImportError:
+        print("Error: pytesseract and/or Pillow not installed.")
+        print("Please install them using: pip install pytesseract Pillow")
+        return ""
+    
+    if not is_tesseract_installed():
+        print("Error: Tesseract OCR is not installed on your system.")
+        print("Please install Tesseract OCR:")
+        print("  - On Ubuntu/Debian: sudo apt-get install tesseract-ocr")
+        print("  - On macOS: brew install tesseract")
+        print("  - On Windows: Download installer from https://github.com/UB-Mannheim/tesseract/wiki")
+        return ""
+    
+    all_text = []
+    
+    for image_path in image_paths:
+        try:
+            # Open the image
+            img = Image.open(image_path)
+            
+            # Extract text from the image
+            text = pytesseract.image_to_string(img)
+            
+            # Add to the combined text
+            all_text.append(text)
+            
+            print(f"Extracted {len(text)} characters from {image_path}")
+        except Exception as e:
+            print(f"Error extracting text from {image_path}: {str(e)}")
+    
+    # Combine all text with newlines between images
+    combined_text = "\n\n".join(all_text)
+    
+    return combined_text
 
 def extract_visible_text_from_page(page):
     """Extract visible text content from a webpage"""
@@ -147,8 +210,9 @@ def extract_tender_info(soup, full_text, url=None, translate_to_english=False):
     
     # Country extraction
     country_patterns = [
-        r"Country\s*:?\s*([A-Za-z\s]+)(?=\s*[,.]|\s*$)",
-        r"Member\s*state\s*:?\s*([A-Za-z\s]+)(?=\s*[,.]|\s*$)", 
+        r"Country\s*:?\s*([A-Za-z\s]+?)(?=\s*[,.]|\r|\n|\s*This|\s*$)",
+        r"Member\s*state\s*:?\s*([A-Za-z\s]+?)(?=\s*[,.]|\r|\n|\s*This|\s*$)",
+        r"Country\s*:?\s*(France|Germany|Italy|Spain|United Kingdom|UK|Belgium|Netherlands|Portugal|Sweden|Denmark|Finland|Austria|Greece|Ireland|Luxembourg|Poland|Czech Republic|Hungary|Romania|Bulgaria|Croatia|Cyprus|Estonia|Latvia|Lithuania|Malta|Slovakia|Slovenia)(?:\s*[,.]|\r|\n|\s*This|\s*$)"
     ]
     
     for pattern in country_patterns:
@@ -265,9 +329,9 @@ def extract_tender_info(soup, full_text, url=None, translate_to_english=False):
     
     # Extract CPV codes with improved patterns
     cpv_patterns = [
-        r"Main\s*classification\s*\(\s*cpv\s*\)\s*:?\s*(\d+)\s*([A-Za-z\s\-–]+?)(?=\s*\d|\s*\(|\s*$)",
-        r"CPV\s*code.*?main.*?:?\s*(\d+)\s*([A-Za-z\s\-–]+?)(?=\s*\d|\s*\(|\s*$)",
-        r"CPV.*?:?\s*(\d+)\s*([A-Za-z\s\-–]+?)(?=\s*\d|\s*\(|\s*$)",
+        r"Main\s*classification\s*\(\s*cpv\s*\)\s*:?\s*(\d{8})\s*([A-Za-z\s\-–]+?)(?=\s*\d|\s*\(|\s*$)",
+        r"CPV\s*code.*?main.*?:?\s*(\d{8})\s*([A-Za-z\s\-–]+?)(?=\s*\d|\s*\(|\s*$)",
+        r"CPV.*?:?\s*(\d{8})\s*([A-Za-z\s\-–]+?)(?=\s*\d|\s*\(|\s*$)",
     ]
     
     # Deduplicate CPV codes
@@ -279,6 +343,11 @@ def extract_tender_info(soup, full_text, url=None, translate_to_english=False):
             code = match.group(1).strip()
             description = match.group(2).strip()
             
+            # Skip if it looks like a duration or other non-CPV numeric reference
+            if (re.match(r'^\d{1,3}$', code) and 
+                any(word in description.lower() for word in ['month', 'year', 'day', 'week', 'hour'])):
+                continue
+                
             # Only add if we haven't seen this code before
             if code not in seen_cpv_codes:
                 seen_cpv_codes.add(code)
@@ -326,6 +395,62 @@ def extract_tender_info(soup, full_text, url=None, translate_to_english=False):
     
     return tender_info
 
+def is_valid_cpv_code(code: str) -> bool:
+    """Validate if a string is likely a CPV code"""
+    # CPV codes are typically 8 digits and may have an optional digit or letter suffix
+    # Main divisions start with specific numbers (e.g., 03, 09, 14, ...)
+    
+    # Check if it's a pure digit and appropriate length
+    if not code.isdigit():
+        return False
+        
+    # Check length - most CPV codes are 8 digits
+    if len(code) < 5 or len(code) > 12:  # Allow some flexibility
+        return False
+        
+    # Check for common CPV division prefixes (2-digit)
+    common_prefixes = [
+        '03', '09', '14', '15', '16', '18', '19', '22', '24', '30', 
+        '31', '32', '33', '34', '35', '37', '38', '39', '41', '42', 
+        '43', '44', '45', '48', '50', '51', '55', '60', '63', '64', 
+        '65', '66', '70', '71', '72', '73', '75', '76', '77', '79', 
+        '80', '85', '90', '92', '98'
+    ]
+    
+    prefix = code[:2]
+    
+    # If it's a very short code (1-3 digits), it's likely not a CPV code
+    if len(code) <= 3:
+        return False
+        
+    # If it's a longer code, check if it starts with a common CPV prefix
+    if len(code) >= 5:
+        # If we don't recognize the prefix but it's the right length, still accept it
+        # as it might be a valid CPV code we don't have in our list
+        return True
+        
+    return False
+
+def normalize_status(status: str) -> str:
+    """Normalize tender status values to standard formats"""
+    status_lower = status.lower().strip()
+    
+    # Map various status values to standard statuses
+    if any(word in status_lower for word in ['active', 'open', 'ongoing', 'current']):
+        return 'Active'
+    
+    if any(word in status_lower for word in ['closed', 'expired', 'terminated', 'completed', 'awarded']):
+        return 'Expired'
+        
+    if any(word in status_lower for word in ['cancel', 'withdrawn', 'abort']):
+        return 'Cancelled'
+        
+    if any(word in status_lower for word in ['draft', 'planned', 'upcoming', 'future']):
+        return 'Planned'
+    
+    # If we can't normalize it, return the original with proper capitalization
+    return status.strip()
+
 def clean_extracted_data(tender_info):
     """Clean up the extracted data by removing partial matches and duplicates"""
     
@@ -344,9 +469,24 @@ def clean_extracted_data(tender_info):
         invalid_status_indicators = ['=', 'settings', 'undefined', '{', '}', '<', '>', 'null']
         if any(indicator in tender_info['status'].lower() for indicator in invalid_status_indicators):
             tender_info['status'] = ''
+        else:
+            # Normalize the status to a standard format
+            tender_info['status'] = normalize_status(tender_info['status'])
     
-    # Clean up descriptions for CPV codes
+    # Clean up and validate CPV codes
+    valid_cpv_codes = []
     for cpv in tender_info['cpv_codes']:
+        # Validate the code format - CPV codes should be numeric and at least 8 digits
+        if not is_valid_cpv_code(cpv['code']):
+            print(f"Removing invalid CPV code: {cpv['code']} - {cpv['description']}")
+            continue
+            
+        # Filter out duration-related descriptions
+        if any(word in cpv['description'].lower() for word in ['month', 'year', 'day', 'week', 'duration']):
+            if cpv['description'].lower().strip() == 'months' or re.match(r'^\d+\s+(month|year|day|week)s?$', cpv['description'], re.IGNORECASE):
+                print(f"Removing duration-related CPV entry: {cpv['code']} - {cpv['description']}")
+                continue
+        
         # Remove newlines and standardize spacing
         if cpv['description']:
             cpv['description'] = re.sub(r'\s+', ' ', cpv['description']).strip()
@@ -355,10 +495,119 @@ def clean_extracted_data(tender_info):
             for suffix in ['classification', 'Legal basis', 'Postal address', 'General information', 'Additional']:
                 if suffix in cpv['description']:
                     cpv['description'] = cpv['description'].split(suffix)[0].strip()
+        
+        valid_cpv_codes.append(cpv)
+    
+    # Replace the CPV codes with the validated list
+    tender_info['cpv_codes'] = valid_cpv_codes
+    
+    # Check if deadline has passed and update status accordingly
+    if tender_info['dates']['deadline']:
+        try:
+            # Try different date formats
+            deadline_date = None
+            date_formats = [
+                "%d/%m/%Y",  # DD/MM/YYYY
+                "%d.%m.%Y",  # DD.MM.YYYY
+                "%d-%m-%Y",  # DD-MM-YYYY
+                "%Y/%m/%d",  # YYYY/MM/DD
+                "%Y-%m-%d"   # YYYY-MM-DD
+            ]
+            
+            for date_format in date_formats:
+                try:
+                    deadline_date = datetime.datetime.strptime(tender_info['dates']['deadline'], date_format).date()
+                    break
+                except ValueError:
+                    continue
+            
+            if deadline_date:
+                current_date = datetime.date.today()
+                if current_date > deadline_date:
+                    tender_info['status'] = 'Expired'
+                    print(f"Setting status to Expired as deadline ({tender_info['dates']['deadline']}) has passed")
+                else:
+                    # Set status to Active if the deadline hasn't passed yet
+                    tender_info['status'] = 'Active'
+                    print(f"Setting status to Active as deadline ({tender_info['dates']['deadline']}) has not passed yet")
+        except Exception as e:
+            print(f"Error parsing deadline date: {e}")
+    else:
+        # If no deadline is specified but we have other tender info, assume it's active
+        if tender_info['tender_id'] or tender_info['title']:
+            if not tender_info['status']:  # Only set if status is empty
+                tender_info['status'] = 'Active'
+                print("No deadline specified, but setting status to Active based on available tender information")
+    
+    # Final status check - ensure we have a status when we have tender details
+    if not tender_info['status'] and (tender_info['tender_id'] or tender_info['title']):
+        # If we reached here without setting a status but have tender details, default to Active
+        tender_info['status'] = 'Active'
+        print("Setting default status to Active")
     
     return tender_info
 
-def extract_tender_data(url, output_dir="tender_data"):
+def take_full_page_screenshot(page, output_path: str, scroll_delay: float = 0.5) -> List[str]:
+    """
+    Take screenshots of the entire page by scrolling through it
+    
+    Args:
+        page: Playwright page object
+        output_path: Directory to save screenshots
+        scroll_delay: Delay between scrolls in seconds
+        
+    Returns:
+        List of paths to the screenshot files
+    """
+    # Create the output directory if it doesn't exist
+    output_dir = Path(output_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Get the page dimensions
+    dimensions = page.evaluate("""() => {
+        return {
+            windowHeight: window.innerHeight,
+            documentHeight: document.documentElement.scrollHeight,
+            windowWidth: window.innerWidth,
+            documentWidth: document.documentElement.scrollWidth
+        }
+    }""")
+    
+    window_height = dimensions['windowHeight']
+    document_height = dimensions['documentHeight']
+    
+    # Calculate the number of screenshots needed
+    num_screenshots = max(1, int(document_height / (window_height * 0.8)))  # Overlap by 20%
+    
+    screenshot_paths = []
+    
+    # Take screenshots while scrolling
+    for i in range(num_screenshots):
+        # Calculate scroll position
+        scroll_position = i * (window_height * 0.8)
+        if i == num_screenshots - 1:  # Last screenshot
+            scroll_position = document_height - window_height
+        
+        # Scroll to position
+        page.evaluate(f"window.scrollTo(0, {scroll_position})")
+        
+        # Wait for any lazy-loaded content to appear
+        time.sleep(scroll_delay)
+        
+        # Take the screenshot
+        screenshot_path = str(output_dir / f"screenshot_{i:03d}.png")
+        page.screenshot(path=screenshot_path)
+        screenshot_paths.append(screenshot_path)
+        
+        print(f"Screenshot {i+1}/{num_screenshots} saved to {screenshot_path}")
+    
+    # Return to the top of the page
+    page.evaluate("window.scrollTo(0, 0)")
+    
+    return screenshot_paths
+
+def extract_tender_data(url: str, output_dir: str = "tender_data", take_screenshots: bool = False, 
+                        keep_temp_files: bool = False) -> Dict[str, Any]:
     """Main function to extract tender data from a URL"""
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
@@ -381,6 +630,25 @@ def extract_tender_data(url, output_dir="tender_data"):
             page.wait_for_selector("body", state="visible", timeout=60000)
             print("Page loaded successfully")
             
+            # Take screenshots if requested
+            screenshot_paths = []
+            screenshot_text = ""
+            if take_screenshots:
+                print("Taking full page screenshots...")
+                screenshots_dir = os.path.join(temp_dir, "screenshots")
+                screenshot_paths = take_full_page_screenshot(page, screenshots_dir)
+                print(f"Took {len(screenshot_paths)} screenshots of the page")
+                
+                # Extract text from screenshots using OCR
+                print("Extracting text from screenshots using OCR...")
+                screenshot_text = extract_text_from_images(screenshot_paths)
+                
+                # Save the OCR text for debugging
+                ocr_text_path = os.path.join(temp_dir, "ocr_text.txt")
+                with open(ocr_text_path, "w", encoding="utf-8") as f:
+                    f.write(screenshot_text)
+                print(f"OCR text saved to {ocr_text_path}")
+            
             # Extract visible text from page directly
             print("Extracting visible text from page...")
             visible_text = extract_visible_text_from_page(page)
@@ -388,7 +656,7 @@ def extract_tender_data(url, output_dir="tender_data"):
             # Save the extracted text for debugging purposes
             with open(os.path.join(temp_dir, "visible_text.txt"), "w", encoding="utf-8") as f:
                 f.write(visible_text)
-            
+        
             # Get page title
             page_title = page.title()
             print(f"Page title: {page_title}")
@@ -397,14 +665,27 @@ def extract_tender_data(url, output_dir="tender_data"):
             html = page.content()
             soup = BeautifulSoup(html, "html.parser")
             
-            # Use the extracted visible text + raw HTML for regex extraction
-            combined_text = visible_text + "\n\n" + html
-            
-            # Extract structured information
+            # Combine all text sources for comprehensive extraction
+            if screenshot_text:
+                combined_text = visible_text + "\n\n" + screenshot_text + "\n\n" + html
+            else:
+                combined_text = visible_text + "\n\n" + html
+        
+            # Extract & clean structured information
             tender_info = extract_tender_info(soup, combined_text, url)
-            
-            # Clean up the extracted data
             tender_info = clean_extracted_data(tender_info)
+            
+            # If we're keeping temp files, update the screenshot paths to be relative to output directory
+            if keep_temp_files and take_screenshots:
+                # Create permanent copies of the screenshots
+                permanent_screenshots_dir = os.path.join(output_dir, f"{tender_info['tender_id'] or 'unknown'}_screenshots")
+                os.makedirs(permanent_screenshots_dir, exist_ok=True)
+                
+                permanent_paths = []
+                for i, screenshot_path in enumerate(screenshot_paths):
+                    permanent_path = os.path.join(permanent_screenshots_dir, f"screenshot_{i:03d}.png")
+                    shutil.copy(screenshot_path, permanent_path)
+                    permanent_paths.append(permanent_path)
             
             # Print summary
             print(f"\nTender ID: {tender_info['tender_id']}")
@@ -413,28 +694,39 @@ def extract_tender_data(url, output_dir="tender_data"):
             print(f"Buyer: {tender_info['buyer']['name']}")
             print(f"Buyer Email: {tender_info['buyer']['email']}")
             print(f"Deadline: {tender_info['dates']['deadline']}")
-            
+            print(f"Status: {tender_info['status']}")
+        
             # Save the structured data as the only permanent output
             json_path = os.path.join(output_dir, "tender_info.json")
             # Also save with tender-specific filename for easier identification
-            tender_id_safe = tender_info['tender_id'].replace("-", "_").replace("/", "_")
+            tender_id_safe = tender_info['tender_id'].replace("-", "_").replace("/", "_") if tender_info['tender_id'] else 'unknown'
             specific_json_path = os.path.join(output_dir, f"{tender_id_safe}.json")
             
             with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(tender_info, f, indent=2, ensure_ascii=False)
-            
+        
             with open(specific_json_path, "w", encoding="utf-8") as f:
                 json.dump(tender_info, f, indent=2, ensure_ascii=False)
             
             print(f"\nTender data saved to '{json_path}'")
-            
             browser.close()
+            
+            # If we're keeping temp files, copy them to a persistent location
+            if keep_temp_files:
+                persistent_temp_dir = os.path.join(output_dir, f"{tender_id_safe}_temp")
+                print(f"Keeping temporary files in '{persistent_temp_dir}'")
+                
+                # If the directory already exists, remove it first
+                if os.path.exists(persistent_temp_dir):
+                    shutil.rmtree(persistent_temp_dir)
+                
+                # Copy the temporary directory to the persistent location
+                shutil.copytree(temp_dir, persistent_temp_dir)
             
             return tender_info
     finally:
-        # Clean up the temporary directory
-        import shutil
-        if os.path.exists(temp_dir):
+        # Clean up the temporary directory if we're not keeping the files
+        if os.path.exists(temp_dir) and not keep_temp_files:
             try:
                 shutil.rmtree(temp_dir)
                 print(f"Temporary directory '{temp_dir}' has been removed")
@@ -442,13 +734,16 @@ def extract_tender_data(url, output_dir="tender_data"):
                 print(f"Warning: Could not remove temporary directory: {str(e)}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Extract tender data from websites")
-    parser.add_argument("-i", "--input", default="tender_links.txt", help="Input file with tender URLs (one per line)")
-    parser.add_argument("-o", "--output", default="tender_data", help="Output directory for tender data")
-    args = parser.parse_args()
+    # Default values
+    input_file = "tender_links.txt"
+    output_dir = "tender_data"
+    take_screenshots = True
+    keep_temp_files = False
     
-    input_file = args.input
-    output_dir = args.output
+    print(f"Input file: {input_file}")
+    print(f"Output directory: {output_dir}")
+    print(f"Take screenshots: {'Yes' if take_screenshots else 'No'}")
+    print(f"Keep temporary files: {'Yes' if keep_temp_files else 'No'}")
     
     # Check if the input file exists
     if not os.path.exists(input_file):
@@ -468,7 +763,9 @@ if __name__ == "__main__":
         print(f"\nProcessing URL {i+1}/{len(urls)}: {url}")
         
         try:
-            tender_info = extract_tender_data(url, output_dir)
+            tender_info = extract_tender_data(url, output_dir, 
+                                             take_screenshots=take_screenshots,
+                                             keep_temp_files=keep_temp_files)
             print(f"Successfully processed: {tender_info['title']}")
         except Exception as e:
             print(f"Error processing URL: {url}")
