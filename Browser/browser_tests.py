@@ -7,7 +7,6 @@ sys.path.insert(0, parent_dir)
 
 from Browser.text import extract_tender_data
 from Browser.browser import Browser
-from Browser.pagination import test_pagination_on_site
 
 ted = "https://ted.europa.eu/en/search/result?classification-cpv=core&search-scope=ACTIVE"
 tendium = "https://tendium.ai/se/upphandlingar/"
@@ -50,9 +49,3 @@ match test:
             print(f"Summary saved to: {os.path.join(output_dir, 'processing_summary.json')}")
         except Exception as e:
             print(f"Error processing batch: {str(e)}")
-    case 'pagination':
-        browser = Browser()
-        test_pagination_on_site(browser, ted)
-        test_pagination_on_site(browser, tendium)
-        test_pagination_on_site(browser, tendersontime_portal)
-        browser.Quit()
