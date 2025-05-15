@@ -8,22 +8,22 @@ import re
 import time
 from playwright.sync_api import sync_playwright, Page, Browser as PlaywrightBrowser, ElementHandle, TimeoutError, Error
 
-
 class Browser:
-    def __init__(self):
+    def __init__(self, headless: bool = True):
         self.playwright = None
         self.browser_instance = None
         self.context = None
         self.page = None
         self.max_retries = 3
         self.retry_delay = 2
-
+        self.headless = headless
+        
     def Start(self):
         if self.browser_instance is None:
             try:
                 self.playwright = sync_playwright().start()
                 self.browser_instance = self.playwright.chromium.launch(
-                    headless=True,
+                    headless=self.headless,
                     args=[
                         '--no-sandbox',
                         '--disable-dev-shm-usage',
@@ -124,6 +124,15 @@ class Browser:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.Quit()
+    
+    def FindElement(self, selector: str):
+        try:
+            self.EnsureBrowserStarted()
+            return self.page.locator(selector)
+        except Error as e:
+            print(f"Error finding element: {str(e)}")
+            return None
+                
 
     def ExtractVisibleText(self, url, output_dir="extracted_text"):
         # Create output directory if it doesn't exist
@@ -207,22 +216,6 @@ class Browser:
                 if element:
                     return element.get_attribute(attribute) or ""
                 return ""
-            except Error as e:
-                if attempt == self.max_retries - 1:
-                    raise
-                print(f"Attempt {attempt + 1} failed: {str(e)}")
-                sleep(self.retry_delay)
-                self.EnsureBrowserStarted()
-
-    def TakeScreenshot(self, path: str = None) -> bytes:
-        """Take a screenshot of the current page."""
-        for attempt in range(self.max_retries):
-            try:
-                self.EnsureBrowserStarted()
-                if path:
-                    return self.page.screenshot(path=path)
-                else:
-                    return self.page.screenshot()
             except Error as e:
                 if attempt == self.max_retries - 1:
                     raise

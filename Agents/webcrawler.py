@@ -11,7 +11,7 @@ from enum import Enum
 from Logger import GetLogger
 from multiprocessing import Process
 from .agents import Agent, COMMAND_PORT, STATUS_PORT, AgentStatus
-from Backend.browser import Browser
+from Browser.browser import Browser
 import requests
 import json
 from datetime import datetime, timedelta
