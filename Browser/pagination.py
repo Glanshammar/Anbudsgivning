@@ -1,17 +1,9 @@
-"""
-Pagination utility for navigating to the next page on various websites.
-This module provides utilities to detect and interact with pagination elements
-across different website designs and structures.
-"""
-
 import re
 import json
 from time import sleep
 from typing import Optional, List, Dict, Any, Callable
 
 class PaginationHelper:
-    """Helper class for detecting and clicking pagination elements on webpages."""
-    
     def __init__(self, browser):
         """
         Initialize the pagination helper.
@@ -22,13 +14,6 @@ class PaginationHelper:
         self.browser = browser
         
     def inspect_page_for_pagination(self):
-        """
-        Inspect the page to find potential pagination elements and print their details
-        for debugging purposes.
-        
-        Returns:
-            List of dictionaries containing information about potential pagination elements
-        """
         # Get all potential pagination elements
         potential_elements = self.browser.page.evaluate("""() => {
             const results = [];
@@ -109,15 +94,6 @@ class PaginationHelper:
         return potential_elements
 
     def find_next_page_button(self, debug: bool = False) -> bool:
-        """
-        Find and click the next page button using various strategies.
-        
-        Args:
-            debug: Whether to print detailed debug information
-            
-        Returns:
-            True if successfully found and clicked a next page button, False otherwise
-        """
         # First inspect the page to help with debugging if requested
         if debug:
             pagination_info = self.inspect_page_for_pagination()
@@ -222,8 +198,6 @@ class PaginationHelper:
         return False
     
     def _try_css_selectors(self) -> bool:
-        """Try to find next page elements using CSS selectors."""
-        # Common selectors for next page buttons
         selectors = [
             "a[aria-label*='next' i], a[aria-label*='Next' i], a[aria-label*='nästa' i]",
             "button[aria-label*='next' i], button[aria-label*='Next' i], button[aria-label*='nästa' i]",
@@ -342,7 +316,6 @@ class PaginationHelper:
         return False
     
     def _try_javascript_evaluation(self) -> bool:
-        """Try to find next page elements using JavaScript."""
         try:
             has_next = self.browser.page.evaluate("""() => {
                 // Try to find and click any element that looks like a next page button
@@ -418,7 +391,6 @@ class PaginationHelper:
         return False
     
     def _try_infinite_scroll(self) -> bool:
-        """Try to activate infinite scroll functionality."""
         try:
             # Scroll down to try to trigger infinite loading
             current_height = self.browser.page.evaluate("() => document.body.scrollHeight")
@@ -449,15 +421,50 @@ class PaginationHelper:
             return False
 
 def go_to_next_page(browser, debug: bool = False) -> bool:
-    """
-    Find and navigate to the next page.
-    
-    Args:
-        browser: The browser object with an active page
-        debug: Whether to print detailed debug information
-        
-    Returns:
-        True if successfully navigated to the next page, False otherwise
-    """
     helper = PaginationHelper(browser)
     return helper.find_next_page_button(debug=debug) 
+
+def test_pagination_on_site(browser, url, num_pages=2):
+    print(f"\n\nTesting pagination on {url}")
+    browser.OpenPage(url)
+    sleep(5)  # Wait for page to load
+    
+    for i in range(1, num_pages + 1):
+        print(f"Currently on page {i}")
+        
+        # For the first page, try to get some information
+        if i == 1:
+            # Get the current URL to verify later if we changed pages
+            current_url = browser.page.url
+            print(f"Current URL: {current_url}")
+            
+            # Get the page title
+            page_title = browser.page.title()
+            print(f"Page title: {page_title}")
+        
+        if i < num_pages:
+            # Try to navigate to the next page
+            if go_to_next_page(browser, debug=True):
+                print(f"Successfully navigated to page {i+1}")
+                sleep(5)  # Wait for the page to load
+                
+                # Get the new URL to confirm the page changed
+                new_url = browser.page.url
+                if new_url != current_url:
+                    print(f"URL changed: {new_url}")
+                else:
+                    print("URL didn't change, but may still have navigated (SPA)")
+                
+                # Get the new page title
+                new_page_title = browser.page.title()
+                if new_page_title != page_title:
+                    print(f"Page title changed: {new_page_title}")
+                
+                # Update current info for the next comparison
+                current_url = new_url
+                page_title = new_page_title
+            else:
+                print(f"Failed to navigate to page {i+1}")
+                break
+    
+    print(f"Finished testing pagination on {url}")
