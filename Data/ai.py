@@ -9,7 +9,7 @@ sys.path.insert(0, root_dir)
 
 from openai import OpenAI
 import re
-from Backend.browser import Browser
+from Browser.browser import Browser
 import pymupdf
 import requests
 from typing import List, Dict, Optional
