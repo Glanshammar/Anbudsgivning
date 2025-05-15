@@ -136,6 +136,91 @@ def extract_visible_text_from_page(page):
 
 # We've removed the description extraction function as it's no longer needed
 
+def normalize_currency(currency: str) -> str:
+    if not currency:
+        return ""
+        
+    # Convert to uppercase and strip any whitespace
+    currency = currency.upper().strip()
+    
+    # Filter out common non-currency words that get extracted incorrectly
+    invalid_currencies = [
+        "OF", "THE", "FOR", "AND", "IS", "IN", "TO", "AT", "BY", "OR", 
+        "IF", "AS", "ON", "THIS", "WITH", "FROM", "AN", "BE", "ALL", "THAT",
+        "VALUE", "AMOUNT", "TOTAL", "COST", "PRICE", "SUM", "RATE"
+    ]
+    
+    # If the currency is just a common word (not a currency), return empty string
+    if currency in invalid_currencies:
+        return ""
+    
+    # Common currency code mappings
+    currency_map = {
+        "EUR": "EUR",
+        "EU": "EUR",
+        "EURO": "EUR",
+        "EUROS": "EUR",
+        "€": "EUR",
+        "EXC": "EUR",
+        "EUROPEAN": "EUR",
+        
+        "USD": "USD",
+        "US$": "USD",
+        "DOLLAR": "USD",
+        "DOLLARS": "USD",
+        "$": "USD",
+        
+        "GBP": "GBP",
+        "POUND": "GBP",
+        "POUNDS": "GBP",
+        "£": "GBP",
+        "UKL": "GBP",
+        
+        "SEK": "SEK",
+        "KR": "SEK",
+        "KRONA": "SEK",
+        "KRONOR": "SEK",
+        
+        "NOK": "NOK",
+        "KRONE": "NOK",
+        
+        "DKK": "DKK",
+        
+        "PLN": "PLN",
+        "ZLOTY": "PLN",
+        
+        "CHF": "CHF",
+    }
+    
+    # Check if the currency is already a standard code
+    if currency in currency_map:
+        return currency_map[currency]
+    
+    # Handle common currency names and errors
+    for key, value in currency_map.items():
+        if key in currency:
+            return value
+    
+    # For European tenders, default to EUR if we can't determine the currency
+    # but it seems like it might be Euro-related
+    if any(word in currency for word in ["E", "MONETARY", "EU "]):
+        return "EUR"
+    
+    # If the currency is just a single letter or very short, it's likely an error
+    if len(currency) <= 1:
+        return ""
+        
+    # If the currency is too long, it's likely not a currency code
+    if len(currency) > 5:
+        return ""
+        
+    # Return the original if it looks like a valid currency code
+    if currency.isalpha() and len(currency) == 3:
+        return currency
+        
+    # Default to empty string for anything else
+    return ""
+
 def extract_tender_info(soup, full_text, url=None, translate_to_english=False):
     """Extract structured tender information from the page"""
     tender_info = {
@@ -242,26 +327,44 @@ def extract_tender_info(soup, full_text, url=None, translate_to_english=False):
     if town_pattern and tender_info["buyer"]["address"]:
         tender_info["buyer"]["address"] += ", " + town_pattern.group(1).strip()
     
-    # Extract contract values
+    # Extract contract values with improved patterns
     value_patterns = [
-        r"Value\s*:?\s*([\d\s,.]+)\s*([A-Z]{3})",
-        r"Contract value\s*:?\s*([\d\s,.]+)\s*([A-Z]{3})",
-        r"Total value\s*:?\s*([\d\s,.]+)\s*([A-Z]{3})",
+        r"Value\s*:?\s*([\d\s,.]+)\s*([A-Za-z€£$]+)",
+        r"Contract value\s*:?\s*([\d\s,.]+)\s*([A-Za-z€£$]+)",
+        r"Total value\s*:?\s*([\d\s,.]+)\s*([A-Za-z€£$]+)",
+        r"Estimated\s*value\s*:?\s*([\d\s,.]+)\s*([A-Za-z€£$]+)",
+        r"Value excluding VAT\s*:?\s*([\d\s,.]+)\s*([A-Za-z€£$]+)"
     ]
     
     for pattern in value_patterns:
         value_match = re.search(pattern, full_text, re.IGNORECASE)
         if value_match:
-            tender_info["contract"]["value"] = value_match.group(1).strip().replace(" ", "").replace(",", ".")
-            tender_info["contract"]["currency"] = value_match.group(2).strip()
-            break
+            value_str = value_match.group(1).strip()
+            # Only store the value if it looks like a valid number
+            if re.search(r'\d', value_str):
+                tender_info["contract"]["value"] = value_str.replace(" ", "").replace(",", ".")
+                
+                # Extract and normalize currency
+                currency_str = value_match.group(2).strip()
+                normalized_currency = normalize_currency(currency_str)
+                if normalized_currency:
+                    tender_info["contract"]["currency"] = normalized_currency
+                
+                break
 
-    # Extract estimated value
-    est_value_match = re.search(r"Estimated value[^:]*:?\s*([\d\s,.]+)\s*([A-Z]{3})", full_text, re.IGNORECASE)
-    if est_value_match:
-        tender_info["contract"]["estimated_value"] = est_value_match.group(1).strip().replace(" ", "").replace(",", ".")
-        if not tender_info["contract"]["currency"]:
-            tender_info["contract"]["currency"] = est_value_match.group(2).strip()
+    # Extract estimated value if not already found
+    est_value_patterns = [
+        r"Estimated value[^:]*:?\s*([\d\s,.]+)\s*([A-Za-z€£$]+)",
+        r"Estimated total value\s*:?\s*([\d\s,.]+)\s*([A-Za-z€£$]+)"
+    ]
+    
+    for pattern in est_value_patterns:
+        est_value_match = re.search(pattern, full_text, re.IGNORECASE)
+        if est_value_match:
+            tender_info["contract"]["estimated_value"] = est_value_match.group(1).strip().replace(" ", "").replace(",", ".")
+            if not tender_info["contract"]["currency"]:
+                tender_info["contract"]["currency"] = normalize_currency(est_value_match.group(2).strip())
+            break
     
     # Extract dates - using a unified date format pattern
     date_formats = [
@@ -463,6 +566,29 @@ def clean_extracted_data(tender_info):
                                              ['Start', 'Estimated', 'Duration', 'Postal']):
         tender_info['buyer']['country'] = ''
     
+    # Normalize and validate currency
+    if tender_info['contract']['currency']:
+        normalized_currency = normalize_currency(tender_info['contract']['currency'])
+        # Only keep the currency if it's valid after normalization
+        if normalized_currency:
+            tender_info['contract']['currency'] = normalized_currency
+        else:
+            # If we couldn't normalize it, assume it's invalid and remove it
+            tender_info['contract']['currency'] = ""
+            
+    # Look for evidence of Euro in the text if we don't have a currency
+    if not tender_info['contract']['currency'] and tender_info['contract']['value']:
+        # For European tenders, default to EUR if we have a value but no currency
+        if tender_info['buyer']['country'] in ["France", "Germany", "Italy", "Spain", 
+                                             "Belgium", "Netherlands", "Portugal", 
+                                             "Sweden", "Denmark", "Finland", "Austria", 
+                                             "Greece", "Ireland", "Luxembourg", "Poland", 
+                                             "Czech Republic", "Hungary", "Romania", 
+                                             "Bulgaria", "Croatia", "Cyprus", "Estonia", 
+                                             "Latvia", "Lithuania", "Malta", "Slovakia", 
+                                             "Slovenia"]:
+            tender_info['contract']['currency'] = "EUR"
+    
     # Additional status validation
     if tender_info['status']:
         # Check for invalid status content
@@ -607,11 +733,95 @@ def take_full_page_screenshot(page, output_path: str, scroll_delay: float = 0.5)
     return screenshot_paths
 
 def extract_tender_data(url: str, output_dir: str = "tender_data", take_screenshots: bool = False, 
-                        keep_temp_files: bool = False) -> Dict[str, Any]:
-    """Main function to extract tender data from a URL"""
+                        keep_temp_files: bool = False, input_file: Optional[str] = None) -> Dict[str, Any]:
+    """Main function to extract tender data from a URL or multiple URLs from a file
+    
+    Args:
+        url: URL to extract data from, or None if using input_file
+        output_dir: Directory to save output files
+        take_screenshots: Whether to take screenshots of the page
+        keep_temp_files: Whether to keep temporary files
+        input_file: Path to file containing URLs to process (one per line)
+        
+    Returns:
+        Dictionary with tender information or summary when processing multiple URLs
+    """
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
     
+    # Check if we're processing multiple URLs from a file
+    if input_file:
+        # Check if the input file exists
+        if not os.path.exists(input_file):
+            print(f"Input file '{input_file}' not found. Creating a sample file.")
+            with open(input_file, "w") as f:
+                f.write("https://ted.europa.eu/en/notice/-/detail/266375-2025\n")
+            print(f"Created '{input_file}' with a sample URL. Edit this file to add your own URLs.")
+        
+        # Read URLs from the file
+        with open(input_file, "r") as f:
+            urls = [line.strip() for line in f if line.strip()]
+        
+        print(f"Found {len(urls)} URLs to process.")
+        
+        results = []
+        
+        # Extract and process each URL
+        for i, current_url in enumerate(urls):
+            print(f"\nProcessing URL {i+1}/{len(urls)}: {current_url}")
+            
+            try:
+                # Extract tender data for this URL (recursive call without input_file)
+                tender_info = extract_tender_data(
+                    current_url, 
+                    output_dir, 
+                    take_screenshots=take_screenshots,
+                    keep_temp_files=keep_temp_files
+                )
+                
+                # Add to results
+                results.append({
+                    "url": current_url,
+                    "tender_id": tender_info["tender_id"],
+                    "title": tender_info["title"],
+                    "buyer": tender_info["buyer"]["name"],
+                    "deadline": tender_info["dates"]["deadline"],
+                    "status": tender_info["status"]
+                })
+                
+                print(f"Successfully processed tender: {tender_info['title']}")
+                
+            except Exception as e:
+                print(f"Error processing URL: {current_url}")
+                print(f"Error details: {str(e)}")
+                
+                # Add failed URL to results with error info
+                results.append({
+                    "url": current_url,
+                    "error": str(e),
+                    "status": "Failed"
+                })
+        
+        # Create summary
+        summary = {
+            "processed_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "total_urls": len(urls),
+            "successful": len([r for r in results if "error" not in r]),
+            "failed": len([r for r in results if "error" in r]),
+            "results": results
+        }
+        
+        # Save summary to file
+        summary_file = os.path.join(output_dir, "processing_summary.json")
+        with open(summary_file, "w", encoding="utf-8") as f:
+            json.dump(summary, f, indent=2, ensure_ascii=False)
+        
+        print(f"\nProcessing complete. {summary['successful']} of {len(urls)} URLs successfully processed.")
+        print(f"Summary saved to: {summary_file}")
+        
+        return summary
+    
+    # Single URL processing - existing code
     # Create a temporary directory for intermediate files
     temp_dir = os.path.join(output_dir, "temp_" + str(int(time.time())))
     os.makedirs(temp_dir, exist_ok=True)
@@ -733,40 +943,4 @@ def extract_tender_data(url: str, output_dir: str = "tender_data", take_screensh
             except Exception as e:
                 print(f"Warning: Could not remove temporary directory: {str(e)}")
 
-if __name__ == "__main__":
-    # Default values
-    input_file = "tender_links.txt"
-    output_dir = "tender_data"
-    take_screenshots = True
-    keep_temp_files = False
-    
-    print(f"Input file: {input_file}")
-    print(f"Output directory: {output_dir}")
-    print(f"Take screenshots: {'Yes' if take_screenshots else 'No'}")
-    print(f"Keep temporary files: {'Yes' if keep_temp_files else 'No'}")
-    
-    # Check if the input file exists
-    if not os.path.exists(input_file):
-        print(f"Input file '{input_file}' not found. Creating a sample file.")
-        with open(input_file, "w") as f:
-            f.write("https://ted.europa.eu/en/notice/-/detail/266375-2025\n")
-        print(f"Created '{input_file}' with a sample URL. Edit this file to add your own URLs.")
-    
-    # Read URLs from the file
-    with open(input_file, "r") as f:
-        urls = [line.strip() for line in f if line.strip()]
-    
-    print(f"Found {len(urls)} URLs to process.")
-    
-    # Process each URL
-    for i, url in enumerate(urls):
-        print(f"\nProcessing URL {i+1}/{len(urls)}: {url}")
-        
-        try:
-            tender_info = extract_tender_data(url, output_dir, 
-                                             take_screenshots=take_screenshots,
-                                             keep_temp_files=keep_temp_files)
-            print(f"Successfully processed: {tender_info['title']}")
-        except Exception as e:
-            print(f"Error processing URL: {url}")
-            print(f"Error details: {str(e)}")
+
