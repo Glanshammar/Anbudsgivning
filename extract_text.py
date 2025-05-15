@@ -6,7 +6,7 @@ import json
 import re
 import sys
 from Data.ai import TenderInfo
-from Backend.browser import Browser
+from Browser.browser import Browser
 
 def sanitize_filename(url):
     """Create a safe filename from a URL."""
