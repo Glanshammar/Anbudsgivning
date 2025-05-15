@@ -3,7 +3,7 @@ from Data import (CompanyProfile, Consultant, TenderDocument, Calendar, Expertis
 from Agents import AgentManager, AgentType, WebCrawler, COMMAND_PORT, STATUS_PORT
 from Logger.logger_tests import run_logger_tests
 from Data.ai import DownloadDocument
-from Backend.browser import Browser
+from Browser.browser import Browser
 import zmq
 from selenium import webdriver
 import requests
