@@ -11,44 +11,14 @@ import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 
-# Import visible text extraction functionality from extract_text
-from extract_text import extract_visible_text
-
-def is_tesseract_installed() -> bool:
-    """Check if Tesseract OCR is installed on the system"""
-    try:
-        result = subprocess.run(['tesseract', '--version'], 
-                                stdout=subprocess.PIPE, 
-                                stderr=subprocess.PIPE, 
-                                text=True)
-        return result.returncode == 0
-    except FileNotFoundError:
-        return False
 
 def extract_text_from_images(image_paths: List[str]) -> str:
-    """
-    Extract text from images using Tesseract OCR
-    
-    Args:
-        image_paths: List of paths to image files
-        
-    Returns:
-        Extracted text from all images combined
-    """
     try:
         import pytesseract
         from PIL import Image
     except ImportError:
         print("Error: pytesseract and/or Pillow not installed.")
         print("Please install them using: pip install pytesseract Pillow")
-        return ""
-    
-    if not is_tesseract_installed():
-        print("Error: Tesseract OCR is not installed on your system.")
-        print("Please install Tesseract OCR:")
-        print("  - On Ubuntu/Debian: sudo apt-get install tesseract-ocr")
-        print("  - On macOS: brew install tesseract")
-        print("  - On Windows: Download installer from https://github.com/UB-Mannheim/tesseract/wiki")
         return ""
     
     all_text = []
@@ -74,8 +44,6 @@ def extract_text_from_images(image_paths: List[str]) -> str:
     return combined_text
 
 def extract_visible_text_from_page(page):
-    """Extract visible text content from a webpage"""
-    # Extract text content of visible elements, with simplified approach
     visible_text = page.evaluate("""() => {
         // Function to check if an element is visible
         function isVisible(elem) {
@@ -134,7 +102,6 @@ def extract_visible_text_from_page(page):
     cleaned_text = re.sub(r'\s+', ' ', visible_text).strip()
     return cleaned_text
 
-# We've removed the description extraction function as it's no longer needed
 
 def normalize_currency(currency: str) -> str:
     if not currency:
@@ -222,7 +189,6 @@ def normalize_currency(currency: str) -> str:
     return ""
 
 def extract_tender_info(soup, full_text, url=None, translate_to_english=False):
-    """Extract structured tender information from the page"""
     tender_info = {
         "tender_id": "",
         "title": "",
@@ -493,9 +459,6 @@ def extract_tender_info(soup, full_text, url=None, translate_to_english=False):
         if ref_match:
             tender_info["reference_number"] = ref_match.group(1).strip()
             break
-    
-# Translation code removed
-    
     return tender_info
 
 def is_valid_cpv_code(code: str) -> bool:
@@ -535,7 +498,6 @@ def is_valid_cpv_code(code: str) -> bool:
     return False
 
 def normalize_status(status: str) -> str:
-    """Normalize tender status values to standard formats"""
     status_lower = status.lower().strip()
     
     # Map various status values to standard statuses
@@ -555,8 +517,6 @@ def normalize_status(status: str) -> str:
     return status.strip()
 
 def clean_extracted_data(tender_info):
-    """Clean up the extracted data by removing partial matches and duplicates"""
-    
     # Filter out partial matches in tender_info['buyer']['name']
     if tender_info['buyer']['name'] and 'Email' in tender_info['buyer']['name']:
         tender_info['buyer']['name'] = tender_info['buyer']['name'].split('Email')[0].strip()
@@ -674,17 +634,6 @@ def clean_extracted_data(tender_info):
     return tender_info
 
 def take_full_page_screenshot(page, output_path: str, scroll_delay: float = 0.5) -> List[str]:
-    """
-    Take screenshots of the entire page by scrolling through it
-    
-    Args:
-        page: Playwright page object
-        output_path: Directory to save screenshots
-        scroll_delay: Delay between scrolls in seconds
-        
-    Returns:
-        List of paths to the screenshot files
-    """
     # Create the output directory if it doesn't exist
     output_dir = Path(output_path)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -734,18 +683,6 @@ def take_full_page_screenshot(page, output_path: str, scroll_delay: float = 0.5)
 
 def extract_tender_data(url: str, output_dir: str = "tender_data", take_screenshots: bool = False, 
                         keep_temp_files: bool = False, input_file: Optional[str] = None) -> Dict[str, Any]:
-    """Main function to extract tender data from a URL or multiple URLs from a file
-    
-    Args:
-        url: URL to extract data from, or None if using input_file
-        output_dir: Directory to save output files
-        take_screenshots: Whether to take screenshots of the page
-        keep_temp_files: Whether to keep temporary files
-        input_file: Path to file containing URLs to process (one per line)
-        
-    Returns:
-        Dictionary with tender information or summary when processing multiple URLs
-    """
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
     
