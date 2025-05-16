@@ -80,7 +80,7 @@ class Consultant:
 
 
 class TenderDocument:
-    def __init__(self, branch: str, deadline: datetime, end_date: datetime, project_name: str, start_date: datetime):
+    def __init__(self, project_name: str, branch: str, deadline: datetime, start_date: datetime, end_date: datetime):
         if not isinstance(branch, str):
             raise ValueError('Invalid branch')
         if not isinstance(deadline, datetime):
@@ -93,20 +93,20 @@ class TenderDocument:
             raise ValueError('Invalid start_date')
         self.branch = branch
         self.deadline = deadline
+        self.start_date = start_date
         self.end_date = end_date
         self.project_name = project_name
-        self.start_date = start_date
 
     def __repr__(self):
-        return f'TenderDocument(branch={self.branch}, deadline={self.deadline}, end_date={self.end_date}, project_name={self.project_name}, start_date={self.start_date})'
+        return f'TenderDocument(project_name={self.project_name}, branch={self.branch}, deadline={self.deadline}, start_date={self.start_date}, end_date={self.end_date})'
         
     def to_dict(self):
         return {
+            'project_name': self.project_name,
             'branch': self.branch,
             'deadline': self.deadline.strftime("%Y-%m-%d"),
+            'start_date': self.start_date.strftime("%Y-%m-%d"),
             'end_date': self.end_date.strftime("%Y-%m-%d"),
-            'project_name': self.project_name,
-            'start_date': self.start_date.strftime("%Y-%m-%d")
         }
 
 
