@@ -80,18 +80,36 @@ class Consultant:
 
 
 class TenderDocument:
-    def __init__(self, qualifications: List[int], workforce: int, start_date: datetime, end_date: datetime):
-        if not all(q in Expertise.values() for q in qualifications):
-            raise ValueError('Invalid qualifications')
-        self.qualifications = qualifications
-        self.workforce = workforce
-        self.start_date = start_date
+    def __init__(self, branch: str, deadline: datetime, end_date: datetime, project_name: str, start_date: datetime):
+        if not isinstance(branch, str):
+            raise ValueError('Invalid branch')
+        if not isinstance(deadline, datetime):
+            raise ValueError('Invalid deadline')
+        if not isinstance(end_date, datetime):
+            raise ValueError('Invalid end_date')
+        if not isinstance(project_name, str):
+            raise ValueError('Invalid project_name')
+        if not isinstance(start_date, datetime):
+            raise ValueError('Invalid start_date')
+        self.branch = branch
+        self.deadline = deadline
         self.end_date = end_date
+        self.project_name = project_name
+        self.start_date = start_date
 
     def __repr__(self):
-        return f'TenderDocument(company_name={self.company_name}, start_date={self.start_date}, end_date={self.end_date})'
+        return f'TenderDocument(branch={self.branch}, deadline={self.deadline}, end_date={self.end_date}, project_name={self.project_name}, start_date={self.start_date})'
         
-        
+    def to_dict(self):
+        return {
+            'branch': self.branch,
+            'deadline': self.deadline.strftime("%Y-%m-%d"),
+            'end_date': self.end_date.strftime("%Y-%m-%d"),
+            'project_name': self.project_name,
+            'start_date': self.start_date.strftime("%Y-%m-%d")
+        }
+
+
 class Calendar:
     VALID_MONTH_FORMATS = [
         "%Y-%m",    # ISO Standard (2025-04)

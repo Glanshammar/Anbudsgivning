@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import datetime
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(current_dir)
@@ -35,7 +36,6 @@ socket.connect("tcp://localhost:5001")
 
 # Collection name constants
 COMPANY_DATA = 'CompanyData'
-TENDERS = 'Tenders'
 CONSULTANTS = 'Consultants'
 # ------------------------------------------------------------------------------------------------------------- #
 # --------------------------------------------- Request Functions --------------------------------------------- #
@@ -233,16 +233,69 @@ def BusinessCalendar():
                               doc_id='ConsultantCalendar')
 
 
-@app.route('/api/tenders', methods=['GET', 'POST'])
+@app.route('/api/tenders', methods=['GET', 'POST', 'PUT'])
 def TendersRequest():
+    # JSON format
+    """
+    {
+        "tenders": [
+            {
+                "branch": "Construction",
+                "deadline": "2025-06-09",
+                "end_date": "2025-09-25",
+                "project_name": "Super Duper Bridge Project",
+                "start_date": "2025-06-19"
+            },
+            {
+                "branch": "IT",
+                "deadline": "2025-06-09",
+                "end_date": "2025-09-25",
+                "project_name": "Super Duper IT Project",
+                "start_date": "2025-06-19"
+            }
+        ]
+    }
+    """
     if request.method == 'GET':
-        return DatabaseRequest(collection_name=TENDERS,
+        return DatabaseRequest(collection_name=COMPANY_DATA,
                             data=None,
-                            doc_id=request.args.get('tender_id'))
-    if request.method == 'POST':
-        return DatabaseRequest(collection_name=TENDERS,
-                              data=request.get_json(),
-                              doc_id=request.args.get('tender_id'))
+                            doc_id='Tenders')
+                            
+    if request.method in ['POST', 'PUT']:
+        tender_data = request.get_json().get('tenders', [])
+        validated_tenders = []
+        
+        for tender in tender_data:
+            # Convert date strings to datetime objects
+            try:
+                # Parse date strings to datetime objects
+                for date_field in ['deadline', 'start_date', 'end_date']:
+                    if date_field in tender and isinstance(tender[date_field], str):
+                        tender[date_field] = datetime.datetime.strptime(tender[date_field], "%Y-%m-%d")
+                
+                tender_obj = TenderDocument(**tender)
+                validated_tenders.append(tender_obj.to_dict())
+            except (ValueError, TypeError) as e:
+                return jsonify({"error": f"Invalid tender data: {str(e)}"}), 400
+        
+        if request.method == 'POST':
+            return DatabaseRequest(collection_name=COMPANY_DATA,
+                                data={"tenders": validated_tenders},
+                                doc_id='Tenders')
+        
+        if request.method == 'PUT':
+            existing_data = current_app.db.collection(COMPANY_DATA).document('Tenders').get()
+            existing_tenders = existing_data.to_dict().get('tenders', []) if existing_data.exists else []
+            
+            # Combine existing and new tenders, avoiding duplicates based on project_name
+            existing_projects = {tender['project_name'] for tender in existing_tenders}
+            combined_tenders = existing_tenders + [
+                tender for tender in validated_tenders 
+                if tender['project_name'] not in existing_projects
+            ]
+            return DatabaseRequest(collection_name=COMPANY_DATA,
+                                data={"tenders": combined_tenders},
+                                doc_id='Tenders')
 
 
 @app.route('/api/expertise', methods=['POST', 'GET', 'PUT'])
@@ -280,12 +333,13 @@ def TenderPortals():
         ]
     }
     """
+    portals_data = request.get_json().get('portals', [])
+    validated_portals = []
+    for portal in portals_data:
+        portal_obj = TenderPortal(**portal)
+        validated_portals.append(portal_obj.to_dict())
+
     if request.method == 'POST':
-        portals_data = request.get_json().get('portals', [])
-        validated_portals = []
-        for portal in portals_data:
-            portal_obj = TenderPortal(**portal)
-            validated_portals.append(portal_obj.to_dict())
         return DatabaseRequest(collection_name=COMPANY_DATA,
                              data={"portals": validated_portals},
                              doc_id='TenderPortals')
@@ -295,17 +349,10 @@ def TenderPortals():
         existing_data = current_app.db.collection(COMPANY_DATA).document('TenderPortals').get()
         existing_portals = existing_data.to_dict().get('portals', []) if existing_data.exists else []
         
-        # Get new portals
-        new_portals_data = request.get_json().get('portals', [])
-        validated_new_portals = []
-        for portal in new_portals_data:
-            portal_obj = TenderPortal(**portal)
-            validated_new_portals.append(portal_obj.to_dict())
-        
         # Combine existing and new portals, avoiding duplicates based on URL
         existing_urls = {portal['url'] for portal in existing_portals}
         combined_portals = existing_portals + [
-            portal for portal in validated_new_portals 
+            portal for portal in validated_portals 
             if portal['url'] not in existing_urls
         ]
         
