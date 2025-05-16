@@ -18,14 +18,26 @@ export const login = async (credentials: LoginCredentials) => {
   }
 
   const data = await response.json();
+
+  // Spara token i localStorage (för klient-side-autentisering)
   localStorage.setItem("token", data.access_token);
   localStorage.setItem("username", credentials.username);
+
+  // Spara token som cookie (för middleware)
+  document.cookie = `token=${data.access_token}; path=/; max-age=${
+    60 * 60 * 24 * 7
+  }`; // 7 dagars giltighetstid
+
   return data;
 };
 
 export const logout = () => {
+  // Ta bort från localStorage
   localStorage.removeItem("token");
   localStorage.removeItem("username");
+
+  // Ta bort cookie
+  document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
 };
 
 export const isAuthenticated = (): boolean => {
