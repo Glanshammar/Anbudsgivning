@@ -1,6 +1,4 @@
 export interface Tender {
-  id?: string;
-  parentId?: string;
   project_name: string;
   branch: string;
   deadline: string;
@@ -45,12 +43,8 @@ export async function getTenders(): Promise<Tender[]> {
       throw new Error("Failed to fetch tenders");
     }
     const data = await response.json();
-    // Convert the object to an array of tenders with id
-    if (typeof data === "object" && data !== null) {
-      return Object.entries(data).map(([id, tenderData]: [string, any]) => ({
-        id,
-        ...tenderData,
-      }));
+    if (data && data.tenders && Array.isArray(data.tenders)) {
+      return data.tenders;
     }
     return [];
   }
