@@ -1,5 +1,7 @@
 import os
 import sys
+import json
+from time import sleep
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -7,15 +9,109 @@ sys.path.insert(0, parent_dir)
 
 from Browser.text import extract_tender_data
 from Browser.browser import Browser
-from time import sleep
-import json
 from bs4 import BeautifulSoup
 
 ted = "https://ted.europa.eu/en/search/result?classification-cpv=core&search-scope=ACTIVE"
 tendium = "https://tendium.ai/se/upphandlingar/"
 tendersontime_portal = 'https://www.tendersontime.com/sweden-tenders/'
+opic = "https://www.opic.se/sv/upphandlingar"
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
+def generate_button_selector(html_element, name=None):
+    """
+    Generate a unique selector for a button based on its attributes and content.
+    
+    Args:
+        html_element: BeautifulSoup element representing the button
+        name: Optional name to identify this button type
+        
+    Returns:
+        dict: Dictionary with selector and metadata
+    """
+    # Start with tag name - fix for getting root element in soup.find()
+    if html_element.name == 'html':
+        # This is the document root, find the first meaningful element instead
+        meaningful_elements = html_element.find_all(['button', 'a', 'span', 'div'], recursive=True)
+        if meaningful_elements:
+            html_element = meaningful_elements[0]
+    
+    tag_name = html_element.name
+    base_selector = tag_name
+    
+    # Add ID if available (highest specificity)
+    element_id = html_element.get('id')
+    if element_id:
+        return {
+            'selector': f'#{element_id}',
+            'type': 'id',
+            'description': f"{name or 'Button'} with ID"
+        }
+    
+    # Add classes
+    classes = html_element.get('class', [])
+    if classes:
+        class_selector = base_selector + ''.join(f'.{cls}' for cls in classes)
+        
+        # Add role if it exists
+        role = html_element.get('role')
+        if role == 'button':
+            class_selector += '[role="button"]'
+    else:
+        class_selector = base_selector
+    
+    # Check for text content to make it more specific
+    text = html_element.text.strip()
+    if text and len(text) < 30:  # Only use short text to avoid huge selectors
+        # Escape quotes in text
+        text = text.replace('"', '\\"').replace("'", "\\'")
+        text_selector = f'{class_selector}:has-text("{text}")'
+        return {
+            'selector': text_selector,
+            'type': 'text',
+            'description': f"{name or 'Button'} with text content"
+        }
+    
+    # Check for distinctive attributes
+    for attr in ['aria-label', 'title', 'name', 'data-testid']:
+        attr_value = html_element.get(attr)
+        if attr_value:
+            return {
+                'selector': f'{class_selector}[{attr}="{attr_value}"]',
+                'type': 'attribute',
+                'description': f"{name or 'Button'} with {attr} attribute"
+            }
+    
+    # Check for distinctive icon/SVG
+    svg = html_element.find('svg')
+    if svg:
+        path = svg.find('path')
+        if path and path.get('d'):
+            # First few characters of path are often enough to be distinctive
+            path_start = path.get('d')[:15]
+            return {
+                'selector': f'{class_selector}:has(svg:has(path[d^="{path_start}"]))',
+                'type': 'icon',
+                'description': f"{name or 'Button'} with specific icon"
+            }
+    
+    # Check for position in parent
+    parent = html_element.parent
+    if parent:
+        siblings = parent.find_all(html_element.name, class_=classes[0] if classes else None)
+        if len(siblings) > 1:
+            for i, sibling in enumerate(siblings):
+                if sibling == html_element:
+                    return {
+                        'selector': f'{class_selector}:nth-child({i+1})',
+                        'type': 'position',
+                        'description': f"{name or 'Button'} at position {i+1}"
+                    }
+    
+    # Fallback to just the class selector
+    return {
+        'selector': class_selector,
+        'type': 'class',
+        'description': f"{name or 'Button'} with class selector only"
+    }
 
 test = input("Test: ")
 
@@ -67,64 +163,95 @@ match test:
                     pagination_button = button
             pagination_button.click()
             page += 1
-            sleep(3)
+            sleep(2)
         browser.Quit()
     case 'elements2':
-        with open("selectors.json") as f:
-            selectors = json.load(f)
+        page:int = 1
         browser = Browser(headless=False)
         browser.OpenPage(ted)
-        browser.page.locator(selectors["pagination_button"]).click()
-        sleep(10)
+        sleep(4)
+        
+        for i in range(10):
+            next_page = str(page+1)
+            # browser.page.locator("#btn-next").click()
+            # browser.page.get_by_text(next_page).click()
+            # browser.page.get_by_role("button", name="next page").click()
+            page += 1
+            sleep(3)
         browser.Quit()
     case 'elements3':
-        html = '''
-        <span class="CustomReactClasses-MuiButton-label">
-        2
-        <span class="CustomReactClasses-MuiButton-endIcon CustomReactClasses-MuiButton-iconSizeMedium">
-            <svg class="CustomReactClasses-MuiSvgIcon-root" focusable="false" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M8 5v14l11-7L8 5z"></path>
-            </svg>
-        </span>
-        </span>
-        '''
+        button_examples = [
+            {
+                'html': '''
+                
+                ''',
+                'name': ''
+            }
+        ]
 
-        try:
-            # Try lxml first as it's faster
-            soup = BeautifulSoup(html, "lxml")
-        except Exception as e:
-            print(f"lxml parser not available, falling back to html.parser: {str(e)}")
-            # Fall back to built-in parser
-            soup = BeautifulSoup(html, "html.parser")
-
-        target = soup.find("span", class_=True)
-
-        # Build a CSS selector from tag and all classes
-        tag = target.name
-        classes = target.get("class", [])
-        selector = tag + "".join(f".{cls}" for cls in classes)
-
-        selectors = {
-            "pagination_button": selector
-        }
+        selectors = {}
+        
+        for example in button_examples:
+            try:
+                # Parse HTML properly by wrapping in a container
+                html = f"<div>{example['html'].strip()}</div>"
+                soup = BeautifulSoup(html, "lxml")
+            except Exception as e:
+                print(f"lxml parser not available, falling back to html.parser: {str(e)}")
+                soup = BeautifulSoup(html, "html.parser")
+                
+            # Get the actual element of interest (first child of our wrapper div)
+            root_element = soup.div.contents[0]
+            while root_element.name is None and root_element.next_sibling:  # Skip text nodes
+                root_element = root_element.next_sibling
+            
+            # Generate selector for this button
+            selector_data = generate_button_selector(root_element, example['name'])
+            selectors[example['name']] = selector_data
+        
+        # Save the selectors to a file
         with open(os.path.join(current_dir, "selectors.json"), "w") as f:
             json.dump(selectors, f, indent=2)
 
-        print(f"Saved selector: {selector}")
+        print(f"Saved selectors:")
+        for name, data in selectors.items():
+            print(f"  - {name}: {data['selector']} ({data['description']})")
     case 'elements4':
-        with open(os.path.join(current_dir, "selectors.json")) as f:
-            selectors = json.load(f)
-        browser = Browser(headless=False)
-        browser.OpenPage(ted)
-        
-        # Find all elements matching the selector
-        elements = browser.page.locator(selectors["pagination_button"])
-        print(f"Found {elements.count()} elements matching the selector")
-        
-        # Find the "Go to the next page" button based on the error message
-        next_page_button = browser.page.get_by_role("button", name="Go to the next page").first
-        next_page_button.click()
-        
-        print("Successfully clicked the next page button")
-        sleep(10)
-        browser.Quit()
+        # Test using the selectors from selectors.json to click buttons
+        try:
+            selectors_path = os.path.join(current_dir, "selectors.json")
+            with open(selectors_path, "r") as f:
+                selectors = json.load(f)
+            
+            print(f"Loaded {len(selectors)} selectors from {selectors_path}")
+            for name, data in selectors.items():
+                print(f"  - {name}: {data['selector']} ({data['description']})")
+            
+            browser = Browser(headless=False)
+            browser.OpenPage(ted)
+            print(f"Opened page: {ted}")
+            
+            for name, data in selectors.items():
+                selector = data['selector']
+                print(f"\nAttempting to find and click {name} with selector: {selector}")
+                
+                try:
+                    element = browser.WaitForElement(selector, timeout=5000)
+                    if element:
+                        print(f"✓ Found {name}")
+                        browser.Click(selector)
+                        print(f"✓ Clicked {name}")
+                        sleep(3)
+                    else:
+                        print(f"✗ Element '{name}' not found with selector: {selector}")
+                except Exception as e:
+                    print(f"✗ Error with {name}: {str(e)}")
+            
+            print("\nTest completed")
+            sleep(5)
+        except Exception as e:
+            print(f"Error during test: {str(e)}")
+        finally:
+            if 'browser' in locals():
+                browser.Quit()
+                print("Browser closed")
