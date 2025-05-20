@@ -5,8 +5,13 @@ export interface Portal {
 }
 
 export const getPortals = async () => {
+  const token = localStorage.getItem("token");
   const response = await fetch("http://localhost:5000/api/tender_portals", {
     method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
   });
   const data = await response.json();
   if (!response.ok) {
@@ -16,10 +21,12 @@ export const getPortals = async () => {
 };
 
 export const setTenderPortals = async (portals: Portal[]) => {
+  const token = localStorage.getItem("token");
   const response = await fetch("http://localhost:5000/api/tender_portals", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ portals }),
   });

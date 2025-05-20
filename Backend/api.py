@@ -11,7 +11,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 import zmq
 import bcrypt
 import re
-import threading
+# import threading
 from functools import wraps
 from httpcodes import *
 from Data import Consultant, CompanyProfile, Expertise, TenderDocument, TenderPortal
@@ -34,7 +34,7 @@ context = zmq.Context()
 socket = context.socket(zmq.REQ)
 socket.connect("tcp://localhost:5001")
 # Add lock to synchronize requests to the server
-zmq_lock = threading.Lock()
+# zmq_lock = threading.Lock()
 
 # Collection name constants
 COMPANY_DATA = 'CompanyData'
@@ -51,7 +51,7 @@ def ServerRequest(command: str = None, params: dict = None):
         }
         
         # Use lock to prevent race condition
-        with zmq_lock:
+        # with zmq_lock:
             # Send the command to the server
             socket.send_json(command_obj)
             backend_response = socket.recv_json()
@@ -318,10 +318,7 @@ def TenderPortals():
                              data={"portals": combined_portals},
                              doc_id='TenderPortals')
     
-    if request.method == 'GET':
-        return DatabaseRequest(collection_name=COMPANY_DATA,
-                             data=None,
-                             doc_id='TenderPortals')
+    
 
 
 @app.route('/api/company_profile', methods=['POST', 'GET'])

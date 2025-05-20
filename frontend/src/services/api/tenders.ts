@@ -40,7 +40,14 @@ export async function getTenders(): Promise<Tender[]> {
       setTimeout(() => resolve(dummyTenders), 500)
     );
   } else {
-    const response = await fetch("http://localhost:5000/api/tenders");
+    const token = localStorage.getItem("token");
+    const response = await fetch("http://localhost:5000/api/tenders", {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    });
     if (!response.ok) {
       throw new Error("Failed to fetch tenders");
     }
@@ -54,4 +61,40 @@ export async function getTenders(): Promise<Tender[]> {
     }
     return [];
   }
+}
+
+export async function createTenders(tenders: Tender[]): Promise<any> {
+  const token = localStorage.getItem("token");
+  const response = await fetch("http://localhost:5000/api/tenders", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ tenders }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to create tenders");
+  }
+
+  return await response.json();
+}
+
+export async function updateTenders(tenders: Tender[]): Promise<any> {
+  const token = localStorage.getItem("token");
+  const response = await fetch("http://localhost:5000/api/tenders", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ tenders }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to update tenders");
+  }
+
+  return await response.json();
 }

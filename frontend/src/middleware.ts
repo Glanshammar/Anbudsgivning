@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// Funktion för att kontrollera om JWT token är giltig
+// Function to check if JWT token is valid
 const isTokenValid = (token: string) => {
   try {
-    // Validera token (kontrollera signatur, utgångsdatum osv.)
+    // Validate token (check signature, expiration date, etc.)
     const payload = JSON.parse(atob(token.split(".")[1]));
     return payload.exp * 1000 > Date.now();
   } catch {
@@ -13,15 +13,15 @@ const isTokenValid = (token: string) => {
 };
 
 export function middleware(request: NextRequest) {
-  // Hämta token från cookies eller auth header
+  // Get token from cookies or auth header
   const token =
     request.cookies.get("token")?.value ||
     request.headers.get("Authorization")?.substring(7);
 
-  // Kontrollera om rutten är en del av dashboard
+  // Check if the route is part of the dashboard
   const isDashboardRoute = request.nextUrl.pathname.startsWith("/dashboard");
 
-  // Om det är en dashboard-rutt men ingen giltig token finns, omdirigera till inloggningssidan
+  // If the route is part of the dashboard but no valid token exists, redirect to the login page
   if (isDashboardRoute) {
     if (!token || !isTokenValid(token)) {
       const redirectUrl = new URL("/login", request.url);
@@ -32,10 +32,10 @@ export function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-// Se till att middleware endast körs för relevanta rutter
+// Ensure middleware only runs for relevant routes
 export const config = {
   matcher: [
-    // Matcha alla dashboard-rutter
+    // Match all dashboard routes
     "/dashboard/:path*",
   ],
 };
