@@ -11,6 +11,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 import zmq
 import bcrypt
 import re
+import threading
 from functools import wraps
 from httpcodes import *
 from Data import Consultant, CompanyProfile, Expertise, TenderDocument, TenderPortal
@@ -32,6 +33,8 @@ CORS(app, resources={
 context = zmq.Context()
 socket = context.socket(zmq.REQ)
 socket.connect("tcp://localhost:5001")
+# Add lock to synchronize requests to the server
+zmq_lock = threading.Lock()
 
 # Collection name constants
 COMPANY_DATA = 'CompanyData'
@@ -47,9 +50,11 @@ def ServerRequest(command: str = None, params: dict = None):
             'params': params if params is not None else {}
         }
         
-        # Send the command to the server
-        socket.send_json(command_obj)
-        backend_response = socket.recv_json()
+        # Use lock to prevent race condition
+        with zmq_lock:
+            # Send the command to the server
+            socket.send_json(command_obj)
+            backend_response = socket.recv_json()
         
         return jsonify(backend_response["data"]), backend_response.get("status_code", 200)
     except Exception as e:
