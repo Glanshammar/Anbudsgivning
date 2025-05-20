@@ -1,38 +1,57 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { isAuthenticated } from "@/utils/auth";
+import { updateProfile } from "@/services/api/profile";
 
 export default function UserProfile() {
+  const router = useRouter();
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      router.push("/login");
+    } else {
+      setAuthChecked(true);
+      // Load current username from localStorage
+      const storedUsername = localStorage.getItem("username");
+      if (storedUsername) {
+        setUsername(storedUsername);
+      }
+    }
+  }, [router]);
+
+  const handleUsernameChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setMessage("");
+
+    try {
+      await updateProfile({ username });
+      setMessage("Användarnamn uppdaterat");
+    } catch (err: any) {
+      setError(err.message || "Misslyckades med att uppdatera användarnamn");
+    }
+  };
 
   const handleEmailChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setMessage("");
 
-    // need api-endpoint for this to work /api/user/update-email
     try {
-      const response = await fetch("/api/user/update-email", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to update email");
-      }
-
-      setMessage("Email updated successfully");
-      setEmail("");
-    } catch (err) {
-      setError("Failed to update email. Please try again.");
+      await updateProfile({ email });
+      setMessage("E-post uppdaterad");
+    } catch (err: any) {
+      setError(err.message || "Misslyckades med att uppdatera e-post");
     }
   };
 
@@ -42,39 +61,32 @@ export default function UserProfile() {
     setMessage("");
 
     if (newPassword !== confirmPassword) {
-      setError("New passwords do not match");
+      setError("Nya lösenorden matchar inte");
       return;
     }
 
-    // need api-endpoint for this to work /api/user/update-password
     try {
-      const response = await fetch("/api/user/update-password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          currentPassword,
-          newPassword,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to update password");
-      }
-
-      setMessage("Password updated successfully");
+      await updateProfile({ password: newPassword });
+      setMessage("Lösenord uppdaterat");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-    } catch (err) {
-      setError("Failed to update password. Please try again.");
+    } catch (err: any) {
+      setError(err.message || "Misslyckades med att uppdatera lösenord");
     }
   };
 
+  if (!authChecked) {
+    return (
+      <div className="flex justify-center items-center min-h-[40vh]">
+        <span className="text-gray-500 text-lg">Laddar...</span>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">User Profile</h1>
+      <h1 className="text-2xl font-bold mb-6">Användarprofil</h1>
 
       {message && (
         <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
@@ -89,11 +101,36 @@ export default function UserProfile() {
       )}
 
       <div className="bg-white shadow-md rounded-lg p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Change Email</h2>
+        <h2 className="text-xl font-semibold mb-4">Byt användarnamn</h2>
+        <form onSubmit={handleUsernameChange}>
+          <div className="mb-4">
+            <label htmlFor="username" className="block text-gray-700 mb-2">
+              Nytt användarnamn
+            </label>
+            <input
+              type="text"
+              id="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+          >
+            Uppdatera användarnamn
+          </button>
+        </form>
+      </div>
+
+      <div className="bg-white shadow-md rounded-lg p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">Byt e-post</h2>
         <form onSubmit={handleEmailChange}>
           <div className="mb-4">
             <label htmlFor="email" className="block text-gray-700 mb-2">
-              New Email
+              Ny e-post
             </label>
             <input
               type="email"
@@ -108,33 +145,17 @@ export default function UserProfile() {
             type="submit"
             className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
           >
-            Update Email
+            Uppdatera e-post
           </button>
         </form>
       </div>
 
       <div className="bg-white shadow-md rounded-lg p-6">
-        <h2 className="text-xl font-semibold mb-4">Change Password</h2>
+        <h2 className="text-xl font-semibold mb-4">Byt lösenord</h2>
         <form onSubmit={handlePasswordChange}>
           <div className="mb-4">
-            <label
-              htmlFor="currentPassword"
-              className="block text-gray-700 mb-2"
-            >
-              Current Password
-            </label>
-            <input
-              type="password"
-              id="currentPassword"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
-          </div>
-          <div className="mb-4">
             <label htmlFor="newPassword" className="block text-gray-700 mb-2">
-              New Password
+              Nytt lösenord
             </label>
             <input
               type="password"
@@ -150,7 +171,7 @@ export default function UserProfile() {
               htmlFor="confirmPassword"
               className="block text-gray-700 mb-2"
             >
-              Confirm New Password
+              Bekräfta nytt lösenord
             </label>
             <input
               type="password"
@@ -165,7 +186,7 @@ export default function UserProfile() {
             type="submit"
             className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
           >
-            Update Password
+            Uppdatera lösenord
           </button>
         </form>
       </div>
