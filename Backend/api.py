@@ -1,13 +1,12 @@
 import os
 import sys
-from datetime import datetime
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(current_dir)
 sys.path.insert(0, root_dir)
 
-from flask import Flask, request, jsonify, current_app
-from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
+from flask import Flask, request, jsonify, current_app, Blueprint
+from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request
 from google.cloud.firestore_v1.base_query import FieldFilter
 import zmq
 import bcrypt
@@ -20,6 +19,10 @@ from Agents import AgentType, AgentManager
 from Backend.db_app import *
 from dotenv import load_dotenv
 from flask_cors import CORS
+from Logger.logger import LoggerManager
+from datetime import datetime
+import logging
+from typing import Tuple, Dict, Any
 
 
 load_dotenv()
@@ -40,6 +43,16 @@ zmq_lock = threading.Lock()
 # Collection name constants
 COMPANY_DATA = 'CompanyData'
 CONSULTANTS = 'Consultants'
+USERS = 'Users'
+TENDERS = 'Tenders'
+
+logger = LoggerManager.get_logger(
+    name='api',
+    log_to_console=True,
+    level=logging.INFO
+)
+
+token_blacklist = set()
 # ------------------------------------------------------------------------------------------------------------- #
 # --------------------------------------------- Request Functions --------------------------------------------- #
 def ServerRequest(command: str = None, params: dict = None):
@@ -55,9 +68,19 @@ def ServerRequest(command: str = None, params: dict = None):
             # Send the command to the server
             socket.send_json(command_obj)
             backend_response = socket.recv_json()
+        logger.debug(f"Sending server request: {command}", extra={'command': command, 'params': params})
+        
+        # Use lock to prevent race condition
+        with zmq_lock:
+            # Send the command to the server
+            socket.send_json(command_obj)
+            backend_response = socket.recv_json()
+        
+        logger.debug(f"Received server response: {backend_response}", extra={'response': backend_response})
         
         return jsonify(backend_response["data"]), backend_response.get("status_code", 200)
     except Exception as e:
+        logger.error(f"Server request failed: {str(e)}", extra={'error': str(e), 'command': command})
         return jsonify({"error": str(e)}), 500
     
 
@@ -97,32 +120,29 @@ def ValidateModel(model_class):
             return func(*args, **kwargs)
         return wrapper
     return decorator
+
+def ValidatePassword(password: str) -> bool:
+    # Minimum 8 characters, at least one uppercase, one lowercase, one digit, one special character
+    pattern = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()[\]{}<>.,;:|~`_+=-]).{8,}$'
+    return bool(re.match(pattern, password))
 # ------------------------------------------------------------------------------------------------------------- #
 # ---------------------------------------------- Route Functions ---------------------------------------------- #
-@app.route('/api/verify_user', methods=['GET'])
+
+
+@app.route('/api/status/server', methods=['GET'])
 @jwt_required()
-def VerifyUser():
-    current_user = get_jwt_identity()
-    return jsonify(logged_in_as=current_user), 200
-
-
-@app.route('/api/server', methods=['GET'])
 def ServerStatus():
     return ServerRequest('status')
 
 
-@app.route('/api/status', methods=['GET'])
+@app.route('/api/status/api', methods=['GET'])
+@jwt_required()
 def ApiStatus():
     return http_200('API is Online!')
 
 
-@app.route('/api/register', methods=['POST'])
+@app.route('/api/users/register', methods=['POST'])
 def Register():
-    def ValidatePassword(password):
-        # Minimum 8 characters, at least one uppercase, one lowercase, one digit, one special character
-        pattern = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()[\]{}<>.,;:|~`_+=-]).{8,}$'
-        return bool(re.match(pattern, password))
-    
     data = request.get_json()
     username = data.get("username")
     email = data.get("email")
@@ -136,7 +156,7 @@ def Register():
         return http_400("Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.")
 
     # Check if user already exists
-    users_ref = current_app.db.collection('Users')
+    users_ref = current_app.db.collection(USERS)
     existing_users = list(users_ref.where(filter=FieldFilter('username', '==', username)).limit(1).stream())
     if existing_users:
         return http_409("Username already exists.")
@@ -154,7 +174,7 @@ def Register():
     return http_201("User registered successfully.")
 
 
-@app.route('/api/login', methods=['POST'])
+@app.route('/api/users/login', methods=['GET'])
 def Login():
     data = request.get_json()
     username = data.get("username")
@@ -164,7 +184,7 @@ def Login():
         return http_401("Username and password required.")
 
     # Query Firestore for user document
-    users_ref = current_app.db.collection('Users')
+    users_ref = current_app.db.collection(USERS)
     user_docs = users_ref.where(filter=FieldFilter('username', '==', username)).limit(1).stream()
     user_doc = next(user_docs, None)
 
@@ -186,15 +206,195 @@ def Login():
     ), 200
 
 
-@app.route('/api/refresh', methods=['POST'])
+@app.route('/api/users/refresh-token', methods=['POST'])
 @jwt_required(refresh=True)
-def Refresh():
-    current_user = get_jwt_identity()
-    new_access_token = create_access_token(identity=current_user, fresh=False)
-    return jsonify(access_token=new_access_token), 200
+def RefreshToken() -> Tuple[Dict[str, Any], int]:
+    """
+    Refresh the access token for the current user.
+    
+    This endpoint:
+    1. Validates the refresh token
+    2. Checks if the token is blacklisted
+    3. Verifies the user still exists
+    4. Creates a new access token
+    
+    Returns:
+        Tuple[Dict[str, Any], int]: JSON response with new access token and status code
+        
+    Raises:
+        HTTPException: If token is invalid, expired, or user not found
+    """
+    try:
+        jwt_data = get_jwt()
+        token_jti = jwt_data["jti"]
+        
+        if token_jti in token_blacklist:
+            logger.warning(
+                "Blacklisted refresh token attempted",
+                extra={
+                    'token_jti': token_jti,
+                    'ip': request.remote_addr,
+                    'user_agent': request.user_agent.string
+                }
+            )
+            return http_401("Token has been revoked")
+        
+        current_user = get_jwt_identity()
+        users_ref = current_app.db.collection(USERS)
+        user_doc = users_ref.document(current_user).get()
+        
+        if not user_doc.exists:
+            logger.warning(
+                "Refresh attempted for non-existent user",
+                extra={
+                    'user_id': current_user,
+                    'ip': request.remote_addr,
+                    'user_agent': request.user_agent.string
+                }
+            )
+            return http_401("User no longer exists")
+        
+        new_access_token = create_access_token(identity=current_user, fresh=False)
+        token_blacklist.add(token_jti)
+        
+        logger.info(
+            "Successfully refreshed token",
+            extra={
+                'user_id': current_user,
+                'ip': request.remote_addr,
+                'user_agent': request.user_agent.string
+            }
+        )
+        return jsonify(access_token=new_access_token), 200
+        
+    except Exception as e:
+        logger.error(
+            "Error during token refresh",
+            extra={
+                'error': str(e),
+                'ip': request.remote_addr,
+                'user_agent': request.user_agent.string
+            }
+        )
+        return http_401("Invalid refresh token")
+
+
+@app.route('/api/users/profile', methods=['PUT', 'PATCH'])
+@jwt_required()
+def UpdateProfile() -> Tuple[Dict[str, Any], int]:
+    """
+    Update the profile of the currently logged-in user.
+    Allows optional updates to email, name, and password.
+    Validates that the email is not already in use by another user if email is being updated.
+    
+    JSON Structure:
+    {
+        "email": "newemail@example.com",    // Optional: New email address
+        "username": "NewUsername",          // Optional: New username
+        "password": "NewP@ssw0rd"           // Optional: New password (must meet requirements)
+    }
+    
+    Note: All fields are optional. Only provided fields will be updated.
+    Password requirements:
+    - Minimum 8 characters
+    - At least one uppercase letter
+    - At least one lowercase letter
+    - At least one number
+    - At least one special character
+    
+    Returns:
+        Tuple[Dict[str, Any], int]: Response with status code
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        if not data:
+            logger.warning("Update profile attempted with empty data", extra={'user_id': current_user_id})
+            return http_400("No update data provided")
+
+        # Get current user data
+        users_ref = current_app.db.collection(USERS)
+        current_user = users_ref.document(current_user_id).get()
+        
+        if not current_user.exists:
+            logger.error("User not found during profile update", extra={'user_id': current_user_id})
+            return http_404("User not found")
+
+        current_data = current_user.to_dict()
+        update_data = {}
+
+        # Handle email update if provided
+        if 'email' in data:
+            new_email = data['email']
+            if new_email != current_data.get('email'):
+                # Check if email is already used by another user
+                email_query = users_ref.where(filter=FieldFilter('email', '==', new_email)).limit(1).stream()
+                existing_user = next(email_query, None)
+                
+                if existing_user and existing_user.id != current_user_id:
+                    logger.warning(
+                        "Email already in use",
+                        extra={
+                            'user_id': current_user_id,
+                            'attempted_email': new_email,
+                            'existing_user_id': existing_user.id
+                        }
+                    )
+                    return http_409("Email is already in use")
+                update_data['email'] = new_email
+
+        # Handle username update if provided
+        if 'username' in data:
+            new_username = data['username']
+            if new_username != current_data.get('username'):
+                # Check if username is already used by another user
+                username_query = users_ref.where(filter=FieldFilter('username', '==', new_username)).limit(1).stream()
+                existing_user = next(username_query, None)
+                
+                if existing_user and existing_user.id != current_user_id:
+                    logger.warning(
+                        "Username already in use",
+                        extra={
+                            'user_id': current_user_id,
+                            'attempted_username': new_username,
+                            'existing_user_id': existing_user.id
+                        }
+                    )
+                    return http_409("Username is already in use")
+                update_data['username'] = new_username
+
+        # Handle password update if provided
+        if 'password' in data:
+            if not ValidatePassword(data['password']):
+                logger.warning("Invalid password format during profile update", extra={'user_id': current_user_id})
+                return http_400("Password must be at least 8 characters and include uppercase, lowercase, number, and symbol")
+            update_data['password'] = bcrypt.hashpw(data['password'].encode(), bcrypt.gensalt()).decode()
+
+        if not update_data:
+            logger.warning("No valid updates provided", extra={'user_id': current_user_id})
+            return http_400("No valid updates provided")
+
+        # Update the user's profile
+        return DatabaseRequest(
+            collection_name=USERS,
+            data=update_data,
+            doc_id=current_user_id
+        )
+
+    except Exception as e:
+        logger.error(
+            "Error updating profile",
+            extra={
+                'error': str(e),
+                'user_id': current_user_id
+            }
+        )
+        return http_500("Failed to update profile")
 
 
 @app.route('/api/consultants', methods=['POST', 'GET', 'PUT'])
+@jwt_required()
 @ValidateModel(Consultant)
 def Consultants():
     doc_id = request.args.get('id')
@@ -221,6 +421,15 @@ def Consultants():
 
 @app.route('/api/calendar', methods=['POST', 'GET'])
 def BusinessCalendar():
+    """
+    {
+        "availability": {
+            "0": ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12"],
+            "1": ["2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12"],
+            "2": ["2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12"]
+        }
+    }
+    """
     if request.method == 'POST':
         data = request.get_json()
         availability = data.get("availability")
@@ -427,6 +636,7 @@ def AgentManagement():
 @app.route('/api/agent/command', methods=['POST'])
 def AgentCommand():
         return ServerRequest(command='agent_command', params=request.get_json())
-
+# ------------------------------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------------------------------- #
 
 app.run(host='0.0.0.0', port=5000, threaded=True)
