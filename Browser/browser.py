@@ -32,7 +32,8 @@ class Browser:
                         '--disable-infobars'
                     ]
                 )
-                self.context = self.browser_instance.new_context(viewport={"width": 1920, "height": 1080})
+                self.context = self.browser_instance.new_context(viewport={"width": 1920, "height": 1080}, 
+                                                                 ignore_https_errors=True)
                 self.page = self.context.new_page()
                 self.page.set_default_timeout(30000)  # 30 seconds timeout
             except Exception as e:
