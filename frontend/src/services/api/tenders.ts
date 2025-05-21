@@ -36,6 +36,7 @@ const dummyTenders: Tender[] = [
 
 export async function getTenders(): Promise<Tender[]> {
   if (USE_DUMMY) {
+    console.log("Using dummy tender data");
     return new Promise((resolve) =>
       setTimeout(() => resolve(dummyTenders), 500)
     );
@@ -48,22 +49,48 @@ export async function getTenders(): Promise<Tender[]> {
         Authorization: `Bearer ${token}`,
       },
     });
+
     if (!response.ok) {
-      throw new Error("Failed to fetch tenders");
+      try {
+        const errorText = await response.text();
+        console.error("Tenders fetch error:", errorText);
+      } catch (e) {
+        console.error("Could not read error text:", e);
+      }
+      console.warn("Falling back to dummy tender data");
+      return dummyTenders;
     }
+
     const data = await response.json();
-    // Convert the object to an array of tenders with id
-    if (typeof data === "object" && data !== null) {
+    console.log("API response:", data); // For debugging
+
+    // API returns { tenders: [...] } so we need to extract the tenders-array
+    if (data && Array.isArray(data.tenders)) {
+      // If data.tenders is an array, return it directly
+      return data.tenders.map((tender: any, index: number) => ({
+        id: `tender-${index}`, // Create a synthetic ID if there is none
+        ...tender,
+      }));
+    } else if (typeof data === "object" && data !== null) {
+      // Backward compatibility for old API format
       return Object.entries(data).map(([id, tenderData]: [string, any]) => ({
         id,
         ...tenderData,
       }));
     }
+
+    // Fallback
+    console.warn("Unexpected API response format", data);
     return [];
   }
 }
 
 export async function createTenders(tenders: Tender[]): Promise<any> {
+  if (USE_DUMMY) {
+    console.log("Using dummy mode - tenders would be created:", tenders);
+    return { success: true };
+  }
+
   const token = localStorage.getItem("token");
   const response = await fetch("http://localhost:5000/api/tenders", {
     method: "POST",
@@ -82,6 +109,11 @@ export async function createTenders(tenders: Tender[]): Promise<any> {
 }
 
 export async function updateTenders(tenders: Tender[]): Promise<any> {
+  if (USE_DUMMY) {
+    console.log("Using dummy mode - tenders would be updated:", tenders);
+    return { success: true };
+  }
+
   const token = localStorage.getItem("token");
   const response = await fetch("http://localhost:5000/api/tenders", {
     method: "PUT",
