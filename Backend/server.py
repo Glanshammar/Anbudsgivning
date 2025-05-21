@@ -1,6 +1,9 @@
 import os
 import sys
 import time
+import asyncio
+import zmq.asyncio
+from contextlib import asynccontextmanager
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(current_dir)
@@ -21,6 +24,7 @@ from dotenv import load_dotenv
 load_dotenv()
 cred_file = os.path.join(root_dir, 'credentials.json')
 master_agent = None
+db = None  # Initialize db as global variable
 
 
 class OpStatus(IntEnum):
@@ -41,6 +45,7 @@ def MasterAgent():
 
 
 def GetCollection(collection_name):
+    global db
     collections = [collection.id for collection in db.collections()]
     if collection_name in collections:
         return OpStatus.SUCCESS
@@ -48,6 +53,7 @@ def GetCollection(collection_name):
 
 
 def CreateDocument(params):
+    global db
     collection_name = params.get('collection_name')
     document_data = params.get('document_data')
     document_name = params.get('document_id')
@@ -77,6 +83,7 @@ def CreateDocument(params):
 
 
 def ReadDocument(params):
+    global db
     collection_name = params.get('collection_name')
     document_id = params.get('document_id')
     if not document_id or document_id.strip() == "": # Multiple docs
@@ -99,6 +106,7 @@ def ReadDocument(params):
 
 
 def GetDocuments(collection_name):
+    global db
     try:
         collection_ref = db.collection(collection_name)
         docs = list(collection_ref.stream())
@@ -111,6 +119,7 @@ def GetDocuments(collection_name):
 
 
 def UpdateDocument(params):
+    global db
     collection_name = params.get('collection_name')
     document_id = params.get('document_id')
     document_data = params.get('document_data')
@@ -230,7 +239,7 @@ def AgentCommand(params):
     try:
         agent_id = params.get('agent_id')
         command = params.get('command')
-        return master_agent.SendCommand(agent_id, command)
+        return master_agent.SendAgentCommand(agent_id, command)
     except Exception as e:
         return {
             'status': 'error',
@@ -238,10 +247,15 @@ def AgentCommand(params):
         }, 500
 
 
-def ProcessCommand(command, params):
+async def ProcessCommand(command, params):
+    """Process commands asynchronously"""
     func = operations.get(command.lower())
     if func:
-        return func(params)
+        # If the function is async, await it
+        if asyncio.iscoroutinefunction(func):
+            return await func(params)
+        # Otherwise, run it in a thread pool to avoid blocking
+        return await asyncio.to_thread(func, params)
     else:
         return f'Error: Unknown command "{command}".'
 
@@ -259,7 +273,9 @@ operations = {
 }
 
 
-if __name__ == '__main__':
+async def Main():
+    global db
+    
     if not os.path.exists(cred_file):
         print(f'Please place the {cred_file} in the same directory as this script.')
         cred_path = input('Enter the full path to the credentials file: ').strip()
@@ -269,7 +285,7 @@ if __name__ == '__main__':
             print(f'✅ Credentials file copied to {cred_file}')
         else:
             print(f'⚠️ File not found at {cred_path}. Please check the path and try again.')
-            exit(1)
+            return
     else:
         print('✅ Credentials found.')
 
@@ -278,32 +294,44 @@ if __name__ == '__main__':
         firebase_admin.initialize_app(cred)
 
     db = firestore.client()
-    context = zmq.Context()
+    context = zmq.asyncio.Context()
     
     server = context.socket(zmq.REP)
     server.bind('tcp://0.0.0.0:5001')
     print('ZeroMQ server is running on port 5001...')
 
-    while True:
-        try:
-            message = server.recv_json()
-            command = message.get('command')
-            params = message.get('params', {})
+    try:
+        while True:
+            try:
+                message = await server.recv_json()
+                command = message.get('command')
+                params = message.get('params', {})
 
-            if command == 'exit':
-                break
+                if command == 'exit':
+                    break
 
-            response = ProcessCommand(command, params)
-            if isinstance(response, tuple) and len(response) == 2:
-                response_data = {
-                    'data': response[0],
-                    'status_code': response[1]
-                }
-            else:
-                response_data = {
-                    'data': response,
-                    'status_code': 200
-                }
-            server.send_json(response_data)
-        except (json.JSONDecodeError, KeyError) as e:
-            server.send_json({'error': f'Invalid request: {str(e)}'})
+                response = await ProcessCommand(command, params)
+                if isinstance(response, tuple) and len(response) == 2:
+                    response_data = {
+                        'data': response[0],
+                        'status_code': response[1]
+                    }
+                else:
+                    response_data = {
+                        'data': response,
+                        'status_code': 200
+                    }
+                await server.send_json(response_data)
+            except (json.JSONDecodeError, KeyError) as e:
+                await server.send_json({'error': f'Invalid request: {str(e)}'})
+            except Exception as e:
+                await server.send_json({'error': f'Server error: {str(e)}'})
+    except KeyboardInterrupt:
+        print("\nShutting down server...")
+    finally:
+        server.close()
+        context.term()
+
+
+if __name__ == '__main__':
+    asyncio.run(Main())
