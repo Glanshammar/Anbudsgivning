@@ -1,6 +1,4 @@
 export interface Tender {
-  id?: string;
-  parentId?: string;
   project_name: string;
   branch: string;
   deadline: string;
@@ -62,6 +60,7 @@ export async function getTenders(): Promise<Tender[]> {
     }
 
     const data = await response.json();
+<<<<<<< HEAD
     console.log("API response:", data); // For debugging
 
     // API returns { tenders: [...] } so we need to extract the tenders-array
@@ -77,6 +76,10 @@ export async function getTenders(): Promise<Tender[]> {
         id,
         ...tenderData,
       }));
+=======
+    if (data && data.tenders && Array.isArray(data.tenders)) {
+      return data.tenders;
+>>>>>>> development
     }
 
     // Fallback

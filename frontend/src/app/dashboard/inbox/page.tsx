@@ -157,9 +157,9 @@ export default function InboxPage() {
     }
   };
 
-  const handleRemoveTender = (tenderId: string) => {
+  const handleRemoveTender = (tender: Tender) => {
     setTenders((prevTenders) =>
-      prevTenders.filter((tender) => tender.id !== tenderId)
+      prevTenders.filter((t) => t.project_name !== tender.project_name)
     );
   };
 
@@ -419,7 +419,7 @@ export default function InboxPage() {
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {tenders.map((tender, index) => (
-                        <tr key={tender.id || index}>
+                        <tr key={`${tender.project_name}-${index}`}>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm font-medium text-gray-900">
                               {tender.project_name}
@@ -437,9 +437,7 @@ export default function InboxPage() {
                           </td>
                           <td className="px-6 py-4 flex gap-2 text-sm font-medium">
                             <Button
-                              onClick={() =>
-                                handleRemoveTender(tender.id || "")
-                              }
+                              onClick={() => handleRemoveTender(tender)}
                               size="sm"
                               variant="destructive"
                             >
@@ -447,7 +445,7 @@ export default function InboxPage() {
                             </Button>
                             <Button
                               onClick={() =>
-                                handleSendToEvaluation(tender.id || "")
+                                handleSendToEvaluation(tender.project_name)
                               }
                               size="sm"
                             >
