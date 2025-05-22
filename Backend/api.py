@@ -527,7 +527,9 @@ async def Consultants():
     """
     try:
         consultant_id = request.args.get('id') if request.method == 'GET' else request.json.get('id')
-        
+
+        if not consultant_id:
+            return http_400("Consultant ID is required")
         if request.method == 'GET':
             logger.info(f"Getting consultant: {consultant_id}", extra={'consultant_id': consultant_id})
             return await DatabaseRequest(CONSULTANTS, doc_id=consultant_id)
@@ -715,13 +717,13 @@ async def TenderPortals():
         ]
     }
     """
+    username = GetUsername()
+
     if request.method == 'GET':
         logger.info(f"Getting portals for user: {username}", extra={'user_id': username})
         return await DatabaseRequest(collection_name=COMPANY_DATA,
                              data=None,
                              doc_id='TenderPortals')
-
-    username = GetUsername()
 
     portals_data = request.get_json().get('portals', [])
     validated_portals = []
