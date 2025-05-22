@@ -27,6 +27,12 @@ def CreateApp(config=None):
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = datetime.timedelta(minutes=1)  # Access token expires in 1 minute
     app.config["JWT_REFRESH_TOKEN_EXPIRES"] = datetime.timedelta(hours=12)  # Refresh token expires in 12 hours
     app.config["JWT_REFRESH_TOKEN_EXPIRES_INACTIVE"] = datetime.timedelta(minutes=15)  # Refresh token expires after 15 minutes of inactivity
+    app.config["JWT_TOKEN_LOCATION"] = ["cookies"]
+    app.config["JWT_ACCESS_COOKIE_NAME"] = "access_token"
+    app.config["JWT_REFRESH_COOKIE_NAME"] = "refresh_token"
+    app.config["JWT_COOKIE_SECURE"] = True
+    app.config["JWT_COOKIE_SAMESITE"] = "Strict"  # Or "Lax" if you need cross-site POSTs
+    app.config["JWT_COOKIE_CSRF_PROTECT"] = True  # Optional, for extra CSRF protection
 
     app.db = InitDB(f'{os.path.dirname(os.path.dirname(__file__))}/credentials.json')
     from flask_jwt_extended import JWTManager
