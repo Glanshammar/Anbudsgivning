@@ -24,8 +24,9 @@ def CreateApp(config=None):
         app.config.from_object(config)
     
     app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
-    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = datetime.timedelta(minutes=30)
-    app.config["JWT_REFRESH_TOKEN_EXPIRES"] = datetime.timedelta(days=7)
+    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = datetime.timedelta(minutes=1)  # Access token expires in 1 minute
+    app.config["JWT_REFRESH_TOKEN_EXPIRES"] = datetime.timedelta(hours=12)  # Refresh token expires in 12 hours
+    app.config["JWT_REFRESH_TOKEN_EXPIRES_INACTIVE"] = datetime.timedelta(minutes=15)  # Refresh token expires after 15 minutes of inactivity
 
     app.db = InitDB(f'{os.path.dirname(os.path.dirname(__file__))}/credentials.json')
     from flask_jwt_extended import JWTManager
