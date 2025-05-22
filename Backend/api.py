@@ -162,7 +162,8 @@ CORS(app, resources={
     r"/*": {
         "origins": ["http://localhost:3000"],
         "methods": ["GET", "POST", "PUT", "DELETE"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "allow_headers": ["Content-Type"],
+        "supports_credentials": True  # Important for cookies
     }
 })
 
@@ -450,10 +451,10 @@ async def Login() -> Tuple[Dict[str, Any], int]:
         logger.error(f"Error blacklisting existing tokens: {str(e)}", extra={'error': str(e)})
 
     logger.info(f"User logged in: {username}", extra={'user_id': user_doc.id})
-    return jsonify(
-        access_token=access_token,
-        refresh_token=refresh_token
-    ), 200
+    response = jsonify({"msg": "Login successful"})
+    response.set_cookie("access_token", access_token, httponly=True, secure=True, samesite="Strict")
+    response.set_cookie("refresh_token", refresh_token, httponly=True, secure=True, samesite="Strict")
+    return response, 200
 
 
 @app.route('/api/user/logout', methods=['POST'])
@@ -468,7 +469,10 @@ async def Logout() -> Tuple[Dict[str, Any], int]:
         
         token_blacklist.add(token_jti, expires_at)
         logger.info(f"User logged out: {username}", extra={'username': username})
-        return jsonify({"message": "Successfully logged out"}), 200
+        response = jsonify({"msg": "Successfully logged out"})
+        response.delete_cookie("access_token")
+        response.delete_cookie("refresh_token")
+        return response, 200
     except Exception as e:
         logger.error(f"Logout failed: {str(e)}", extra={'error': str(e)})
         return jsonify({"error": str(e)}), 500
@@ -519,10 +523,10 @@ async def RefreshToken() -> Tuple[Dict[str, Any], int]:
                 'user_agent': request.user_agent.string
             }
         )
-        return jsonify({
-            'access_token': new_access_token,
-            'refresh_token': new_refresh_token
-        }), 200
+        response = jsonify({"msg": "Token refreshed"})
+        response.set_cookie("access_token", new_access_token, httponly=True, secure=True, samesite="Strict")
+        response.set_cookie("refresh_token", new_refresh_token, httponly=True, secure=True, samesite="Strict")
+        return response, 200
     except Exception as e:
         logger.error(
             "Error during token refresh",
