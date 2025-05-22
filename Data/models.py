@@ -39,13 +39,9 @@ class TenderPortal:
 
 
 class CompanyProfile:
-    def __init__(self, name:str, country:str, industry:str):
-        if not isinstance(name, str):
-            raise ValueError("Name must be a string")
-        if not isinstance(country, str):
-            raise ValueError("Country must be a string")
-        if not isinstance(industry, str):
-            raise ValueError("Industry must be a string")
+    def __init__(self, name: str, country: str, industry: str):
+        if not all(isinstance(var, str) for var in [name, country, industry]):
+            raise ValueError("Name, country, and industry must all be strings")
 
         self.name = name
         self.country = country
