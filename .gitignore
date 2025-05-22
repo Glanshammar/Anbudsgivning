@@ -144,4 +144,8 @@ crawl_results/
 portals.json
 cache/
 documents/
+feature/agents
 tender_data/
+
+.cursor
+development
