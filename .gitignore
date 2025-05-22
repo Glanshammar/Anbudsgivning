@@ -145,3 +145,4 @@ portals.json
 cache/
 documents/
 tender_data/
+.cursor
