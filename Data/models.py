@@ -1,11 +1,12 @@
 from faker import Faker
 import random
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timedelta, date
 import userpaths
 import os
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
+import re
 
 fake = Faker()
 Faker.seed(42)
@@ -76,18 +77,36 @@ class Consultant:
 
 
 class TenderDocument:
-    def __init__(self, qualifications: List[int], workforce: int, start_date: datetime, end_date: datetime):
-        if not all(q in Expertise.values() for q in qualifications):
-            raise ValueError('Invalid qualifications')
-        self.qualifications = qualifications
-        self.workforce = workforce
+    def __init__(self, project_name: str, branch: str, deadline: datetime, start_date: datetime, end_date: datetime):
+        if not isinstance(branch, str):
+            raise ValueError('Invalid branch')
+        if not isinstance(deadline, datetime):
+            raise ValueError('Invalid deadline')
+        if not isinstance(end_date, datetime):
+            raise ValueError('Invalid end_date')
+        if not isinstance(project_name, str):
+            raise ValueError('Invalid project_name')
+        if not isinstance(start_date, datetime):
+            raise ValueError('Invalid start_date')
+        self.branch = branch
+        self.deadline = deadline
         self.start_date = start_date
         self.end_date = end_date
+        self.project_name = project_name
 
     def __repr__(self):
-        return f'TenderDocument(company_name={self.company_name}, start_date={self.start_date}, end_date={self.end_date})'
+        return f'TenderDocument(project_name={self.project_name}, branch={self.branch}, deadline={self.deadline}, start_date={self.start_date}, end_date={self.end_date})'
         
-        
+    def to_dict(self):
+        return {
+            'project_name': self.project_name,
+            'branch': self.branch,
+            'deadline': self.deadline.strftime("%Y-%m-%d"),
+            'start_date': self.start_date.strftime("%Y-%m-%d"),
+            'end_date': self.end_date.strftime("%Y-%m-%d"),
+        }
+
+
 class Calendar:
     VALID_MONTH_FORMATS = [
         "%Y-%m",    # ISO Standard (2025-04)
@@ -171,4 +190,59 @@ class Calendar:
             return True
         except ValueError:
             return False
+
+
+class UserProfile:
+    def __init__(
+        self,
+        username: Optional[str] = None,
+        email: Optional[str] = None,
+        password: Optional[str] = None
+    ):
+        # Validate that at least one field is provided
+        if all(field is None for field in [username, email, password]):
+            raise ValueError("At least one field (username, email, or password) must be provided")
+
+        # Validate username if provided
+        if username is not None:
+            if not isinstance(username, str):
+                raise ValueError("Username must be a string")
+            if len(username) < 3:
+                raise ValueError("Username must be at least 3 characters long")
+            if not username.isalnum():
+                raise ValueError("Username must contain only alphanumeric characters")
+
+        # Validate email if provided
+        if email is not None:
+            if not isinstance(email, str):
+                raise ValueError("Email must be a string")
+            email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(email_pattern, email):
+                raise ValueError("Invalid email format")
+
+        # Validate password if provided
+        if password is not None:
+            if not isinstance(password, str):
+                raise ValueError("Password must be a string")
+            # Minimum 8 characters, at least one uppercase, one lowercase, one digit, one special character
+            password_pattern = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()[\]{}<>.,;:|~`_+=-]).{8,}$'
+            if not re.match(password_pattern, password):
+                raise ValueError("Password must be at least 8 characters and include uppercase, lowercase, number, and symbol")
+
+        self.username = username
+        self.email = email
+        self.password = password
+
+    def to_dict(self) -> dict:
+        """Convert the profile to a dictionary, excluding None values"""
+        return {
+            k: v for k, v in {
+                'username': self.username,
+                'email': self.email,
+                'password': self.password
+            }.items() if v is not None
+        }
+
+    def __str__(self) -> str:
+        return f"UserProfile(username={self.username}, email={self.email})"
 
