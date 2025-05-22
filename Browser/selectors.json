@@ -1,0 +1,10 @@
+{
+    "ted": {
+        "type": "role",
+        "selector": "next page"
+    },
+    "tendium": {
+        "type": "id",
+        "selector": "btn-next"
+    }
+}

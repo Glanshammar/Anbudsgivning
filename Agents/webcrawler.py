@@ -11,7 +11,7 @@ from enum import Enum
 from Logger import GetLogger
 from multiprocessing import Process
 from .agents import Agent, COMMAND_PORT, STATUS_PORT, AgentStatus
-from Backend.browser import Browser
+from Browser.browser import Browser
 import requests
 import json
 from datetime import datetime, timedelta
@@ -28,6 +28,13 @@ class WebCrawler(Agent):
         os.makedirs(self.results_dir, exist_ok=True)
         os.makedirs(self.cache_dir, exist_ok=True)
         self.logger.debug(f"Results directory: {self.results_dir}", extra={'agent_id': self.agent_id})
+        
+        # Test mode limits (configurable via command)
+        self.test_mode = False
+        self.max_portal_links = 2     # Max number of tender links to extract from each portal
+        self.max_tender_pages = 3     # Max number of tender pages to process
+        self.max_document_links = 2   # Max number of document links to extract per tender
+        self.max_documents = 3        # Max number of documents to download and process
 
     def Initialize(self):
         self.logger.info("Initializing crawler data", extra={'agent_id': self.agent_id})
@@ -121,145 +128,332 @@ class WebCrawler(Agent):
             self.send_status("Falling back to portals.json...")
             return self.ReadPortalsFromFile()
 
-    def Crawl(self):
-        from Data.ai import GetTenderLinksFromPortal, TenderInfo, FindDocumentLinks, DownloadDocument
+    def GetTenderLinks(self, browser):
+        from Data.ai import GetTenderLinksFromPortal
+        all_tender_links = []
+        for portal in self.portals_to_crawl:
+            portal_url = portal['url']
+            self.logger.info(f"Processing portal: {portal_url}", extra={'agent_id': self.agent_id})
+            self.send_status(f"Crawling portal: {portal_url}")
+            try:
+                tender_links = GetTenderLinksFromPortal(browser, portal_url)
+                
+                # Apply test mode limit if enabled
+                if self.test_mode and len(tender_links) > self.max_portal_links:
+                    self.logger.info(f"Test mode: Limiting to {self.max_portal_links} links from portal", 
+                                   extra={'agent_id': self.agent_id})
+                    tender_links = tender_links[:self.max_portal_links]
+                
+                all_tender_links.extend(tender_links)
+                self.logger.info(f"Found {len(tender_links)} tenders in {portal_url}", extra={'agent_id': self.agent_id})
+                self.send_status(f"Found {len(tender_links)} tenders in {portal_url}")
+            except Exception as e:
+                error_msg = f"Error processing portal {portal_url}: {str(e)}"
+                self.logger.error(error_msg, extra={'agent_id': self.agent_id})
+                self.send_status(error_msg)
+                continue
+        return all_tender_links
+
+    def FindDocumentLinksForTenders(self, browser, all_tender_links):
+        from Data.ai import FindDocumentLinks
+        all_document_links = []
+        
+        # Apply test mode limit if enabled
+        links_to_process = all_tender_links
+        if self.test_mode and len(all_tender_links) > self.max_tender_pages:
+            self.logger.info(f"Test mode: Limiting document search to {self.max_tender_pages} tenders", 
+                           extra={'agent_id': self.agent_id})
+            links_to_process = all_tender_links[:self.max_tender_pages]
+        
+        for tender_url in links_to_process:
+            try:
+                self.logger.info(f"Finding documents for tender: {tender_url}", extra={'agent_id': self.agent_id})
+                self.send_status(f"Finding documents for tender: {tender_url}")
+                document_links = FindDocumentLinks(browser, tender_url)
+                
+                # Apply test mode limit if enabled
+                if self.test_mode and len(document_links) > self.max_document_links:
+                    self.logger.info(f"Test mode: Limiting to {self.max_document_links} document links per tender", 
+                                   extra={'agent_id': self.agent_id})
+                    document_links = document_links[:self.max_document_links]
+                
+                all_document_links.extend(document_links)
+                self.logger.info(f"Found {len(document_links)} documents for tender {tender_url}", extra={'agent_id': self.agent_id})
+                self.send_status(f"Found {len(document_links)} documents for tender {tender_url}")
+            except Exception as e:
+                error_msg = f"Error finding documents for tender {tender_url}: {str(e)}"
+                self.logger.error(error_msg, extra={'agent_id': self.agent_id})
+                self.send_status(error_msg)
+                continue
+        return all_document_links
+
+    def DownloadDocuments(self, browser, all_document_links: list[str]):
+        from Data.ai import DownloadDocument
+        downloaded_documents = []
+        
+        # Apply test mode limit if enabled
+        links_to_process = all_document_links
+        if self.test_mode and len(all_document_links) > self.max_documents:
+            self.logger.info(f"Test mode: Limiting to {self.max_documents} documents to download", 
+                           extra={'agent_id': self.agent_id})
+            links_to_process = all_document_links[:self.max_documents]
+        
+        for doc_link in links_to_process:
+            try:
+                self.logger.info(f"Downloading document: {doc_link}", extra={'agent_id': self.agent_id})
+                self.send_status(f"Downloading document: {doc_link}")
+                doc_path = DownloadDocument(browser, doc_link, self.documents_dir)
+                if doc_path:
+                    downloaded_documents.append({
+                        'url': doc_link,
+                        'local_path': doc_path
+                    })
+                    self.logger.info(f"Successfully downloaded document to: {doc_path}", extra={'agent_id': self.agent_id})
+                    self.send_status(f"Successfully downloaded document to: {doc_path}")
+            except Exception as e:
+                error_msg = f"Error downloading document {doc_link}: {str(e)}"
+                self.logger.error(error_msg, extra={'agent_id': self.agent_id})
+                self.send_status(error_msg)
+                continue
+        return downloaded_documents
+
+    def ProcessDownloadedDocuments(self, browser, downloaded_documents):
+        from Data.ai import TenderInfo
+        all_tender_info = []
+        for doc in downloaded_documents:
+            try:
+                self.logger.info(f"Processing document: {doc['local_path']}", extra={'agent_id': self.agent_id})
+                self.send_status(f"Processing document: {doc['local_path']}")
+                tender_info = TenderInfo(browser, doc['local_path'], is_document=True)
+                try:
+                    parsed_info = json.loads(tender_info['info'])
+                    tender_info['info'] = parsed_info
+                except json.JSONDecodeError as e:
+                    self.logger.error(f"Failed to parse tender info JSON: {str(e)}", extra={'agent_id': self.agent_id})
+                    self.send_status(f"Warning: Could not parse tender info as JSON for {doc['local_path']}")
+                all_tender_info.append(tender_info)
+                self.logger.info(f"Successfully processed document: {doc['local_path']}", extra={'agent_id': self.agent_id})
+                self.send_status(f"Successfully processed document: {doc['local_path']}")
+            except Exception as e:
+                error_msg = f"Error processing document {doc['local_path']}: {str(e)}"
+                self.logger.error(error_msg, extra={'agent_id': self.agent_id})
+                self.send_status(error_msg)
+                continue
+        return all_tender_info
+
+    def ProcessTenderPages(self, browser, tender_links):
+        from Data.ai import TenderInfo
+        """Process tender pages by visiting each page and extracting tender information."""
+        processed_tenders = []
+        
+        # Apply test mode limit if enabled
+        links_to_process = tender_links
+        if self.test_mode and len(tender_links) > self.max_tender_pages:
+            self.logger.info(f"Test mode: Limiting to {self.max_tender_pages} tender pages", 
+                           extra={'agent_id': self.agent_id})
+            links_to_process = tender_links[:self.max_tender_pages]
+        
+        for tender_url in links_to_process:
+            try:
+                self.logger.info(f"Processing tender page: {tender_url}", extra={'agent_id': self.agent_id})
+                self.send_status(f"Processing tender page: {tender_url}")
+                
+                # Run TenderInfo on the webpage (is_document=False)
+                tender_info = TenderInfo(browser, tender_url, is_document=False)
+                
+                # Try to parse the JSON response
+                try:
+                    parsed_info = json.loads(tender_info['info'])
+                    tender_info['info'] = parsed_info
+                except json.JSONDecodeError as e:
+                    self.logger.error(f"Failed to parse tender info JSON: {str(e)}", extra={'agent_id': self.agent_id})
+                    self.send_status(f"Warning: Could not parse tender info as JSON for {tender_url}")
+                
+                processed_tenders.append(tender_info)
+                
+                self.logger.info(f"Successfully processed tender page: {tender_url}", 
+                               extra={'agent_id': self.agent_id})
+                self.send_status(f"Successfully processed tender page: {tender_url}")
+            except Exception as e:
+                error_msg = f"Error processing tender page {tender_url}: {str(e)}"
+                self.logger.error(error_msg, extra={'agent_id': self.agent_id})
+                self.send_status(error_msg)
+                continue
+        
+        return processed_tenders
+
+    def Crawl(self, max_tenders=None, max_documents=None):
+        from Data.ai import TenderInfo, FindDocumentLinks, DownloadDocument
+        """
+        Crawl tender portals and process findings.
+        
+        Args:
+            max_tenders: Maximum number of tender pages to process (None for unlimited)
+            max_documents: Maximum number of documents to process (None for unlimited)
+        """
         try:
-            self.logger.info("Starting crawl operation", extra={'agent_id': self.agent_id})
-            self.send_status("Starting crawl operation")
+            self.logger.info(f"Starting crawl operation (max_tenders={max_tenders}, max_documents={max_documents})", 
+                           extra={'agent_id': self.agent_id})
+            self.send_status(f"Starting crawl operation with limits: tenders={max_tenders}, documents={max_documents}")
             
-            # Create a results file for this crawl session
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             results_file = os.path.join(self.results_dir, f'crawl_results_{timestamp}.json')
             tender_links_file = os.path.join(self.results_dir, f'tender_links_{timestamp}.txt')
-            
             self.logger.debug(f"Results will be saved to: {results_file}", extra={'agent_id': self.agent_id})
             
-            all_tender_links = []
-            all_tender_info = []
-            all_document_links = []
-            downloaded_documents = []
-
-            # Initialize a single browser instance for all operations
             browser = Browser()
             try:
-                # First phase: Get tender links from all portals
-                for portal in self.portals_to_crawl:
-                    portal_url = portal['url']
-                    self.logger.info(f"Processing portal: {portal_url}", extra={'agent_id': self.agent_id})
-                    self.send_status(f"Crawling portal: {portal_url}")
-                    
-                    try:
-                        tender_links = GetTenderLinksFromPortal(browser, portal_url)
-                        all_tender_links.extend(tender_links)
-                        self.logger.info(f"Found {len(tender_links)} tenders in {portal_url}", extra={'agent_id': self.agent_id})
-                        self.send_status(f"Found {len(tender_links)} tenders in {portal_url}")
-                    except Exception as e:
-                        error_msg = f"Error processing portal {portal_url}: {str(e)}"
-                        self.logger.error(error_msg, extra={'agent_id': self.agent_id})
-                        self.send_status(error_msg)
-                        continue
-
-                # Save tender links to file
+                # Get all tender links 
+                all_tender_links = self.GetTenderLinks(browser)
+                
+                # Apply tender limit if specified
+                if max_tenders is not None and len(all_tender_links) > max_tenders:
+                    self.logger.info(f"Limiting to {max_tenders} tender links (from {len(all_tender_links)})", 
+                                   extra={'agent_id': self.agent_id})
+                    all_tender_links = all_tender_links[:max_tenders]
+                
+                # Save all links to file
                 with open(tender_links_file, 'w', encoding='utf-8') as f:
                     for link in all_tender_links:
                         f.write(f"{link}\n")
-
-                # Second phase: Find document links for each tender
-                for tender_url in all_tender_links[:3]:
+                    
+                # Process tender pages
+                processed_tender_pages = []
+                for tender_url in all_tender_links:
                     try:
-                        self.logger.info(f"Finding documents for tender: {tender_url}", extra={'agent_id': self.agent_id})
-                        self.send_status(f"Finding documents for tender: {tender_url}")
-
-                        # Get document links
-                        document_links = FindDocumentLinks(browser, tender_url)
-                        all_document_links.extend(document_links)
-
-                        self.logger.info(f"Found {len(document_links)} documents for tender {tender_url}", 
-                                       extra={'agent_id': self.agent_id})
-                        self.send_status(f"Found {len(document_links)} documents for tender {tender_url}")
-
-                    except Exception as e:
-                        error_msg = f"Error finding documents for tender {tender_url}: {str(e)}"
-                        self.logger.error(error_msg, extra={'agent_id': self.agent_id})
-                        self.send_status(error_msg)
-                        continue
-
-                # Third phase: Download all documents
-                for doc_link in all_document_links:
-                    try:
-                        self.logger.info(f"Downloading document: {doc_link}", extra={'agent_id': self.agent_id})
-                        self.send_status(f"Downloading document: {doc_link}")
+                        self.logger.info(f"Processing tender page: {tender_url}", extra={'agent_id': self.agent_id})
+                        self.send_status(f"Processing tender page: {tender_url}")
                         
-                        doc_path = DownloadDocument(browser, doc_link, self.documents_dir)
-                        if doc_path:
-                            downloaded_documents.append({
-                                'url': doc_link,
-                                'local_path': doc_path
-                            })
-                            self.logger.info(f"Successfully downloaded document to: {doc_path}", 
-                                           extra={'agent_id': self.agent_id})
-                            self.send_status(f"Successfully downloaded document to: {doc_path}")
-                    except Exception as e:
-                        error_msg = f"Error downloading document {doc_link}: {str(e)}"
-                        self.logger.error(error_msg, extra={'agent_id': self.agent_id})
-                        self.send_status(error_msg)
-                        continue
-
-                # Fourth phase: Process downloaded documents
-                for doc in downloaded_documents:
-                    try:
-                        self.logger.info(f"Processing document: {doc['local_path']}", extra={'agent_id': self.agent_id})
-                        self.send_status(f"Processing document: {doc['local_path']}")
+                        # Run TenderInfo on the webpage
+                        tender_info = TenderInfo(browser, tender_url, is_document=False)
                         
-                        # Process the downloaded document instead of the tender page
-                        tender_info = TenderInfo(browser, doc['local_path'], is_document=True)
-                        
-                        # Parse the JSON response from the AI
+                        # Try to parse the JSON response
                         try:
                             parsed_info = json.loads(tender_info['info'])
                             tender_info['info'] = parsed_info
                         except json.JSONDecodeError as e:
-                            self.logger.error(f"Failed to parse tender info JSON: {str(e)}", extra={'agent_id': self.agent_id})
-                            self.send_status(f"Warning: Could not parse tender info as JSON for {doc['local_path']}")
+                            self.logger.error(f"Failed to parse tender info JSON: {str(e)}", 
+                                            extra={'agent_id': self.agent_id})
+                            self.send_status(f"Warning: Could not parse tender info as JSON for {tender_url}")
                         
-                        all_tender_info.append(tender_info)
-                        
-                        self.logger.info(f"Successfully processed document: {doc['local_path']}", 
+                        processed_tender_pages.append(tender_info)
+                        self.logger.info(f"Processed tender page: {tender_url}", 
                                        extra={'agent_id': self.agent_id})
-                        self.send_status(f"Successfully processed document: {doc['local_path']}")
                     except Exception as e:
-                        error_msg = f"Error processing document {doc['local_path']}: {str(e)}"
+                        error_msg = f"Error processing tender page {tender_url}: {str(e)}"
                         self.logger.error(error_msg, extra={'agent_id': self.agent_id})
                         self.send_status(error_msg)
                         continue
-
-                # Save all results to JSON file
+                
+                # Determine which tenders need document processing
+                tenders_needing_documents = []
+                for tender_info in processed_tender_pages:
+                    if isinstance(tender_info['info'], dict) and 'error' in tender_info['info']:
+                        self.logger.info(f"Tender page {tender_info['url']} needs document processing", 
+                                       extra={'agent_id': self.agent_id})
+                        tenders_needing_documents.append(tender_info['url'])
+                
+                # Find document links only for tenders that need it
+                all_document_links = []
+                if tenders_needing_documents:
+                    self.logger.info(f"Finding documents for {len(tenders_needing_documents)} tenders", 
+                                   extra={'agent_id': self.agent_id})
+                    
+                    for tender_url in tenders_needing_documents:
+                        try:
+                            document_links = FindDocumentLinks(browser, tender_url)
+                            all_document_links.extend(document_links)
+                            self.logger.info(f"Found {len(document_links)} documents for {tender_url}", 
+                                           extra={'agent_id': self.agent_id})
+                        except Exception as e:
+                            self.logger.error(f"Error finding documents for {tender_url}: {str(e)}", 
+                                            extra={'agent_id': self.agent_id})
+                            continue
+                else:
+                    self.logger.info("All tenders were successfully processed from pages", 
+                                   extra={'agent_id': self.agent_id})
+                    self.send_status("All tenders were successfully processed from pages")
+                
+                # Apply document limit if specified
+                if max_documents is not None and len(all_document_links) > max_documents:
+                    self.logger.info(f"Limiting to {max_documents} document links (from {len(all_document_links)})", 
+                                   extra={'agent_id': self.agent_id})
+                    all_document_links = all_document_links[:max_documents]
+                
+                # Download and process documents if any links were found
+                downloaded_documents = []
+                processed_documents = []
+                if all_document_links:
+                    # Download documents
+                    for doc_link in all_document_links:
+                        try:
+                            self.logger.info(f"Downloading document: {doc_link}", extra={'agent_id': self.agent_id})
+                            self.send_status(f"Downloading document: {doc_link}")
+                            
+                            doc_path = DownloadDocument(browser, doc_link, self.documents_dir)
+                            if doc_path:
+                                downloaded_documents.append({
+                                    'url': doc_link,
+                                    'local_path': doc_path
+                                })
+                                self.logger.info(f"Successfully downloaded document to: {doc_path}", 
+                                               extra={'agent_id': self.agent_id})
+                        except Exception as e:
+                            self.logger.error(f"Error downloading document {doc_link}: {str(e)}", 
+                                            extra={'agent_id': self.agent_id})
+                            continue
+                    
+                    # Process downloaded documents
+                    for doc in downloaded_documents:
+                        try:
+                            self.logger.info(f"Processing document: {doc['local_path']}", 
+                                           extra={'agent_id': self.agent_id})
+                            
+                            tender_info = TenderInfo(browser, doc['local_path'], is_document=True)
+                            try:
+                                parsed_info = json.loads(tender_info['info'])
+                                tender_info['info'] = parsed_info
+                            except json.JSONDecodeError as e:
+                                self.logger.error(f"Failed to parse document info JSON: {str(e)}", 
+                                                extra={'agent_id': self.agent_id})
+                            
+                            processed_documents.append(tender_info)
+                            self.logger.info(f"Successfully processed document: {doc['local_path']}", 
+                                           extra={'agent_id': self.agent_id})
+                        except Exception as e:
+                            self.logger.error(f"Error processing document {doc['local_path']}: {str(e)}", 
+                                            extra={'agent_id': self.agent_id})
+                            continue
+                
+                # Prepare results
                 results = {
                     'timestamp': timestamp,
                     'tender_links': all_tender_links,
-                    'tender_info': all_tender_info,
+                    'tender_page_info': processed_tender_pages,
                     'document_links': all_document_links,
-                    'downloaded_documents': downloaded_documents
+                    'downloaded_documents': downloaded_documents,
+                    'document_info': processed_documents
                 }
                 
                 with open(results_file, 'w', encoding='utf-8') as f:
                     json.dump(results, f, ensure_ascii=False, indent=2)
-                
+                    
+                # Count successfully processed tenders
+                successful_page_tenders = sum(1 for t in processed_tender_pages 
+                                            if isinstance(t['info'], dict) and 'error' not in t['info'])
+                    
                 success_msg = f"""Crawl completed successfully:
-                - Found {len(all_tender_links)} tender pages
-                - Found {len(all_document_links)} document links
-                - Downloaded {len(downloaded_documents)} documents
-                - Processed {len(all_tender_info)} tender details
-                Results saved to {results_file}
-                Documents saved to {self.documents_dir}"""
-                
+- Found {len(all_tender_links)} tender pages
+- Successfully processed {successful_page_tenders} tender pages
+- Found {len(all_document_links)} document links
+- Downloaded {len(downloaded_documents)} documents
+- Processed {len(processed_documents)} document details
+- Results saved to {results_file}
+- Documents saved to {self.documents_dir}"""
                 self.logger.info(success_msg, extra={'agent_id': self.agent_id})
                 self.send_status(success_msg)
-
             finally:
-                # Ensure browser is closed even if an error occurs
                 browser.Quit()
-            
         except Exception as e:
             error_msg = f"Error during crawl: {str(e)}"
             self.logger.error(error_msg, extra={'agent_id': self.agent_id})
@@ -343,9 +537,31 @@ class WebCrawler(Agent):
                             ])
                             self.set_status(AgentStatus.CRAWLING)
                             self.send_status(f'Agent {self.agent_id} status: {self.get_status().name}')
-                            self.Crawl()
+                            self.Crawl(max_tenders=2, max_documents=2)
                             self.set_status(AgentStatus.IDLE)
                             self.send_status(f'Agent {self.agent_id} status: {self.get_status().name}')
+                        elif command.startswith("crawl:"):
+                            try:
+                                # Parse limits from command like "crawl:3,2" (3 tenders, 2 documents)
+                                limits = command.split(":", 1)[1].strip()
+                                parts = limits.split(",")
+                                
+                                max_tenders = int(parts[0]) if len(parts) > 0 and parts[0] else None
+                                max_documents = int(parts[1]) if len(parts) > 1 and parts[1] else None
+                                
+                                self.logger.info(f"Received limited crawl command: max_tenders={max_tenders}, max_documents={max_documents}", 
+                                               extra={'agent_id': self.agent_id})
+                                self.command_socket.send_string(f"Crawling with limits: tenders={max_tenders}, documents={max_documents}")
+                                
+                                self.set_status(AgentStatus.CRAWLING)
+                                self.send_status(f'Agent {self.agent_id} status: {self.get_status().name}')
+                                self.Crawl(max_tenders=max_tenders, max_documents=max_documents)
+                                self.set_status(AgentStatus.IDLE)
+                                self.send_status(f'Agent {self.agent_id} status: {self.get_status().name}')
+                            except Exception as e:
+                                error_msg = f"Error parsing crawl limits: {str(e)}"
+                                self.logger.error(error_msg, extra={'agent_id': self.agent_id})
+                                self.command_socket.send_string(f"Error: {error_msg}")
                         else:
                             error_msg = f"Received unknown command: {command}"
                             self.logger.warning(error_msg, extra={'agent_id': self.agent_id})

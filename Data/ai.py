@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import json
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(current_dir)
@@ -8,7 +9,7 @@ sys.path.insert(0, root_dir)
 
 from openai import OpenAI
 import re
-from Backend.browser import Browser
+from Browser.browser import Browser
 import pymupdf
 import requests
 from typing import List, Dict, Optional
@@ -84,97 +85,114 @@ def DownloadDocument(browser: Browser, url: str, save_dir: str) -> Optional[str]
         
         filepath = os.path.join(save_dir, filename)
         
-        # Configure download settings
-        browser.driver.execute_cdp_cmd('Page.setDownloadBehavior', {
-            'behavior': 'allow',
-            'downloadPath': save_dir
-        })
+        # Configure download settings for Playwright
+        browser.page.context.set_default_timeout(60000)  # 60 seconds for download
         
-        # Use browser to download the file
-        browser.driver.get(url)
-        time.sleep(3)  # Wait for download to start
+        # Setup download event handler
+        with browser.page.expect_download() as download_info:
+            browser.page.goto(url)
+        
+        download = download_info.value
+        # Wait for the download to complete
+        download_path = download.path()
+        
+        # Move the file to the specified directory
+        final_path = os.path.join(save_dir, filename)
+        os.rename(download_path, final_path)
         
         # Check if file exists
-        if os.path.exists(filepath):
-            return filepath
+        if os.path.exists(final_path):
+            return final_path
         return None
     except Exception as e:
         print(f"Error downloading document: {str(e)}")
         return None
 
 def TenderInfo(browser: Browser, source: str, is_document: bool = False) -> Dict:
-    """Extract information from a tender document."""
     try:
+        # Get content based on source type
         if is_document:
-            # Process local document
             doc = pymupdf.open(source)
-            text = ""
-            for page in doc:
-                page_text = page.get_text()
-                if page_text:
-                    text += page_text
-            content = text
+            content = "".join(page.get_text() for page in doc if page.get_text())
         else:
-            # Process webpage
             browser.OpenPage(source)
-            content = browser.driver.page_source
+            content = browser.page.content()
         
         if not content:
-            print(f"Warning: Empty content for source {source}")
-            return {"url": source, "info": "No content available"}
+            return create_error_response(source, "no_content", "No content available to analyze")
         
-        prompt = f"""Analyze this tender document and extract the following information in a structured format.
-        Format your response exactly like this JSON structure (replace the values with actual information from the content):
-
-        {{
-            "buyer": {{
-                "name": "Organization name",
-                "contact": "Contact information if available"
-            }},
-            "project": {{
+        # Common JSON structure for both document and webpage
+        json_structure = """
+        {
+            "buyer": {
+                "name": "Organization name"
+            },
+            "project": {
                 "title": "Project title",
-                "description": "Detailed project description",
-                "estimated_value": "Estimated value if available",
-                "currency": "Currency if available"
-            }},
-            "procedure": {{
-                "type": "Procedure type (e.g., Open, Restricted, etc.)",
-                "reference_number": "Reference number if available"
-            }},
-            "award_criteria": {{
-                "main_criteria": ["List of main award criteria"],
-                "weighting": "Information about criteria weighting if available"
-            }},
-            "timeline": {{
+                "description": "Brief project description",
+                "branch": "Branch of the tender (construction, IT, etc.)"
+            },
+            "timeline": {
                 "publication_date": "Date when tender was published",
                 "deadline": "Submission deadline",
                 "start_date": "Project start date if available",
                 "end_date": "Project end date if available"
-            }},
-            "requirements": {{
-                "technical": ["List of technical requirements"],
-                "financial": ["List of financial requirements"],
-                "qualifications": ["List of required qualifications"]
-            }},
-            "additional_info": {{
-                "important_notes": ["List of important notes or conditions"],
-                "attachments": ["List of required attachments"],
-                "other": "Any other relevant information"
-            }}
-        }}
-
-        Content to analyze:
-        {content}"""
+            }
+        }"""
         
+        # Set up prompt based on source type
+        source_type = "document" if is_document else "webpage"
+        prompt = f"""Analyze this tender {source_type} and extract the structured information about the tender.
+        Look for key tender details typically found in procurement notices such as the buyer organization, project details, 
+        deadlines, requirements, and any contact information, etc. Anything related to the procurement process.
+        
+        Format your response exactly like this JSON structure (replace the values with actual information from the {source_type}):
+        {json_structure}
+
+        You should translate the project description to English if it's not already in English and use the English version for the analysis.
+        """
+        
+        # Add error structure only for webpages
+        if not is_document:
+            prompt += """
+            If you cannot find enough information to determine this is a tender notice, respond with:
+            {
+                "error": "insufficient_info",
+                "message": "This does not appear to be a tender notice page"
+            }
+            """
+        
+        prompt += f"\nContent to analyze:\n{content}"
+        
+        # Get AI response
         response = PromptAI(prompt)
         if not response:
-            print(f"Warning: No AI response for source {source}")
-            return {"url": source, "info": "Failed to analyze tender"}
+            return create_error_response(source, "ai_no_response", "Failed to get AI response for tender analysis")
             
-        return {"url": source, "info": response}
+        # Validate the response is proper JSON
+        try:
+            json.loads(response)
+            return {"url": source, "info": response}
+        except json.JSONDecodeError:
+            return create_error_response(source, "invalid_json", 
+                                    "AI response was not in valid JSON format",
+                                    {"raw_response": response[:500]})
     except Exception as e:
-        print(f"Error in TenderInfo: {str(e)}")
-        return {"url": source, "info": f"Error analyzing tender: {str(e)}"}
+        return create_error_response(source, "processing_error", f"Error analyzing tender: {str(e)}")
+
+def create_error_response(source: str, error_code: str, message: str, extra_data: Dict = None) -> Dict:
+    """Helper function to create standardized error responses."""
+    print(f"Warning: {error_code} for source {source} - {message}")
+    
+    error_response = {
+        "error": error_code,
+        "message": message
+    }
+    
+    if extra_data:
+        error_response.update(extra_data)
+        
+    return {"url": source, "info": json.dumps(error_response)}
 
 def FindDocumentLinks(browser: Browser, tender_url: str) -> List[str]:
     """Find document links on a tender page."""
