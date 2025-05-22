@@ -137,10 +137,15 @@ cython_debug/
 creds.json
 credentials.json
 
+
 # Etc
 logs/
 crawl_results/
 portals.json
 cache/
 documents/
+feature/agents
 tender_data/
+
+.cursor
+development

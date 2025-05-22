@@ -237,7 +237,7 @@ class AgentManager(Process):
         if dead:
             self.logger.info(f"Cleaned {len(dead)} terminated agents")
 
-    def SendCommand(self, agent_id: int, command: str) -> dict:
+    def SendAgentCommand(self, agent_id: int, command: str) -> dict:
         """
         Send a command to a specific agent and get its response.
         
