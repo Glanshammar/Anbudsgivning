@@ -5,7 +5,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import asyncio
 from time import sleep
@@ -162,7 +162,8 @@ CORS(app, resources={
     r"/*": {
         "origins": ["http://localhost:3000"],
         "methods": ["GET", "POST", "PUT", "DELETE"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "allow_headers": ["Content-Type"],
+        "supports_credentials": True  # Important for cookies
     }
 })
 
@@ -265,23 +266,72 @@ def CheckBlacklist():
         @wraps(fn)
         async def wrapper(*args, **kwargs):
             try:
-                # Only verify JWT if we're in a request context
                 if request:
                     verify_jwt_in_request()
                     jwt_data = get_jwt()
                     token_jti = jwt_data["jti"]
+                    token_type = jwt_data.get('token_type')
+                    
+                    # Verify token type
+                    if token_type not in ['access', 'refresh']:
+                        return http_401("Invalid token type")
                     
                     if token_blacklist.is_blacklisted(token_jti):
                         logger.warning(
-                            f"Blacklisted token attempted by token: {token_jti}",
+                            "Blacklisted token attempted",
                             extra={
                                 'token_jti': token_jti,
+                                'token_type': token_type,
                                 'ip': request.remote_addr,
-                                'user_agent': request.user_agent.string,
-                                'request': request
+                                'user_agent': request.user_agent.string
                             }
                         )
                         return http_401("Token has been revoked")
+                    
+                    # For access tokens, create new tokens and blacklist the current one
+                    if token_type == 'access':
+                        current_user = get_jwt_identity()
+                        
+                        # Blacklist the current access token
+                        token_blacklist.add(token_jti)
+                        
+                        # Create new access token
+                        new_access_token = create_access_token(
+                            identity=current_user,
+                            fresh=True,
+                            additional_claims={'token_type': 'access'}
+                        )
+                        
+                        # Create new refresh token if needed
+                        last_activity = jwt_data.get('last_activity', 0)
+                        current_time = datetime.datetime.now(datetime.UTC).timestamp()
+                        
+                        if current_time - last_activity > 900:  # 15 minutes in seconds
+                            new_refresh_token = create_refresh_token(
+                                identity=current_user,
+                                additional_claims={
+                                    'token_type': 'refresh',
+                                    'last_activity': current_time
+                                }
+                            )
+                        else:
+                            new_refresh_token = create_refresh_token(
+                                identity=current_user,
+                                additional_claims={
+                                    'token_type': 'refresh',
+                                    'last_activity': current_time
+                                }
+                            )
+                        
+                        # Add the new tokens to the response
+                        response = await fn(*args, **kwargs)
+                        if isinstance(response, tuple):
+                            data, status_code = response
+                            if isinstance(data, dict):
+                                data['access_token'] = new_access_token
+                                data['refresh_token'] = new_refresh_token
+                                return jsonify(data), status_code
+                        return response
                 
                 return await fn(*args, **kwargs)
             except Exception as e:
@@ -379,13 +429,32 @@ async def Login() -> Tuple[Dict[str, Any], int]:
     if not bcrypt.checkpw(password.encode(), stored_hash.encode()):
         return http_401("Invalid credentials.")
 
-    access_token = create_access_token(identity=user_doc.id, fresh=True)
-    refresh_token = create_refresh_token(identity=user_doc.id)
+    # Create tokens with additional claims
+    access_token = create_access_token(
+        identity=user_doc.id,
+        fresh=True,
+        additional_claims={'token_type': 'access'}
+    )
+    refresh_token = create_refresh_token(
+        identity=user_doc.id,
+        additional_claims={'token_type': 'refresh'}
+    )
+    
+    # Blacklist any existing tokens for this user
+    try:
+        existing_tokens = current_app.db.collection('TokenBlacklist').where(
+            'user_id', '==', user_doc.id
+        ).stream()
+        for token in existing_tokens:
+            token_blacklist.add(token.id)
+    except Exception as e:
+        logger.error(f"Error blacklisting existing tokens: {str(e)}", extra={'error': str(e)})
+
     logger.info(f"User logged in: {username}", extra={'user_id': user_doc.id})
-    return jsonify(
-        access_token=access_token,
-        refresh_token=refresh_token
-    ), 200
+    response = jsonify({"msg": "Login successful"})
+    response.set_cookie("access_token", access_token, httponly=True, secure=True, samesite="Strict")
+    response.set_cookie("refresh_token", refresh_token, httponly=True, secure=True, samesite="Strict")
+    return response, 200
 
 
 @app.route('/api/user/logout', methods=['POST'])
@@ -400,7 +469,10 @@ async def Logout() -> Tuple[Dict[str, Any], int]:
         
         token_blacklist.add(token_jti, expires_at)
         logger.info(f"User logged out: {username}", extra={'username': username})
-        return jsonify({"message": "Successfully logged out"}), 200
+        response = jsonify({"msg": "Successfully logged out"})
+        response.delete_cookie("access_token")
+        response.delete_cookie("refresh_token")
+        return response, 200
     except Exception as e:
         logger.error(f"Logout failed: {str(e)}", extra={'error': str(e)})
         return jsonify({"error": str(e)}), 500
@@ -410,64 +482,51 @@ async def Logout() -> Tuple[Dict[str, Any], int]:
 @jwt_required(refresh=True)
 @CheckBlacklist()
 async def RefreshToken() -> Tuple[Dict[str, Any], int]:
-    """
-    Refresh the access token for the current user.
-    
-    This endpoint:
-    1. Validates the refresh token
-    2. Checks if the token is blacklisted
-    3. Verifies the user still exists
-    4. Creates a new access token
-    
-    Returns:
-        Tuple[Dict[str, Any], int]: JSON response with new access token and status code
-        
-    Raises:
-        HTTPException: If token is invalid, expired, or user not found
-    """
     try:
         jwt_data = get_jwt()
         token_jti = jwt_data["jti"]
-        
-        if token_blacklist.is_blacklisted(token_jti):
-            logger.warning(
-                "Blacklisted refresh token attempted",
-                extra={
-                    'token_jti': token_jti,
-                    'ip': request.remote_addr,
-                    'user_agent': request.user_agent.string
-                }
-            )
-            return http_401("Token has been revoked")
-        
         current_user = get_jwt_identity()
-        users_ref = current_app.db.collection(USERS)
-        user_doc = users_ref.document(current_user).get()
         
-        if not user_doc.exists:
-            logger.warning(
-                "Refresh attempted for non-existent user",
-                extra={
-                    'user_id': current_user,
-                    'ip': request.remote_addr,
-                    'user_agent': request.user_agent.string
-                }
-            )
-            return http_401("User no longer exists")
+        # Verify this is a refresh token
+        if jwt_data.get('token_type') != 'refresh':
+            return http_401("Invalid token type")
         
-        new_access_token = create_access_token(identity=current_user, fresh=False)
+        # Check if the refresh token has expired due to inactivity
+        last_activity = jwt_data.get('last_activity', 0)
+        current_time = datetime.datetime.now(datetime.UTC).timestamp()
+        
+        if current_time - last_activity > 900:  # 15 minutes in seconds
+            return http_401("Refresh token expired due to inactivity")
+        
+        # Blacklist the current refresh token
         token_blacklist.add(token_jti)
         
+        # Create new tokens
+        new_access_token = create_access_token(
+            identity=current_user,
+            fresh=True,
+            additional_claims={'token_type': 'access'}
+        )
+        new_refresh_token = create_refresh_token(
+            identity=current_user,
+            additional_claims={
+                'token_type': 'refresh',
+                'last_activity': current_time
+            }
+        )
+        
         logger.info(
-            "Successfully refreshed token",
+            "Successfully refreshed tokens",
             extra={
                 'user_id': current_user,
                 'ip': request.remote_addr,
                 'user_agent': request.user_agent.string
             }
         )
-        logger.info(f"Token refreshed for user: {current_user}", extra={'user_id': current_user})
-        return jsonify(access_token=new_access_token), 200
+        response = jsonify({"msg": "Token refreshed"})
+        response.set_cookie("access_token", new_access_token, httponly=True, secure=True, samesite="Strict")
+        response.set_cookie("refresh_token", new_refresh_token, httponly=True, secure=True, samesite="Strict")
+        return response, 200
     except Exception as e:
         logger.error(
             "Error during token refresh",
@@ -850,8 +909,13 @@ async def GetAgentLogs():
         return jsonify({"error": str(e)}), 500
 # ------------------------------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------------------------------- #
+@app.route('/api/test/wait', methods=['GET'])
+async def TestWait():
+    time.sleep(15)
+    return http_200('Wait test done.')
+
+
 @app.route('/api/test/async', methods=['GET'])
-@CheckBlacklist()
 async def TestAsync():
     """
     Test endpoint to demonstrate async functionality.
