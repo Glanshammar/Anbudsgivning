@@ -161,7 +161,7 @@ app = CreateApp()
 CORS(app, resources={
     r"/*": {
         "origins": ["http://localhost:3000"],
-        "methods": ["GET", "POST", "PUT", "DELETE"],
+        "methods": ["GET", "POST", "PUT", "DELETE, OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"]
     }
 })
@@ -267,10 +267,10 @@ def CheckBlacklist():
             try:
                 # Only verify JWT if we're in a request context
                 if request:
+                    auth_header = request.headers.get('Authorization', None)
                     verify_jwt_in_request()
                     jwt_data = get_jwt()
                     token_jti = jwt_data["jti"]
-                    
                     if token_blacklist.is_blacklisted(token_jti):
                         logger.warning(
                             f"Blacklisted token attempted by token: {token_jti}",
@@ -282,7 +282,6 @@ def CheckBlacklist():
                             }
                         )
                         return http_401("Token has been revoked")
-                
                 return await fn(*args, **kwargs)
             except Exception as e:
                 logger.error(f"Token validation failed: {str(e)}", extra={'error': str(e)})
@@ -716,6 +715,12 @@ async def TenderPortals():
         ]
     }
     """
+    if request.method == 'GET':
+        logger.info(f"Getting portals for user: {username}", extra={'user_id': username})
+        return await DatabaseRequest(collection_name=COMPANY_DATA,
+                             data=None,
+                             doc_id='TenderPortals')
+
     username = GetUsername()
 
     portals_data = request.get_json().get('portals', [])
@@ -726,7 +731,7 @@ async def TenderPortals():
 
     if request.method == 'POST':
         logger.info(f"Creating new portals {validated_portals} for user: {username}", extra={'user_id': username})
-        return DatabaseRequest(collection_name=COMPANY_DATA,
+        return await DatabaseRequest(collection_name=COMPANY_DATA,
                              data={"portals": validated_portals},
                              doc_id='TenderPortals')
     
@@ -741,15 +746,8 @@ async def TenderPortals():
             portal for portal in validated_portals 
             if portal['url'] not in existing_urls
         ]
-        
-        return DatabaseRequest(collection_name=COMPANY_DATA,
+        return await DatabaseRequest(collection_name=COMPANY_DATA,
                              data={"portals": combined_portals},
-                             doc_id='TenderPortals')
-    
-    if request.method == 'GET':
-        logger.info(f"Getting portals for user: {username}", extra={'user_id': username})
-        return DatabaseRequest(collection_name=COMPANY_DATA,
-                             data=None,
                              doc_id='TenderPortals')
 
 
@@ -788,7 +786,7 @@ async def Company():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/users/refresh', methods=['POST'])
+@app.route('/api/user/refresh', methods=['POST'])
 @jwt_required()
 @CheckBlacklist()
 async def Refresh():
@@ -910,20 +908,42 @@ async def TestAsync():
 # ------------------------------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------------------------------- #
 
-@app.teardown_appcontext
+""" @app.teardown_appcontext
 @CheckBlacklist()
 async def cleanup(exception=None):
-    """Cleanup resources when the application context is torn down"""
+    Cleanup resources when the application context is torn down
     if hasattr(current_app, 'connection_pool'):
-        await current_app.connection_pool.close()
+        await current_app.connection_pool.close() """
 
 
 if __name__ == '__main__':
     import hypercorn.asyncio
     import hypercorn.config
-    
+    import signal
+    import sys
+
     config = hypercorn.config.Config()
     config.bind = ["0.0.0.0:5000"]
     config.use_reloader = True
-    
-    asyncio.run(hypercorn.asyncio.serve(app, config))
+
+    async def shutdown():
+        print("\nShutting down server and cleaning up ZMQ resources...")
+        if hasattr(app, 'connection_pool'):
+            await app.connection_pool.close()
+        if 'context' in globals():
+            context.term()
+        print("Cleanup complete. Bye!")
+
+    def handle_exit(*args):
+        # Kör shutdown i event loop
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(shutdown())
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, handle_exit)
+    signal.signal(signal.SIGTERM, handle_exit)
+
+    try:
+        asyncio.run(hypercorn.asyncio.serve(app, config))
+    except (KeyboardInterrupt, SystemExit):
+        pass

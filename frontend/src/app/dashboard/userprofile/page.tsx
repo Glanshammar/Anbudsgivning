@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { isAuthenticated } from "@/utils/auth";
+import { isAuthenticated, logout } from "@/utils/auth";
 import { updateProfile } from "@/services/api/profile";
 
 export default function UserProfile() {
@@ -17,16 +17,22 @@ export default function UserProfile() {
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      router.push("/login");
-    } else {
-      setAuthChecked(true);
-      // Load current username from localStorage
-      const storedUsername = localStorage.getItem("username");
-      if (storedUsername) {
-        setUsername(storedUsername);
+    const checkAuth = async () => {
+      const authenticated = await isAuthenticated();
+      if (!authenticated) {
+        logout();
+        router.push("/login");
+      } else {
+        setAuthChecked(true);
+        // Load current username from localStorage
+        const storedUsername = localStorage.getItem("username");
+        if (storedUsername) {
+          setUsername(storedUsername);
+        }
       }
-    }
+    };
+
+    checkAuth();
   }, [router]);
 
   const handleUsernameChange = async (e: React.FormEvent) => {

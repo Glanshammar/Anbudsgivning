@@ -4,7 +4,7 @@ interface LoginCredentials {
 }
 
 export const login = async (credentials: LoginCredentials) => {
-  const response = await fetch("http://localhost:5000/api/users/login", {
+  const response = await fetch("http://localhost:5000/api/user/login", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -41,7 +41,7 @@ export const refreshToken = async (): Promise<string | null> => {
 
   try {
     const response = await fetch(
-      "http://localhost:5000/api/users/refresh-token",
+      "http://localhost:5000/api/user/refresh-token",
       {
         method: "POST",
         headers: {
@@ -83,16 +83,27 @@ export const logout = () => {
   document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
 };
 
-export const isAuthenticated = (): boolean => {
+export const isAuthenticated = async (): Promise<boolean> => {
   if (typeof window === "undefined") return false;
 
-  const token = localStorage.getItem("token");
-  if (!token) return false;
+  let token = localStorage.getItem("token");
+
+  // Om access token saknas, försök att förnya med refresh token
+  if (!token) {
+    const newToken = await refreshToken();
+    return !!newToken;
+  }
 
   // Token validation (checks if token is expired)
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.exp * 1000 > Date.now();
+    if (payload.exp * 1000 > Date.now()) {
+      return true;
+    }
+
+    // Token is expired, try to refresh
+    const newToken = await refreshToken();
+    return !!newToken;
   } catch {
     return false;
   }

@@ -28,19 +28,28 @@ export const getPortals = async () => {
     );
   }
 
-  const token = localStorage.getItem("token");
+  /*   const token = localStorage.getItem("token");
   const response = await fetch("http://localhost:5000/api/tender_portals", {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
+  }); */
+
+  const response = await fetch("http://localhost:5000/api/test/portals", {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
   });
 
   if (!response.ok) {
     try {
-      const errorText = await response.text();
-      console.error("Portal fetch error:", errorText);
+      if (response) {
+        const errorText = await response.text();
+        console.error("Portal fetch error:", errorText);
+      }
     } catch (e) {
       console.error("Could not read error text:", e);
     }
@@ -59,6 +68,9 @@ export const setTenderPortals = async (portals: Portal[]) => {
   }
 
   const token = localStorage.getItem("token");
+  if (!token || token.split(".").length !== 3) {
+    throw new Error("Not authenticated");
+  }
   const response = await fetch("http://localhost:5000/api/tender_portals", {
     method: "POST",
     headers: {
@@ -71,6 +83,8 @@ export const setTenderPortals = async (portals: Portal[]) => {
   if (!response.ok) {
     throw new Error("Failed to create portals");
   }
+  const data = await response.json();
+  console.log("API response:", data); // For debugging
 
-  return await response.json();
+  return data;
 };
