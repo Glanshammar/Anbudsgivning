@@ -40,6 +40,9 @@ export async function getTenders(): Promise<Tender[]> {
     );
   } else {
     const token = localStorage.getItem("token");
+    if (!token || token.split(".").length !== 3) {
+      throw new Error("Not authenticated");
+    }
     const response = await fetch("http://localhost:5000/api/tenders", {
       method: "GET",
       headers: {
@@ -60,26 +63,9 @@ export async function getTenders(): Promise<Tender[]> {
     }
 
     const data = await response.json();
-<<<<<<< HEAD
     console.log("API response:", data); // For debugging
-
-    // API returns { tenders: [...] } so we need to extract the tenders-array
-    if (data && Array.isArray(data.tenders)) {
-      // If data.tenders is an array, return it directly
-      return data.tenders.map((tender: any, index: number) => ({
-        id: `tender-${index}`, // Create a synthetic ID if there is none
-        ...tender,
-      }));
-    } else if (typeof data === "object" && data !== null) {
-      // Backward compatibility for old API format
-      return Object.entries(data).map(([id, tenderData]: [string, any]) => ({
-        id,
-        ...tenderData,
-      }));
-=======
     if (data && data.tenders && Array.isArray(data.tenders)) {
       return data.tenders;
->>>>>>> development
     }
 
     // Fallback
@@ -107,8 +93,10 @@ export async function createTenders(tenders: Tender[]): Promise<any> {
   if (!response.ok) {
     throw new Error("Failed to create tenders");
   }
+  const data = await response.json();
+  console.log("API response:", data); // For debugging
 
-  return await response.json();
+  return data;
 }
 
 export async function updateTenders(tenders: Tender[]): Promise<any> {
@@ -130,6 +118,8 @@ export async function updateTenders(tenders: Tender[]): Promise<any> {
   if (!response.ok) {
     throw new Error("Failed to update tenders");
   }
+  const data = await response.json();
+  console.log("API response:", data); // For debugging
 
-  return await response.json();
+  return data;
 }
