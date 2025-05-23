@@ -7,6 +7,7 @@ export interface Tender {
 }
 
 const USE_DUMMY = false;
+const API_BASE_URL = "http://localhost:5000";
 
 const dummyTenders: Tender[] = [
   {
@@ -38,32 +39,30 @@ export async function getTenders(): Promise<Tender[]> {
     return new Promise((resolve) =>
       setTimeout(() => resolve(dummyTenders), 500)
     );
-  } else {
-    const token = localStorage.getItem("token");
-    if (!token || token.split(".").length !== 3) {
-      throw new Error("Not authenticated");
-    }
-    const response = await fetch("http://localhost:5000/api/tenders", {
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/tenders`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
       },
+      credentials: "include", // Ensures cookies are sent for authentication
     });
 
     if (!response.ok) {
-      try {
-        const errorText = await response.text();
-        console.error("Tenders fetch error:", errorText);
-      } catch (e) {
-        console.error("Could not read error text:", e);
-      }
+      console.error(
+        "Tenders fetch error:",
+        response.status,
+        response.statusText
+      );
       console.warn("Falling back to dummy tender data");
       return dummyTenders;
     }
 
     const data = await response.json();
     console.log("API response:", data); // For debugging
+
     if (data && data.tenders && Array.isArray(data.tenders)) {
       return data.tenders;
     }
@@ -71,6 +70,10 @@ export async function getTenders(): Promise<Tender[]> {
     // Fallback
     console.warn("Unexpected API response format", data);
     return [];
+  } catch (error) {
+    console.error("Error fetching tenders:", error);
+    console.warn("Falling back to dummy tender data");
+    return dummyTenders;
   }
 }
 
@@ -80,23 +83,29 @@ export async function createTenders(tenders: Tender[]): Promise<any> {
     return { success: true };
   }
 
-  const token = localStorage.getItem("token");
-  const response = await fetch("http://localhost:5000/api/tenders", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ tenders }),
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/tenders`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include", // Ensures cookies are sent for authentication
+      body: JSON.stringify({ tenders }),
+    });
 
-  if (!response.ok) {
-    throw new Error("Failed to create tenders");
+    if (!response.ok) {
+      throw new Error(
+        `Failed to create tenders: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    console.log("API response:", data); // For debugging
+    return data;
+  } catch (error) {
+    console.error("Error creating tenders:", error);
+    throw error;
   }
-  const data = await response.json();
-  console.log("API response:", data); // For debugging
-
-  return data;
 }
 
 export async function updateTenders(tenders: Tender[]): Promise<any> {
@@ -105,21 +114,27 @@ export async function updateTenders(tenders: Tender[]): Promise<any> {
     return { success: true };
   }
 
-  const token = localStorage.getItem("token");
-  const response = await fetch("http://localhost:5000/api/tenders", {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ tenders }),
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/tenders`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include", // Ensures cookies are sent for authentication
+      body: JSON.stringify({ tenders }),
+    });
 
-  if (!response.ok) {
-    throw new Error("Failed to update tenders");
+    if (!response.ok) {
+      throw new Error(
+        `Failed to update tenders: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    console.log("API response:", data); // For debugging
+    return data;
+  } catch (error) {
+    console.error("Error updating tenders:", error);
+    throw error;
   }
-  const data = await response.json();
-  console.log("API response:", data); // For debugging
-
-  return data;
 }

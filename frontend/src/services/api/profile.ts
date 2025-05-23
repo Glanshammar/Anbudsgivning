@@ -4,6 +4,8 @@ interface ProfileUpdateData {
   password?: string;
 }
 
+const API_BASE_URL = "http://localhost:5000";
+
 /**
  * Updates the user profile with the provided data
  * @param data ProfileUpdateData - Can include email, username, and/or password
@@ -11,19 +13,12 @@ interface ProfileUpdateData {
  */
 export const updateProfile = async (data: ProfileUpdateData) => {
   try {
-    const token = localStorage.getItem("token");
-
-    // Kontrollera att token finns och är en giltig JWT (tre delar)
-    if (!token || token.split(".").length !== 3) {
-      throw new Error("Not authenticated");
-    }
-
-    const response = await fetch("http://localhost:5000/api/user/profile", {
+    const response = await fetch(`${API_BASE_URL}/api/user/profile`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
       },
+      credentials: "include", // Ensures cookies are sent for authentication
       body: JSON.stringify(data),
     });
 
@@ -33,14 +28,36 @@ export const updateProfile = async (data: ProfileUpdateData) => {
       throw new Error(responseData.message || "Failed to update profile");
     }
 
-    // If username was updated, update it in localStorage
-    if (data.username) {
-      localStorage.setItem("username", data.username);
+    return responseData;
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    throw error;
+  }
+};
+
+/**
+ * Gets the current user profile
+ * @returns The user profile data
+ */
+export const getProfile = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/user/profile`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include", // Ensures cookies are sent for authentication
+    });
+
+    const responseData = await response.json();
+
+    if (!response.ok) {
+      throw new Error(responseData.message || "Failed to get profile");
     }
 
     return responseData;
   } catch (error) {
-    console.error("Error updating profile:", error);
+    console.error("Error getting profile:", error);
     throw error;
   }
 };

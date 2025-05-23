@@ -162,7 +162,8 @@ CORS(app, resources={
     r"/*": {
         "origins": ["http://localhost:3000"],
         "methods": ["GET", "POST", "PUT", "DELETE, OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
     }
 })
 
@@ -288,50 +289,7 @@ def CheckBlacklist():
                         )
                         return http_401("Token has been revoked")
                     
-                    # For access tokens, create new tokens and blacklist the current one
-                    if token_type == 'access':
-                        current_user = get_jwt_identity()
-                        
-                        # Blacklist the current access token
-                        token_blacklist.add(token_jti)
-                        
-                        # Create new access token
-                        new_access_token = create_access_token(
-                            identity=current_user,
-                            fresh=True,
-                            additional_claims={'token_type': 'access'}
-                        )
-                        
-                        # Create new refresh token if needed
-                        last_activity = jwt_data.get('last_activity', 0)
-                        current_time = datetime.datetime.now(datetime.UTC).timestamp()
-                        
-                        if current_time - last_activity > 900:  # 15 minutes in seconds
-                            new_refresh_token = create_refresh_token(
-                                identity=current_user,
-                                additional_claims={
-                                    'token_type': 'refresh',
-                                    'last_activity': current_time
-                                }
-                            )
-                        else:
-                            new_refresh_token = create_refresh_token(
-                                identity=current_user,
-                                additional_claims={
-                                    'token_type': 'refresh',
-                                    'last_activity': current_time
-                                }
-                            )
-                        
-                        # Add the new tokens to the response
-                        response = await fn(*args, **kwargs)
-                        if isinstance(response, tuple):
-                            data, status_code = response
-                            if isinstance(data, dict):
-                                data['access_token'] = new_access_token
-                                data['refresh_token'] = new_refresh_token
-                                return jsonify(data), status_code
-                        return response
+                                        # Token is valid, proceed with request
                 
                 return await fn(*args, **kwargs)
             except Exception as e:
@@ -452,8 +410,8 @@ async def Login() -> Tuple[Dict[str, Any], int]:
 
     logger.info(f"User logged in: {username}", extra={'user_id': user_doc.id})
     response = jsonify({"msg": "Login successful"})
-    response.set_cookie("access_token", access_token, httponly=True, secure=True, samesite="Strict")
-    response.set_cookie("refresh_token", refresh_token, httponly=True, secure=True, samesite="Strict")
+    response.set_cookie("access_token", access_token, httponly=True, secure=False, samesite="Lax")
+    response.set_cookie("refresh_token", refresh_token, httponly=True, secure=False, samesite="Lax")
     return response, 200
 
 
@@ -524,8 +482,8 @@ async def RefreshToken() -> Tuple[Dict[str, Any], int]:
             }
         )
         response = jsonify({"msg": "Token refreshed"})
-        response.set_cookie("access_token", new_access_token, httponly=True, secure=True, samesite="Strict")
-        response.set_cookie("refresh_token", new_refresh_token, httponly=True, secure=True, samesite="Strict")
+        response.set_cookie("access_token", new_access_token, httponly=True, secure=False, samesite="Lax")
+        response.set_cookie("refresh_token", new_refresh_token, httponly=True, secure=False, samesite="Lax")
         return response, 200
     except Exception as e:
         logger.error(
@@ -775,13 +733,13 @@ async def TenderPortals():
         ]
     }
     """
+    username = GetUsername()
+
     if request.method == 'GET':
         logger.info(f"Getting portals for user: {username}", extra={'user_id': username})
         return await DatabaseRequest(collection_name=COMPANY_DATA,
                              data=None,
                              doc_id='TenderPortals')
-
-    username = GetUsername()
 
     portals_data = request.get_json().get('portals', [])
     validated_portals = []

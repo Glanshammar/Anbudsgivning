@@ -4,6 +4,9 @@ export interface Portal {
   password: string;
 }
 
+const USE_DUMMY = false;
+const API_BASE_URL = "http://localhost:5000";
+
 // Dummy-data
 const dummyPortals: Portal[] = [
   {
@@ -18,9 +21,7 @@ const dummyPortals: Portal[] = [
   },
 ];
 
-const USE_DUMMY = false;
-
-export const getPortals = async () => {
+export const getPortals = async (): Promise<Portal[]> => {
   if (USE_DUMMY) {
     console.log("Using dummy portal data");
     return new Promise((resolve) =>
@@ -28,63 +29,61 @@ export const getPortals = async () => {
     );
   }
 
-  /*   const token = localStorage.getItem("token");
-  const response = await fetch("http://localhost:5000/api/tender_portals", {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-  }); */
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/tender_portals`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include", // Ensures cookies are sent for authentication
+    });
 
-  const response = await fetch("http://localhost:5000/api/test/portals", {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    try {
-      if (response) {
-        const errorText = await response.text();
-        console.error("Portal fetch error:", errorText);
-      }
-    } catch (e) {
-      console.error("Could not read error text:", e);
+    if (!response.ok) {
+      console.error(
+        "Portal fetch error:",
+        response.status,
+        response.statusText
+      );
+      console.warn("Falling back to dummy portal data");
+      return dummyPortals;
     }
+
+    const data = await response.json();
+    return Array.isArray(data.portals) ? data.portals : [];
+  } catch (error) {
+    console.error("Error fetching portals:", error);
     console.warn("Falling back to dummy portal data");
     return dummyPortals;
   }
-
-  const data = await response.json();
-  return Array.isArray(data.portals) ? data.portals : [];
 };
 
-export const setTenderPortals = async (portals: Portal[]) => {
+export const setTenderPortals = async (portals: Portal[]): Promise<any> => {
   if (USE_DUMMY) {
     console.log("Using dummy mode - portals set to:", portals);
     return { success: true };
   }
 
-  const token = localStorage.getItem("token");
-  if (!token || token.split(".").length !== 3) {
-    throw new Error("Not authenticated");
-  }
-  const response = await fetch("http://localhost:5000/api/tender_portals", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ portals }),
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/tender_portals`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include", // Ensures cookies are sent for authentication
+      body: JSON.stringify({ portals }),
+    });
 
-  if (!response.ok) {
-    throw new Error("Failed to create portals");
-  }
-  const data = await response.json();
-  console.log("API response:", data); // For debugging
+    if (!response.ok) {
+      throw new Error(
+        `Failed to create portals: ${response.status} ${response.statusText}`
+      );
+    }
 
-  return data;
+    const data = await response.json();
+    console.log("API response:", data); // For debugging
+    return data;
+  } catch (error) {
+    console.error("Error creating portals:", error);
+    throw error;
+  }
 };
