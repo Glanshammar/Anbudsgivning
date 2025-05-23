@@ -545,7 +545,9 @@ async def Consultants():
     """
     try:
         consultant_id = request.args.get('id') if request.method == 'GET' else request.json.get('id')
-        
+
+        if not consultant_id:
+            return http_400("Consultant ID is required")
         if request.method == 'GET':
             logger.info(f"Getting consultant: {consultant_id}", extra={'consultant_id': consultant_id})
             return await DatabaseRequest(CONSULTANTS, doc_id=consultant_id)
