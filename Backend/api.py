@@ -12,15 +12,11 @@ from time import sleep
 from functools import wraps
 from typing import Tuple, Dict, Any, Optional
 from contextlib import asynccontextmanager
-
 from flask import Flask, request, jsonify, current_app
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_jwt_extended import (
-    create_access_token, create_refresh_token, jwt_required, get_jwt_identity,
-    get_jwt, verify_jwt_in_request
-)
+from flask_login import login_user, logout_user, login_required, current_user
 from google.cloud.firestore_v1.base_query import FieldFilter
 import zmq
 import zmq.asyncio
@@ -34,6 +30,7 @@ from dotenv import load_dotenv
 from Logger.logger import LoggerManager
 import threading
 import time
+import secrets
 
 
 # Collection name constants
@@ -100,60 +97,6 @@ class ZMQClientPool:
         self.context = None
 
 
-class TokenBlacklist:
-    def __init__(self):
-        self.collection = 'TokenBlacklist'
-        self._cache = set()  # In-memory cache for quick lookups
-
-    def _load_blacklist(self):
-        """Load blacklisted tokens from Firestore into memory"""
-        try:
-            with app.app_context():
-                blacklist_ref = current_app.db.collection(self.collection)
-                docs = blacklist_ref.stream()
-                for doc in docs:
-                    self._cache.add(doc.id)
-                logger.info(f"Loaded {len(self._cache)} blacklisted tokens from database")
-        except Exception as e:
-            logger.error(f"Error loading token blacklist: {str(e)}", extra={'error': str(e)})
-
-    def add(self, token_jti: str, expires_at: Optional[datetime.datetime] = None):
-        """Add a token to the blacklist"""
-        try:
-            with app.app_context():
-                blacklist_ref = current_app.db.collection(self.collection)
-                blacklist_ref.document(token_jti).set({
-                    'blacklisted_at': datetime.datetime.now(datetime.UTC),
-                    'expires_at': expires_at
-                })
-                self._cache.add(token_jti)
-                logger.info(f"Token blacklisted: {token_jti}", extra={'token_jti': token_jti})
-        except Exception as e:
-            logger.error(f"Error blacklisting token: {str(e)}", extra={'error': str(e)})
-
-    def is_blacklisted(self, token_jti: str) -> bool:
-        """Check if a token is blacklisted"""
-        return token_jti in self._cache
-
-    def cleanup_expired(self):
-        """Remove expired tokens from the blacklist"""
-        try:
-            with app.app_context():
-                now = datetime.datetime.now(datetime.UTC)
-                blacklist_ref = current_app.db.collection(self.collection)
-                expired_tokens = blacklist_ref.where(
-                    'expires_at', '<', now
-                ).stream()
-                
-                for doc in expired_tokens:
-                    doc.reference.delete()
-                    self._cache.remove(doc.id)
-                
-                logger.info(f"Cleaned up expired tokens from blacklist")
-        except Exception as e:
-            logger.error(f"Error cleaning up expired tokens: {str(e)}", extra={'error': str(e)})
-
-
 load_dotenv()
 app = CreateApp()
 
@@ -162,8 +105,8 @@ CORS(app, resources={
     r"/*": {
         "origins": ["http://localhost:3000"],
         "methods": ["GET", "POST", "PUT", "DELETE"],
-        "allow_headers": ["Content-Type"],
-        "supports_credentials": True  # Important for cookies
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
     }
 })
 
@@ -173,10 +116,8 @@ socket = context.socket(zmq.REQ)
 socket.connect("tcp://localhost:5001")
 
 
-token_blacklist = TokenBlacklist()
-
 with app.app_context():
-    token_blacklist._load_blacklist()
+    pass
 
 _connection_pool_initialized = False
 
@@ -192,7 +133,7 @@ def initialize_connection_pool():
 def cleanup_task():
     while True:
         with app.app_context():
-            token_blacklist.cleanup_expired()
+            pass
         time.sleep(900)
 
 thread = threading.Thread(target=cleanup_task, daemon=True)
@@ -261,112 +202,20 @@ def ValidateModel(model_class):
     return decorator
 
 
-def CheckBlacklist():
-    def decorator(fn):
-        @wraps(fn)
-        async def wrapper(*args, **kwargs):
-            try:
-                if request:
-                    verify_jwt_in_request()
-                    jwt_data = get_jwt()
-                    token_jti = jwt_data["jti"]
-                    token_type = jwt_data.get('token_type')
-                    
-                    # Verify token type
-                    if token_type not in ['access', 'refresh']:
-                        return http_401("Invalid token type")
-                    
-                    if token_blacklist.is_blacklisted(token_jti):
-                        logger.warning(
-                            "Blacklisted token attempted",
-                            extra={
-                                'token_jti': token_jti,
-                                'token_type': token_type,
-                                'ip': request.remote_addr,
-                                'user_agent': request.user_agent.string
-                            }
-                        )
-                        return http_401("Token has been revoked")
-                    
-                    # For access tokens, create new tokens and blacklist the current one
-                    if token_type == 'access':
-                        current_user = get_jwt_identity()
-                        
-                        # Blacklist the current access token
-                        token_blacklist.add(token_jti)
-                        
-                        # Create new access token
-                        new_access_token = create_access_token(
-                            identity=current_user,
-                            fresh=True,
-                            additional_claims={'token_type': 'access'}
-                        )
-                        
-                        # Create new refresh token if needed
-                        last_activity = jwt_data.get('last_activity', 0)
-                        current_time = datetime.datetime.now(datetime.UTC).timestamp()
-                        
-                        if current_time - last_activity > 900:  # 15 minutes in seconds
-                            new_refresh_token = create_refresh_token(
-                                identity=current_user,
-                                additional_claims={
-                                    'token_type': 'refresh',
-                                    'last_activity': current_time
-                                }
-                            )
-                        else:
-                            new_refresh_token = create_refresh_token(
-                                identity=current_user,
-                                additional_claims={
-                                    'token_type': 'refresh',
-                                    'last_activity': current_time
-                                }
-                            )
-                        
-                        # Add the new tokens to the response
-                        response = await fn(*args, **kwargs)
-                        if isinstance(response, tuple):
-                            data, status_code = response
-                            if isinstance(data, dict):
-                                data['access_token'] = new_access_token
-                                data['refresh_token'] = new_refresh_token
-                                return jsonify(data), status_code
-                        return response
-                
-                return await fn(*args, **kwargs)
-            except Exception as e:
-                logger.error(f"Token validation failed: {str(e)}", extra={'error': str(e)})
-                return http_401("Invalid token")
-        return wrapper
-    return decorator
-
-
 def ValidatePassword(password: str) -> bool:
     # Minimum 8 characters, at least one uppercase, one lowercase, one digit, one special character
     pattern = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()[\]{}<>.,;:|~`_+=-]).{8,}$'
     return bool(re.match(pattern, password))
-
-
-def GetUsername() -> str:
-    try:
-        user_id = get_jwt_identity()
-        user_doc = current_app.db.collection(USERS).document(user_id).get()
-        return user_doc.get('username') if user_doc.exists else 'unknown'
-    except Exception as e:
-        logger.error(f"Error checking username: {str(e)}", extra={'error': str(e)})
-        return 'unknown'
 # ------------------------------------------------------------------------------------------------------------- #
 # ---------------------------------------------- Route Functions ---------------------------------------------- #
 @app.route('/api/status/server', methods=['GET'])
-@jwt_required()
-@CheckBlacklist()
+@login_required
 async def ServerStatus() -> Tuple[Dict[str, Any], int]:
     return await ServerRequest('status')
 
 
 @app.route('/api/status/api', methods=['GET'])
-@jwt_required()
-@CheckBlacklist()
+@login_required
 async def ApiStatus() -> Tuple[Dict[str, Any], int]:
     return http_200('API is Online!')
 
@@ -394,15 +243,21 @@ async def Register() -> Tuple[Dict[str, Any], int]:
     # Hash the password
     hashed_pw = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
-    # Store user in Firestore
+    # Generate a secure validation code
+    validation_code = secrets.token_urlsafe(8)
+
+    # Store user in Firestore with validated=False and validation_code
     user_data = {
         "username": username,
         "email": email,
-        "password": hashed_pw
+        "password": hashed_pw,
+        "validated": False,
+        "validation_code": validation_code
     }
-    users_ref.add(user_data)
-    logger.info(f"User registered: {username}", extra={'user_id': user_data.id})
-    return http_201("User registered successfully.")
+    user_ref = users_ref.add(user_data)
+    logger.info(f"User registered: {username}", extra={'user_id': user_ref[1].id})
+    # For now, return the code in the response
+    return jsonify({"message": "User registered successfully. Please validate your account.", "validation_code": validation_code}), 201
 
 
 @app.route('/api/user/login', methods=['POST'])
@@ -414,168 +269,86 @@ async def Login() -> Tuple[Dict[str, Any], int]:
     if not username or not password:
         return http_401("Username and password required.")
 
-    # Query Firestore for user document
-    users_ref = current_app.db.collection(USERS)
-    user_docs = users_ref.where(filter=FieldFilter('username', '==', username)).limit(1).stream()
-    user_doc = next(user_docs, None)
-
-    if not user_doc:
+    # Use the User class's authenticate method
+    user_obj = app.User.authenticate(username, password)
+    if not user_obj:
         return http_401("Invalid credentials.")
 
-    user_data = user_doc.to_dict()
-    stored_hash = user_data.get("password")
+    if not user_obj.validated:
+        return http_401("Account not validated. Please validate your account before logging in.")
 
-    # Verify password using bcrypt
-    if not bcrypt.checkpw(password.encode(), stored_hash.encode()):
-        return http_401("Invalid credentials.")
-
-    # Create tokens with additional claims
-    access_token = create_access_token(
-        identity=user_doc.id,
-        fresh=True,
-        additional_claims={'token_type': 'access'}
-    )
-    refresh_token = create_refresh_token(
-        identity=user_doc.id,
-        additional_claims={'token_type': 'refresh'}
-    )
-    
-    # Blacklist any existing tokens for this user
-    try:
-        existing_tokens = current_app.db.collection('TokenBlacklist').where(
-            'user_id', '==', user_doc.id
-        ).stream()
-        for token in existing_tokens:
-            token_blacklist.add(token.id)
-    except Exception as e:
-        logger.error(f"Error blacklisting existing tokens: {str(e)}", extra={'error': str(e)})
-
-    logger.info(f"User logged in: {username}", extra={'user_id': user_doc.id})
-    response = jsonify({"msg": "Login successful"})
-    response.set_cookie("access_token", access_token, httponly=True, secure=True, samesite="Strict")
-    response.set_cookie("refresh_token", refresh_token, httponly=True, secure=True, samesite="Strict")
-    return response, 200
-
+    login_user(user_obj)
+    logger.info(f"User logged in: {username}", extra={'user_id': user_obj.id})
+    return jsonify({"message": "Login successful"}), 200
 
 @app.route('/api/user/logout', methods=['POST'])
-@jwt_required()
-@CheckBlacklist()
+@login_required
 async def Logout() -> Tuple[Dict[str, Any], int]:
-    try:
-        username = GetUsername()
-        jwt_data = get_jwt()
-        token_jti = jwt_data["jti"]
-        expires_at = datetime.datetime.fromtimestamp(jwt_data["exp"])
-        
-        token_blacklist.add(token_jti, expires_at)
-        logger.info(f"User logged out: {username}", extra={'username': username})
-        response = jsonify({"msg": "Successfully logged out"})
-        response.delete_cookie("access_token")
-        response.delete_cookie("refresh_token")
-        return response, 200
-    except Exception as e:
-        logger.error(f"Logout failed: {str(e)}", extra={'error': str(e)})
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/user/refresh-token', methods=['POST'])
-@jwt_required(refresh=True)
-@CheckBlacklist()
-async def RefreshToken() -> Tuple[Dict[str, Any], int]:
-    try:
-        jwt_data = get_jwt()
-        token_jti = jwt_data["jti"]
-        current_user = get_jwt_identity()
-        
-        # Verify this is a refresh token
-        if jwt_data.get('token_type') != 'refresh':
-            return http_401("Invalid token type")
-        
-        # Check if the refresh token has expired due to inactivity
-        last_activity = jwt_data.get('last_activity', 0)
-        current_time = datetime.datetime.now(datetime.UTC).timestamp()
-        
-        if current_time - last_activity > 900:  # 15 minutes in seconds
-            return http_401("Refresh token expired due to inactivity")
-        
-        # Blacklist the current refresh token
-        token_blacklist.add(token_jti)
-        
-        # Create new tokens
-        new_access_token = create_access_token(
-            identity=current_user,
-            fresh=True,
-            additional_claims={'token_type': 'access'}
-        )
-        new_refresh_token = create_refresh_token(
-            identity=current_user,
-            additional_claims={
-                'token_type': 'refresh',
-                'last_activity': current_time
-            }
-        )
-        
-        logger.info(
-            "Successfully refreshed tokens",
-            extra={
-                'user_id': current_user,
-                'ip': request.remote_addr,
-                'user_agent': request.user_agent.string
-            }
-        )
-        response = jsonify({"msg": "Token refreshed"})
-        response.set_cookie("access_token", new_access_token, httponly=True, secure=True, samesite="Strict")
-        response.set_cookie("refresh_token", new_refresh_token, httponly=True, secure=True, samesite="Strict")
-        return response, 200
-    except Exception as e:
-        logger.error(
-            "Error during token refresh",
-            extra={
-                'error': str(e),
-                'ip': request.remote_addr,
-                'user_agent': request.user_agent.string
-            }
-        )
-        return http_401("Invalid refresh token")
-
+    logout_user()
+    return jsonify({"message": "Successfully logged out"}), 200
 
 @app.route('/api/user/profile', methods=['GET'])
-@jwt_required()
-@CheckBlacklist()
+@login_required
 async def GetProfile():
     try:
-        current_user_id = get_jwt_identity()
-        username = GetUsername()
-        logger.info(f"Getting profile for user: {username}", extra={'username': username})
+        current_user_id = current_user.get_id()
+        logger.info(f"Getting profile for user: {current_user_id}", extra={'user_id': current_user_id})
         return await DatabaseRequest(USERS, doc_id=current_user_id)
     except Exception as e:
         logger.error(f"Get profile failed: {str(e)}", extra={'error': str(e)})
         return jsonify({"error": str(e)}), 500
 
-
 @app.route('/api/user/profile', methods=['PUT'])
-@jwt_required()
-@CheckBlacklist()
+@login_required
 @ValidateModel(UserProfile)
 async def UpdateProfile():
     try:
-        username = GetUsername()
-        current_user_id = get_jwt_identity()
+        current_user_id = current_user.get_id()
         data = request.validated_data
 
         if 'password' in data:
             data['password'] = bcrypt.hashpw(data['password'].encode(), bcrypt.gensalt()).decode()
         
-        logger.info(f"Updating profile for user: {username}", extra={'user_id': username})
+        logger.info(f"Updating profile for user: {current_user_id}", extra={'user_id': current_user_id})
         return await DatabaseRequest(USERS, data, current_user_id)
     except Exception as e:
         logger.error(f"Update profile failed: {str(e)}", extra={'error': str(e)})
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/api/user/validate', methods=['POST'])
+async def ValidateUser() -> Tuple[Dict[str, Any], int]:
+    data = request.get_json()
+    username = data.get("username")
+    email = data.get("email")
+    code = data.get("validation_code")
+
+    if not code or (not username and not email):
+        return http_400("Username or email and validation code are required.")
+
+    users_ref = current_app.db.collection(USERS)
+    query = None
+    if username:
+        query = users_ref.where(filter=FieldFilter('username', '==', username)).limit(1)
+    elif email:
+        query = users_ref.where(filter=FieldFilter('email', '==', email)).limit(1)
+    user_docs = list(query.stream())
+    if not user_docs:
+        return http_404("User not found.")
+    user_doc = user_docs[0]
+    user_data = user_doc.to_dict()
+    if user_data.get("validated", False):
+        return http_400("User already validated.")
+    if user_data.get("validation_code") != code:
+        return http_401("Invalid validation code.")
+    # Set validated to True and remove validation_code
+    user_doc.reference.update({"validated": True, "validation_code": firestore.DELETE_FIELD})
+    logger.info(f"User validated: {user_doc.id}", extra={'user_id': user_doc.id})
+    return jsonify({"msg": "User validated successfully."}), 200
+
+
 @app.route('/api/consultants', methods=['GET', 'POST', 'PUT', 'DELETE'])
-@jwt_required()
-@CheckBlacklist()
+@login_required
 @ValidateModel(Consultant)
 async def Consultants():
     """
@@ -610,8 +383,7 @@ async def Consultants():
 
 
 @app.route('/api/calendar', methods=['POST', 'GET'])
-@jwt_required()
-@CheckBlacklist()
+@login_required
 async def BusinessCalendar():
     """
     {
@@ -622,7 +394,7 @@ async def BusinessCalendar():
         }
     }
     """
-    username = GetUsername()
+    current_user_id = current_user.get_id()
 
     if request.method == 'POST':
         data = request.get_json()
@@ -631,21 +403,20 @@ async def BusinessCalendar():
         if not isinstance(availability, dict):
             return http_400("Invalid input: 'availability' must be a dictionary.")
 
-        logger.info(f"Creating consultant calendar: {availability} for user: {username}", extra={'availability': availability, 'user_id': username})
+        logger.info(f"Creating consultant calendar: {availability} for user: {current_user_id}", extra={'availability': availability, 'user_id': current_user_id})
         return DatabaseRequest(collection_name=COMPANY_DATA,
                               data=availability,
                               doc_id='ConsultantCalendar')
     
     if request.method == 'GET':
-        logger.info(f"Getting consultant calendar for user: {username}", extra={'user_id': username})
+        logger.info(f"Getting consultant calendar for user: {current_user_id}", extra={'user_id': current_user_id})
         return DatabaseRequest(collection_name=COMPANY_DATA,
                               data=None,
                               doc_id='ConsultantCalendar')
 
 
 @app.route('/api/tenders', methods=['GET', 'POST', 'PUT', 'DELETE'])
-@jwt_required()
-@CheckBlacklist()
+@login_required
 async def TendersRequest():
     # JSON format
     """
@@ -669,10 +440,10 @@ async def TendersRequest():
     }
     """
 
-    username = GetUsername()
+    current_user_id = current_user.get_id()
 
     if request.method == 'GET':
-        logger.info(f"Getting tenders for user: {username}", extra={'user_id': username})
+        logger.info(f"Getting tenders for user: {current_user_id}", extra={'user_id': current_user_id})
         return await DatabaseRequest(collection_name=COMPANY_DATA,
                             data=None,
                             doc_id='Tenders')
@@ -695,7 +466,7 @@ async def TendersRequest():
                 return jsonify({"error": f"Invalid tender data: {str(e)}"}), 400
         
         if request.method == 'POST':
-            logger.info(f"Creating new tenders {validated_tenders} for user: {username}", extra={'user_id': username})
+            logger.info(f"Creating new tenders {validated_tenders} for user: {current_user_id}", extra={'user_id': current_user_id})
             return await DatabaseRequest(collection_name=COMPANY_DATA,
                                 data={"tenders": validated_tenders},
                                 doc_id='Tenders')
@@ -710,14 +481,14 @@ async def TendersRequest():
                 tender for tender in validated_tenders 
                 if tender['project_name'] not in existing_projects
             ]
-            logger.info(f"Updating tenders {combined_tenders} for user: {username}", extra={'user_id': username})
+            logger.info(f"Updating tenders {combined_tenders} for user: {current_user_id}", extra={'user_id': current_user_id})
             return await DatabaseRequest(collection_name=COMPANY_DATA,
                                 data={"tenders": combined_tenders},
                                 doc_id='Tenders')
 
     elif request.method == 'DELETE':
         try:
-            logger.info(f"Deleting tenders for user: {username}", extra={'user_id': username})
+            logger.info(f"Deleting tenders for user: {current_user_id}", extra={'user_id': current_user_id})
             return await DatabaseRequest(
                 collection_name=COMPANY_DATA,
                 doc_id='Tenders'
@@ -728,24 +499,23 @@ async def TendersRequest():
 
 
 @app.route('/api/expertise', methods=['POST', 'GET', 'PUT'])
-@jwt_required()
-@CheckBlacklist()
+@login_required
 async def ExpertiseRequest():
     try:
-        username = GetUsername()
+        current_user_id = current_user.get_id()
         
         if request.method == 'POST':
-            logger.info(f"Creating expertise by user: {username}", extra={'user_id': username})
+            logger.info(f"Creating expertise by user: {current_user_id}", extra={'user_id': current_user_id})
             return await DatabaseRequest(collection_name=COMPANY_DATA,
                                   data=request.get_json(),
                                   doc_id='Expertise')
         elif request.method == 'GET':
-            logger.info(f"Getting expertise by user: {username}", extra={'user_id': username})
+            logger.info(f"Getting expertise by user: {current_user_id}", extra={'user_id': current_user_id})
             return await DatabaseRequest(collection_name=COMPANY_DATA,
                                   data=None,
                                   doc_id='Expertise')
         elif request.method == 'PUT':
-            logger.info(f"Updating expertise by user: {username}", extra={'user_id': username})
+            logger.info(f"Updating expertise by user: {current_user_id}", extra={'user_id': current_user_id})
             return await DatabaseRequest(collection_name=COMPANY_DATA,
                                   data=request.get_json(),
                                   doc_id='Expertise')
@@ -755,8 +525,7 @@ async def ExpertiseRequest():
 
 
 @app.route('/api/tender_portals', methods=['POST', 'GET', 'PUT'])
-@jwt_required()
-@CheckBlacklist()
+@login_required
 async def TenderPortals():
     # JSON format
     """
@@ -775,7 +544,7 @@ async def TenderPortals():
         ]
     }
     """
-    username = GetUsername()
+    current_user_id = current_user.get_id()
 
     portals_data = request.get_json().get('portals', [])
     validated_portals = []
@@ -784,13 +553,13 @@ async def TenderPortals():
         validated_portals.append(portal_obj.to_dict())
 
     if request.method == 'POST':
-        logger.info(f"Creating new portals {validated_portals} for user: {username}", extra={'user_id': username})
+        logger.info(f"Creating new portals {validated_portals} for user: {current_user_id}", extra={'user_id': current_user_id})
         return DatabaseRequest(collection_name=COMPANY_DATA,
                              data={"portals": validated_portals},
                              doc_id='TenderPortals')
     
     elif request.method == 'PUT':
-        logger.info(f"Updating portals {validated_portals} for user: {username}", extra={'user_id': username})
+        logger.info(f"Updating portals {validated_portals} for user: {current_user_id}", extra={'user_id': current_user_id})
         existing_data = current_app.db.collection(COMPANY_DATA).document('TenderPortals').get()
         existing_portals = existing_data.to_dict().get('portals', []) if existing_data.exists else []
         
@@ -806,15 +575,14 @@ async def TenderPortals():
                              doc_id='TenderPortals')
     
     if request.method == 'GET':
-        logger.info(f"Getting portals for user: {username}", extra={'user_id': username})
+        logger.info(f"Getting portals for user: {current_user_id}", extra={'user_id': current_user_id})
         return DatabaseRequest(collection_name=COMPANY_DATA,
                              data=None,
                              doc_id='TenderPortals')
 
 
 @app.route('/api/company', methods=['GET', 'POST', 'PUT', 'DELETE'])
-@jwt_required()
-@CheckBlacklist()
+@login_required
 async def Company():
     """
     Handle all company operations:
@@ -845,23 +613,10 @@ async def Company():
     except Exception as e:
         logger.error(f"Company operation failed: {str(e)}", extra={'error': str(e)})
         return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/users/refresh', methods=['POST'])
-@jwt_required()
-@CheckBlacklist()
-async def Refresh():
-    try:
-        data = request.get_json()
-        return await ServerRequest('refresh', data)
-    except Exception as e:
-        logger.error(f"Token refresh failed: {str(e)}", extra={'error': str(e)})
-        return jsonify({"error": str(e)}), 500
 # ------------------------------------------------------------------------------------------------------------- #
 # --------------------------------------------- Agent Management ---------------------------------------------- #
 @app.route('/api/agents', methods=['POST', 'GET', 'DELETE'])
-@jwt_required()
-@CheckBlacklist()
+@login_required
 async def AgentManagement():
     try:
         if request.method == 'POST':
@@ -871,10 +626,10 @@ async def AgentManagement():
                 agent_type: "WebCrawler"
             }
             """
-            return ServerRequest(command='start_agent', params=request.get_json())
+            return await ServerRequest(command='start_agent', params=request.get_json())
 
         elif request.method == 'GET':
-            return ServerRequest(command='get_agents')
+            return await ServerRequest(command='get_agents')
 
         elif request.method == 'DELETE':
             # JSON example
@@ -887,20 +642,13 @@ async def AgentManagement():
             if not agent_id:
                 return http_400("Missing agent_id parameter")
             
-            command = {
-                'command': 'stop_agent',
-                'params': {'agent_id': int(agent_id)}
-            }
-            socket.send_json(command)
-            response = socket.recv_json()
-            return jsonify(response), response['status_code']
+            return await ServerRequest(command='stop_agent', params={'agent_id': int(agent_id)})
     except Exception as e:
         logger.error(f"Agent management failed: {str(e)}", extra={'error': str(e)})
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/agents/logs', methods=['GET'])
-@jwt_required()
-@CheckBlacklist()
+@login_required
 async def GetAgentLogs():
     try:
         return await ServerRequest('get_agent_logs')
@@ -911,7 +659,7 @@ async def GetAgentLogs():
 # ------------------------------------------------------------------------------------------------------------- #
 @app.route('/api/test/wait', methods=['GET'])
 async def TestWait():
-    time.sleep(15)
+    await asyncio.sleep(15)
     return http_200('Wait test done.')
 
 
@@ -975,11 +723,15 @@ async def TestAsync():
 # ------------------------------------------------------------------------------------------------------------- #
 
 @app.teardown_appcontext
-@CheckBlacklist()
 async def cleanup(exception=None):
     """Cleanup resources when the application context is torn down"""
     if hasattr(current_app, 'connection_pool'):
         await current_app.connection_pool.close()
+
+
+@app.login_manager.unauthorized_handler
+def unauthorized():
+    return jsonify({"message": "You must be logged in to access this resource."}), 401
 
 
 if __name__ == '__main__':
@@ -989,5 +741,5 @@ if __name__ == '__main__':
     config = hypercorn.config.Config()
     config.bind = ["0.0.0.0:5000"]
     config.use_reloader = True
-    
+
     asyncio.run(hypercorn.asyncio.serve(app, config))
