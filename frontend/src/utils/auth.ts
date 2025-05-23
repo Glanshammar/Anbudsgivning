@@ -3,12 +3,22 @@ interface LoginCredentials {
   password: string;
 }
 
-export const login = async (credentials: LoginCredentials) => {
-  const response = await fetch("http://localhost:5000/api/user/login", {
+interface AuthResponse {
+  msg: string;
+}
+
+const API_BASE_URL = "http://localhost:5000";
+
+// Login function - cookies are set automatically by the backend
+export const login = async (
+  credentials: LoginCredentials
+): Promise<AuthResponse> => {
+  const response = await fetch(`${API_BASE_URL}/api/user/login`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
+    credentials: "include", // This ensures cookies are sent and received
     body: JSON.stringify(credentials),
   });
 
@@ -18,103 +28,62 @@ export const login = async (credentials: LoginCredentials) => {
   }
 
   const data = await response.json();
-
-  // Save tokens to localStorage (for client-side authentication)
-  localStorage.setItem("token", data.access_token);
-  localStorage.setItem("refresh_token", data.refresh_token);
-  localStorage.setItem("username", credentials.username);
-
-  // Spara token som cookie (för middleware)
-  document.cookie = `token=${data.access_token}; path=/; max-age=${
-    60 * 60 * 24 * 7
-  }`; // 7 dagars giltighetstid
-
   return data;
 };
 
-export const refreshToken = async (): Promise<string | null> => {
-  const refreshToken = localStorage.getItem("refresh_token");
-
-  if (!refreshToken) {
-    return null;
-  }
-
+// Logout function - backend will clear cookies
+export const logout = async (): Promise<void> => {
   try {
-    const response = await fetch(
-      "http://localhost:5000/api/user/refresh-token",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${refreshToken}`,
-        },
-      }
-    );
+    const response = await fetch(`${API_BASE_URL}/api/user/logout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include", // Ensures cookies are sent for authentication
+    });
 
-    if (!response.ok) {
-      throw new Error("Token refresh failed");
-    }
-
-    const data = await response.json();
-
-    // Update token in localStorage
-    localStorage.setItem("token", data.access_token);
-
-    // Update token in cookies
-    document.cookie = `token=${data.access_token}; path=/; max-age=${
-      60 * 60 * 24 * 7
-    }`; // 7 days validity
-
-    return data.access_token;
+    // Even if the request fails, we should redirect to login
+    // because the user wants to log out
   } catch (error) {
-    console.error("Error refreshing token:", error);
-    logout();
-    return null;
+    console.error("Logout request failed:", error);
+    // Continue with logout even if request fails
   }
+
+  // Redirect to login page
+  window.location.href = "/login";
 };
 
-export const logout = () => {
-  // Delete tokens from localStorage
-  localStorage.removeItem("token");
-  localStorage.removeItem("refresh_token");
-  localStorage.removeItem("username");
-
-  // Ta bort cookie
-  document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-};
-
+// Check if user is authenticated by making a request to a protected endpoint
 export const isAuthenticated = async (): Promise<boolean> => {
   if (typeof window === "undefined") return false;
 
-  let token = localStorage.getItem("token");
-
-  // Om access token saknas, försök att förnya med refresh token
-  if (!token) {
-    const newToken = await refreshToken();
-    return !!newToken;
-  }
-
-  // Token validation (checks if token is expired)
   try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    if (payload.exp * 1000 > Date.now()) {
-      return true;
-    }
+    const response = await fetch(`${API_BASE_URL}/api/status/api`, {
+      method: "GET",
+      credentials: "include", // Ensures cookies are sent
+    });
 
-    // Token is expired, try to refresh
-    const newToken = await refreshToken();
-    return !!newToken;
+    return response.ok;
   } catch {
     return false;
   }
 };
 
-export const getToken = (): string | null => {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("token");
-};
+// Get current user info from a protected endpoint
+export const getCurrentUser = async (): Promise<any> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/user/profile`, {
+      method: "GET",
+      credentials: "include",
+    });
 
-export const getUsername = (): string | null => {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("username");
+    if (!response.ok) {
+      throw new Error("Failed to get user info");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error getting user info:", error);
+    throw error;
+  }
 };

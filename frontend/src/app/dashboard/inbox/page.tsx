@@ -1,11 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { getPortals, setTenderPortals } from "@/services/api/portals";
 import { getTenders, Tender } from "@/services/api/tenders";
-import { isAuthenticated } from "@/utils/auth";
 import { Portal } from "@/services/api/portals";
 
 const agents = [
@@ -22,8 +20,6 @@ const agents = [
 ];
 
 export default function InboxPage() {
-  const router = useRouter();
-  const [authChecked, setAuthChecked] = useState(false);
   const [selectedAgents, setSelectedAgents] = useState<string[]>([
     "tender-finder",
   ]);
@@ -41,19 +37,11 @@ export default function InboxPage() {
   const [showAgentSettings, setShowAgentSettings] = useState(false);
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      router.push("/login");
-    } else {
-      setAuthChecked(true);
-    }
-  }, [router]);
-
-  useEffect(() => {
-    if (authChecked && selectedAgents.includes("tender-finder")) {
+    if (selectedAgents.includes("tender-finder")) {
       fetchPortals();
       fetchTenders();
     }
-  }, [authChecked, selectedAgents]);
+  }, [selectedAgents]);
 
   useEffect(() => {
     const storedAgents = localStorage.getItem("selectedAgents");
@@ -172,14 +160,6 @@ export default function InboxPage() {
       return updatedAgents;
     });
   };
-
-  if (!authChecked) {
-    return (
-      <div className="flex justify-center items-center min-h-[40vh]">
-        <span className="text-gray-500 text-lg">Laddar...</span>
-      </div>
-    );
-  }
 
   function handleSendToEvaluation(arg0: string): void {
     throw new Error("Function not implemented.");

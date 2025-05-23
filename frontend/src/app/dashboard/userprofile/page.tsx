@@ -1,12 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { isAuthenticated, logout } from "@/utils/auth";
-import { updateProfile } from "@/services/api/profile";
+import { getProfile, updateProfile } from "@/services/api/profile";
 
 export default function UserProfile() {
-  const router = useRouter();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -14,26 +11,24 @@ export default function UserProfile() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [authChecked, setAuthChecked] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const authenticated = await isAuthenticated();
-      if (!authenticated) {
-        logout();
-        router.push("/login");
-      } else {
-        setAuthChecked(true);
-        // Load current username from localStorage
-        const storedUsername = localStorage.getItem("username");
-        if (storedUsername) {
-          setUsername(storedUsername);
-        }
+    const loadUserProfile = async () => {
+      try {
+        const userProfile = await getProfile();
+        setUsername(userProfile.username || "");
+        setEmail(userProfile.email || "");
+      } catch (error) {
+        console.error("Error loading user profile:", error);
+        setError("Kunde inte ladda användarens profil");
+      } finally {
+        setLoading(false);
       }
     };
 
-    checkAuth();
-  }, [router]);
+    loadUserProfile();
+  }, []);
 
   const handleUsernameChange = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,7 +77,7 @@ export default function UserProfile() {
     }
   };
 
-  if (!authChecked) {
+  if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[40vh]">
         <span className="text-gray-500 text-lg">Laddar...</span>
