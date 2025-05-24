@@ -232,6 +232,7 @@ class UserProfile:
         self.username = username
         self.email = email
         self.password = password
+        self.validated = False
 
     def to_dict(self) -> dict:
         """Convert the profile to a dictionary, excluding None values"""
@@ -239,10 +240,11 @@ class UserProfile:
             k: v for k, v in {
                 'username': self.username,
                 'email': self.email,
-                'password': self.password
+                'password': self.password,
+                'validated': self.validated
             }.items() if v is not None
         }
 
     def __str__(self) -> str:
-        return f"UserProfile(username={self.username}, email={self.email})"
+        return f"UserProfile(username={self.username}, email={self.email}, validated={self.validated})"
 
