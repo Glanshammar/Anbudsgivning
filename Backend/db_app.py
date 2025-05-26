@@ -16,11 +16,10 @@ sys.path.insert(0, current_dir)
 import firebase_admin
 from firebase_admin import credentials, firestore
 from flask import Flask, jsonify
-import datetime
 from flask_login import LoginManager, UserMixin
 from typing import Optional
 import secrets
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 """
 Configuration loading order for CreateApp:
@@ -71,7 +70,7 @@ def CreateApp(config=None):
         secret_key = secrets.token_hex(32)
         warnings.warn("No SECRET_KEY set in environment or config. Using a random key. Sessions will not persist across restarts. Set SECRET_KEY for production.")
     app.config["SECRET_KEY"] = secret_key
-    app.config.setdefault("PERMANENT_SESSION_LIFETIME", datetime.timedelta(hours=12))
+    app.config.setdefault("PERMANENT_SESSION_LIFETIME", timedelta(hours=12))
     app.config['SESSION_REFRESH_EACH_REQUEST'] = True
     app.config.setdefault("SESSION_COOKIE_HTTPONLY", True)
     app.config.setdefault("SESSION_COOKIE_SECURE", True)

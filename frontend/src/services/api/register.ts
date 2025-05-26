@@ -6,6 +6,7 @@ interface User {
 
 interface RegisterResponse {
   message: string;
+  success: boolean;
 }
 
 const API_BASE_URL = "http://localhost:5000";
@@ -17,6 +18,7 @@ export const registerUser = async (user: User): Promise<RegisterResponse> => {
       headers: {
         "Content-Type": "application/json",
       },
+      credentials: "include",
       body: JSON.stringify(user),
     });
 
