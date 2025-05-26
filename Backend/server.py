@@ -268,7 +268,7 @@ operations = {
     'read': ReadDocument,
     'update': UpdateDocument,
     'delete': DeleteDocument,
-    'status': lambda params: 'Server is online!',
+    'status': lambda params: {'message': 'Server is online!'},
     'start_agent': StartAgent,
     'get_agents': GetAgents,
     'stop_agent': StopAgent,
