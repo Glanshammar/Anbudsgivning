@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { getPortals, setTenderPortals } from "@/services/api/portals";
+import { getTenderPortals, setTenderPortals } from "@/services/api/portals";
 import { getTenders, Tender } from "@/services/api/tenders";
 import { Portal } from "@/services/api/portals";
 
@@ -35,41 +35,114 @@ export default function InboxPage() {
   const [tenders, setTenders] = useState<Tender[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAgentSettings, setShowAgentSettings] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  useEffect(() => {
-    if (selectedAgents.includes("tender-finder")) {
-      fetchPortals();
-      fetchTenders();
-    }
-  }, [selectedAgents]);
+  // Ref to track if component is mounted and prevent duplicate requests
+  const isMountedRef = useRef(true);
+  const hasLoadedAgentsRef = useRef(false);
 
+  // Effect to load agents from localStorage (only once)
   useEffect(() => {
+    if (hasLoadedAgentsRef.current) return;
+
+    hasLoadedAgentsRef.current = true;
     const storedAgents = localStorage.getItem("selectedAgents");
+
     if (storedAgents) {
-      setSelectedAgents(JSON.parse(storedAgents));
+      const agentsToUse = JSON.parse(storedAgents);
+      setSelectedAgents(agentsToUse);
     }
   }, []);
 
+  // Effect to fetch data when component mounts or selectedAgents changes
+  useEffect(() => {
+    if (!selectedAgents.includes("tender-finder") || !isMountedRef.current) {
+      setLoading(false);
+      setIsInitialized(true);
+      return;
+    }
+
+    const fetchData = async () => {
+      if (loading) return; // Prevent concurrent fetches
+
+      setLoading(true);
+
+      try {
+        console.log("Starting data fetch sequence...");
+
+        // Fetch portals first
+        if (isMountedRef.current) {
+          await fetchPortals();
+        }
+
+        // Small delay to prevent race condition
+        if (isMountedRef.current) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+
+        // Then fetch tenders
+        if (isMountedRef.current) {
+          await fetchTenders();
+        }
+
+        console.log("Data fetch sequence completed");
+      } catch (error) {
+        console.error("Error in data fetch sequence:", error);
+        if (isMountedRef.current) {
+          setMessage("Fel vid hämtning av data: " + (error as Error).message);
+        }
+      } finally {
+        if (isMountedRef.current) {
+          setLoading(false);
+          setIsInitialized(true);
+        }
+      }
+    };
+
+    fetchData();
+
+    // Cleanup function - reset mounted ref
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, [selectedAgents]); // Depend on selectedAgents
+
+  // Reset mounted ref when component mounts
+  useEffect(() => {
+    isMountedRef.current = true;
+  }, []);
+
   const fetchPortals = async () => {
+    if (!isMountedRef.current) return;
+
     try {
-      const data = await getPortals();
-      setPortals(data);
+      const data = await getTenderPortals();
+      if (isMountedRef.current) {
+        setPortals(data);
+      }
     } catch (error) {
-      setMessage("Fel vid hämtning av portaler: " + (error as Error).message);
+      console.error("Error in fetchPortals:", error);
+      if (isMountedRef.current) {
+        setMessage("Fel vid hämtning av portaler: " + (error as Error).message);
+      }
     }
   };
 
   const fetchTenders = async () => {
+    if (!isMountedRef.current) return;
+
     try {
-      setLoading(true);
       const data = await getTenders();
-      setTenders(data);
+      if (isMountedRef.current) {
+        setTenders(data);
+      }
     } catch (error) {
-      setMessage(
-        "Fel vid hämtning av upphandlingar: " + (error as Error).message
-      );
-    } finally {
-      setLoading(false);
+      console.error("Error in fetchTenders:", error);
+      if (isMountedRef.current) {
+        setMessage(
+          "Fel vid hämtning av upphandlingar: " + (error as Error).message
+        );
+      }
     }
   };
 
@@ -161,14 +234,18 @@ export default function InboxPage() {
     });
   };
 
-  function handleSendToEvaluation(arg0: string): void {
-    throw new Error("Function not implemented.");
-  }
+  const handleSendToEvaluation = (projectName: string) => {
+    // TODO: Implement send to evaluation functionality
+    console.log(`Sending ${projectName} to evaluation`);
+    alert(
+      `Funktionen "Skicka till bedömning" är inte implementerad än för: ${projectName}`
+    );
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow p-4 sm:p-6">
-        <div className="flex justify-end mb-6">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="bg-white rounded-lg shadow p-3 sm:p-4 lg:p-6">
+        <div className="flex justify-end mb-4 sm:mb-6">
           <div className="relative">
             <button
               onClick={() => setShowAgentSettings(!showAgentSettings)}
@@ -185,7 +262,7 @@ export default function InboxPage() {
         </div>
 
         {showAgentSettings && (
-          <div className="mb-8 bg-gray-50 rounded-lg p-6">
+          <div className="mb-6 sm:mb-8 bg-gray-50 rounded-lg p-4 sm:p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold text-gray-900">
                 Aktiva agenter
@@ -248,12 +325,13 @@ export default function InboxPage() {
                     ))}
                   </select>
                   {selectedPortal && (
-                    <div className="mt-2 flex flex-wrap gap-2">
+                    <div className="mt-2 flex flex-col sm:flex-row gap-2">
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         onClick={handleEdit}
+                        className="flex-1 sm:flex-none"
                       >
                         Redigera
                       </Button>
@@ -262,6 +340,7 @@ export default function InboxPage() {
                         variant="destructive"
                         size="sm"
                         onClick={handleDelete}
+                        className="flex-1 sm:flex-none"
                       >
                         Ta bort
                       </Button>
@@ -288,35 +367,41 @@ export default function InboxPage() {
                         required
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Användarnamn
-                      </label>
-                      <input
-                        type="text"
-                        name="username"
-                        value={newPortal.username}
-                        onChange={handleInputChange}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Lösenord
-                      </label>
-                      <input
-                        type="password"
-                        name="password"
-                        value={newPortal.password}
-                        onChange={handleInputChange}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                        required
-                      />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Användarnamn
+                        </label>
+                        <input
+                          type="text"
+                          name="username"
+                          value={newPortal.username}
+                          onChange={handleInputChange}
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Lösenord
+                        </label>
+                        <input
+                          type="password"
+                          name="password"
+                          value={newPortal.password}
+                          onChange={handleInputChange}
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          required
+                        />
+                      </div>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="submit" variant="default">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Button
+                      type="submit"
+                      variant="default"
+                      className="flex-1 sm:flex-none"
+                    >
                       {editIndex === null
                         ? "Lägg till portal"
                         : "Spara ändring"}
@@ -333,13 +418,14 @@ export default function InboxPage() {
                             password: "",
                           });
                         }}
+                        className="flex-1 sm:flex-none"
                       >
                         Avbryt
                       </Button>
                     )}
                   </div>
                   {message && (
-                    <div className="text-sm text-red-500 mt-2">{message}</div>
+                    <div className="text-sm text-green-600 mt-2">{message}</div>
                   )}
                 </form>
               </div>
@@ -360,66 +446,128 @@ export default function InboxPage() {
             <div>
               {tenders.length === 0 ? (
                 <div className="text-center py-6 text-gray-500">
-                  <p>Inga upphandlingar hittades.</p>
+                  <p>Laddar...</p>
                   <p className="text-sm mt-2">
                     Kontrollera att du har ställt in rätt portaler och att
                     agenten är aktiverad.
                   </p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                        >
-                          Upphandling
-                        </th>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                        >
-                          Bransch
-                        </th>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                        >
-                          Deadline
-                        </th>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                        >
-                          Åtgärder
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {tenders.map((tender, index) => (
-                        <tr key={`${tender.project_name}-${index}`}>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900">
+                <div>
+                  {/* Desktop Table View */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th
+                            scope="col"
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          >
+                            Upphandling
+                          </th>
+                          <th
+                            scope="col"
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          >
+                            Bransch
+                          </th>
+                          <th
+                            scope="col"
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          >
+                            Deadline
+                          </th>
+                          <th
+                            scope="col"
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          >
+                            Åtgärder
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {tenders.map((tender, index) => (
+                          <tr key={`${tender.project_name}-${index}`}>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">
+                                {tender.project_name}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-500">
+                                {tender.branch}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-500">
+                                {tender.deadline}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 flex gap-2 text-sm font-medium">
+                              <Button
+                                onClick={() => handleRemoveTender(tender)}
+                                size="sm"
+                                variant="destructive"
+                              >
+                                Ta bort
+                              </Button>
+                              <Button
+                                onClick={() =>
+                                  handleSendToEvaluation(tender.project_name)
+                                }
+                                size="sm"
+                              >
+                                Skicka till bedömning
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile Card View */}
+                  <div className="md:hidden space-y-4">
+                    {tenders.map((tender, index) => (
+                      <div
+                        key={`${tender.project_name}-${index}`}
+                        className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm"
+                      >
+                        <div className="space-y-3">
+                          <div>
+                            <h3 className="text-sm font-medium text-gray-900 mb-1">
+                              Upphandling
+                            </h3>
+                            <p className="text-sm text-gray-600">
                               {tender.project_name}
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                                Bransch
+                              </h4>
+                              <p className="text-sm text-gray-600">
+                                {tender.branch}
+                              </p>
                             </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-500">
-                              {tender.branch}
+                            <div>
+                              <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                                Deadline
+                              </h4>
+                              <p className="text-sm text-gray-600">
+                                {tender.deadline}
+                              </p>
                             </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-500">
-                              {tender.deadline}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 flex gap-2 text-sm font-medium">
+                          </div>
+
+                          <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-gray-100">
                             <Button
                               onClick={() => handleRemoveTender(tender)}
                               size="sm"
                               variant="destructive"
+                              className="flex-1"
                             >
                               Ta bort
                             </Button>
@@ -428,14 +576,15 @@ export default function InboxPage() {
                                 handleSendToEvaluation(tender.project_name)
                               }
                               size="sm"
+                              className="flex-1"
                             >
                               Skicka till bedömning
                             </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

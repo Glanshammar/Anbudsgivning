@@ -5,11 +5,12 @@ interface LoginCredentials {
 
 interface AuthResponse {
   msg: string;
+  success: boolean;
 }
 
 const API_BASE_URL = "http://localhost:5000";
 
-// Login function - cookies are set automatically by the backend
+// Login function - flask-login will handle session creation
 export const login = async (
   credentials: LoginCredentials
 ): Promise<AuthResponse> => {
@@ -31,7 +32,7 @@ export const login = async (
   return data;
 };
 
-// Logout function - backend will clear cookies
+// Logout function - flask-login will clear session
 export const logout = async (): Promise<void> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/user/logout`, {
@@ -53,7 +54,7 @@ export const logout = async (): Promise<void> => {
   window.location.href = "/login";
 };
 
-// Check if user is authenticated by making a request to a protected endpoint
+// Check if user is authenticated by checking session status
 export const isAuthenticated = async (): Promise<boolean> => {
   if (typeof window === "undefined") return false;
 
@@ -69,7 +70,7 @@ export const isAuthenticated = async (): Promise<boolean> => {
   }
 };
 
-// Get current user info from a protected endpoint
+// Get current user info from flask-login
 export const getCurrentUser = async (): Promise<any> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/user/profile`, {

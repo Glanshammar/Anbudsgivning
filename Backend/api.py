@@ -546,6 +546,12 @@ async def TenderPortals():
     """
     current_user_id = current_user.get_id()
 
+    if request.method == 'GET':
+        logger.info(f"Getting portals for user: {current_user_id}", extra={'user_id': current_user_id})
+        return await DatabaseRequest(collection_name=COMPANY_DATA,
+                             data=None,
+                             doc_id='TenderPortals')
+
     portals_data = request.get_json().get('portals', [])
     validated_portals = []
     for portal in portals_data:
@@ -554,7 +560,7 @@ async def TenderPortals():
 
     if request.method == 'POST':
         logger.info(f"Creating new portals {validated_portals} for user: {current_user_id}", extra={'user_id': current_user_id})
-        return DatabaseRequest(collection_name=COMPANY_DATA,
+        return await DatabaseRequest(collection_name=COMPANY_DATA,
                              data={"portals": validated_portals},
                              doc_id='TenderPortals')
     
@@ -570,15 +576,10 @@ async def TenderPortals():
             if portal['url'] not in existing_urls
         ]
         
-        return DatabaseRequest(collection_name=COMPANY_DATA,
+        return await DatabaseRequest(collection_name=COMPANY_DATA,
                              data={"portals": combined_portals},
                              doc_id='TenderPortals')
     
-    if request.method == 'GET':
-        logger.info(f"Getting portals for user: {current_user_id}", extra={'user_id': current_user_id})
-        return DatabaseRequest(collection_name=COMPANY_DATA,
-                             data=None,
-                             doc_id='TenderPortals')
 
 
 @app.route('/api/company', methods=['GET', 'POST', 'PUT', 'DELETE'])
