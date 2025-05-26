@@ -34,7 +34,6 @@
             "runtimeArgs": ["start"],
             "console": "integratedTerminal"
         }
-        
     ],
     "compounds": [
         {
