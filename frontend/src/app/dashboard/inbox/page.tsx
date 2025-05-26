@@ -118,7 +118,12 @@ export default function InboxPage() {
     try {
       const data = await getTenderPortals();
       if (isMountedRef.current) {
-        setPortals(data);
+        // Remove duplicates based on URL to prevent React key conflicts
+        const uniquePortals = data.filter(
+          (portal, index, self) =>
+            index === self.findIndex((p) => p.url === portal.url)
+        );
+        setPortals(uniquePortals);
       }
     } catch (error) {
       console.error("Error in fetchPortals:", error);
@@ -153,6 +158,13 @@ export default function InboxPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Check if portal already exists
+    if (portals.some((portal) => portal.url === newPortal.url)) {
+      setMessage("En portal med denna URL finns redan!");
+      return;
+    }
+
     try {
       const updatedPortals = [...portals, newPortal];
       await setTenderPortals(updatedPortals);
@@ -162,7 +174,8 @@ export default function InboxPage() {
         username: "",
         password: "",
       });
-      await fetchPortals();
+      // Update state directly instead of fetching from server
+      setPortals(updatedPortals);
     } catch (error) {
       setMessage("Fel vid tillägg: " + (error as Error).message);
     }
@@ -183,7 +196,12 @@ export default function InboxPage() {
       const updatedPortals = portals.map((portal, idx) =>
         idx === editIndex ? newPortal : portal
       );
-      await setTenderPortals(updatedPortals);
+      // Remove duplicates before saving
+      const uniquePortals = updatedPortals.filter(
+        (portal, index, self) =>
+          index === self.findIndex((p) => p.url === portal.url)
+      );
+      await setTenderPortals(uniquePortals);
       setMessage("Portal uppdaterad!");
       setEditIndex(null);
       setNewPortal({
@@ -192,7 +210,7 @@ export default function InboxPage() {
         password: "",
       });
       setSelectedPortal("");
-      await fetchPortals();
+      setPortals(uniquePortals);
     } catch (error) {
       setMessage("Fel vid uppdatering: " + (error as Error).message);
     }
@@ -212,7 +230,7 @@ export default function InboxPage() {
       await setTenderPortals(updatedPortals);
       setMessage("Portal borttagen!");
       setSelectedPortal("");
-      await fetchPortals();
+      setPortals(updatedPortals);
     } catch (error) {
       setMessage("Fel vid borttagning: " + (error as Error).message);
     }
