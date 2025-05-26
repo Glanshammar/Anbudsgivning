@@ -2,40 +2,30 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { isAuthenticated } from "@/utils/auth";
 import { getTenders, Tender } from "@/services/api/tenders";
 
 // Default dashboard page with inbox of tenders
 
 export default function Dashboard() {
-  const router = useRouter();
   const [tenders, setTenders] = useState<Tender[]>([]);
-  const [authChecked, setAuthChecked] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      router.push("/login");
-    } else {
-      setAuthChecked(true);
-    }
-  }, [router]);
+    const fetchTenders = async () => {
+      try {
+        const data = await getTenders();
+        setTenders(data);
+      } catch (error) {
+        console.error("Error fetching tenders:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  useEffect(() => {
-    if (authChecked) {
-      const fetchTenders = async () => {
-        try {
-          const data = await getTenders();
-          setTenders(data);
-        } catch (error) {
-          console.error("Error fetching tenders:", error);
-        }
-      };
-      fetchTenders();
-    }
-  }, [authChecked]);
+    fetchTenders();
+  }, []);
 
-  if (!authChecked) {
+  if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[40vh]">
         <span className="text-gray-500 text-lg">Laddar...</span>
@@ -56,13 +46,17 @@ export default function Dashboard() {
             Senaste upphandlingar
           </h2>
           <Link href="/dashboard/inbox"></Link>
-          <ul className="list-disc pl-5">
-            {tenders.map((tender, index) => (
-              <li key={index} className="text-gray-700">
-                {tender.project_name}
-              </li>
-            ))}
-          </ul>
+          {tenders.length > 0 ? (
+            <ul className="list-disc pl-5">
+              {tenders.map((tender, index) => (
+                <li key={index} className="text-gray-700">
+                  {tender.project_name}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-gray-500">Inga upphandlingar hittades.</p>
+          )}
         </div>
       </div>
     </div>
