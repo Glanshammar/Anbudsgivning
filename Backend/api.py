@@ -14,8 +14,6 @@ from typing import Tuple, Dict, Any, Optional
 from contextlib import asynccontextmanager
 from flask import Flask, request, jsonify, current_app
 from flask_cors import CORS
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from flask_login import login_user, logout_user, login_required, current_user
 from google.cloud.firestore_v1.base_query import FieldFilter
 import zmq
@@ -31,6 +29,7 @@ from Logger.logger import LoggerManager
 import threading
 import time
 import secrets
+import inspect
 
 
 # Collection name constants
@@ -185,20 +184,36 @@ async def DatabaseRequest(collection_name: str = None, data: dict = None, doc_id
 
 def ValidateModel(model_class):
     def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            if request.method == 'GET':
+        if inspect.iscoroutinefunction(func):
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                if request.method == 'GET':
+                    return await func(*args, **kwargs)
+                data = request.get_json()
+                try:
+                    model_instance = model_class(**data)
+                    request.validated_data = model_instance.to_dict()
+                except TypeError as e:
+                    return http_400(f"Validation Error: {str(e)}")
+                except ValueError as e:
+                    return http_422(f"Data Error: {str(e)}")
+                return await func(*args, **kwargs)
+            return async_wrapper
+        else:
+            @wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                if request.method == 'GET':
+                    return func(*args, **kwargs)
+                data = request.get_json()
+                try:
+                    model_instance = model_class(**data)
+                    request.validated_data = model_instance.to_dict()
+                except TypeError as e:
+                    return http_400(f"Validation Error: {str(e)}")
+                except ValueError as e:
+                    return http_422(f"Data Error: {str(e)}")
                 return func(*args, **kwargs)
-            data = request.get_json()
-            try:
-                model_instance = model_class(**data)
-                request.validated_data = model_instance.to_dict()
-            except TypeError as e:
-                return http_400(f"Validation Error: {str(e)}")
-            except ValueError as e:
-                return http_422(f"Data Error: {str(e)}")
-            return func(*args, **kwargs)
-        return wrapper
+            return sync_wrapper
     return decorator
 
 
@@ -277,6 +292,7 @@ async def Login() -> Tuple[Dict[str, Any], int]:
     if not user_obj.validated:
         return http_401("Account not validated. Please validate your account before logging in.")
 
+    print(f"User validated: {user_obj.validated}")
     login_user(user_obj)
     logger.info(f"User logged in: {username}", extra={'user_id': user_obj.id})
     return jsonify({"message": "Login successful"}), 200
@@ -293,7 +309,7 @@ async def GetProfile():
     try:
         current_user_id = current_user.get_id()
         logger.info(f"Getting profile for user: {current_user_id}", extra={'user_id': current_user_id})
-        return await DatabaseRequest(USERS, doc_id=current_user_id)
+        return await DatabaseRequest(collection_name=USERS, data=None, doc_id=current_user_id)
     except Exception as e:
         logger.error(f"Get profile failed: {str(e)}", extra={'error': str(e)})
         return jsonify({"error": str(e)}), 500
@@ -310,7 +326,7 @@ async def UpdateProfile():
             data['password'] = bcrypt.hashpw(data['password'].encode(), bcrypt.gensalt()).decode()
         
         logger.info(f"Updating profile for user: {current_user_id}", extra={'user_id': current_user_id})
-        return await DatabaseRequest(USERS, data, current_user_id)
+        return await DatabaseRequest(collection_name=USERS, data=data, doc_id=current_user_id)
     except Exception as e:
         logger.error(f"Update profile failed: {str(e)}", extra={'error': str(e)})
         return jsonify({"error": str(e)}), 500
@@ -404,13 +420,13 @@ async def BusinessCalendar():
             return http_400("Invalid input: 'availability' must be a dictionary.")
 
         logger.info(f"Creating consultant calendar: {availability} for user: {current_user_id}", extra={'availability': availability, 'user_id': current_user_id})
-        return DatabaseRequest(collection_name=COMPANY_DATA,
+        return await DatabaseRequest(collection_name=COMPANY_DATA,
                               data=availability,
                               doc_id='ConsultantCalendar')
     
     if request.method == 'GET':
         logger.info(f"Getting consultant calendar for user: {current_user_id}", extra={'user_id': current_user_id})
-        return DatabaseRequest(collection_name=COMPANY_DATA,
+        return await DatabaseRequest(collection_name=COMPANY_DATA,
                               data=None,
                               doc_id='ConsultantCalendar')
 
@@ -546,6 +562,12 @@ async def TenderPortals():
     """
     current_user_id = current_user.get_id()
 
+    if request.method == 'GET':
+        logger.info(f"Getting portals for user: {current_user_id}", extra={'user_id': current_user_id})
+        return await DatabaseRequest(collection_name=COMPANY_DATA,
+                             data=None,
+                             doc_id='TenderPortals')
+
     portals_data = request.get_json().get('portals', [])
     validated_portals = []
     for portal in portals_data:
@@ -554,7 +576,7 @@ async def TenderPortals():
 
     if request.method == 'POST':
         logger.info(f"Creating new portals {validated_portals} for user: {current_user_id}", extra={'user_id': current_user_id})
-        return DatabaseRequest(collection_name=COMPANY_DATA,
+        return await DatabaseRequest(collection_name=COMPANY_DATA,
                              data={"portals": validated_portals},
                              doc_id='TenderPortals')
     
@@ -570,14 +592,8 @@ async def TenderPortals():
             if portal['url'] not in existing_urls
         ]
         
-        return DatabaseRequest(collection_name=COMPANY_DATA,
+        return await DatabaseRequest(collection_name=COMPANY_DATA,
                              data={"portals": combined_portals},
-                             doc_id='TenderPortals')
-    
-    if request.method == 'GET':
-        logger.info(f"Getting portals for user: {current_user_id}", extra={'user_id': current_user_id})
-        return DatabaseRequest(collection_name=COMPANY_DATA,
-                             data=None,
                              doc_id='TenderPortals')
 
 
