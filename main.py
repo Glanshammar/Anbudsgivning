@@ -16,6 +16,8 @@ import pymupdf
 from datetime import datetime, timedelta
 from Matching import IsTenderMatch
 from dotenv import load_dotenv
+import smtplib
+from email.mime.text import MIMEText
 
 
 load_dotenv()
@@ -37,9 +39,25 @@ if __name__ == "__main__":
         command = input(">> ").lower()
         
         match command:
-            case 'download':
-                browser = Browser()
-                DownloadDocument(browser, tender_document, save_dir=app_folder)
+            case 'email':
+                sender = os.getenv('EMAIL_SENDER')
+                password = os.getenv('EMAIL_PASSWORD')
+                receiver = os.getenv('EMAIL_RECEIVER')
+                subject = 'Test Email'
+                body = 'This is a test email'
+                message = MIMEText(body)
+                message['Subject'] = subject
+                message['From'] = sender
+                message['To'] = receiver
+
+                try:
+                    with smtplib.SMTP('smtp.gmail.com', 587) as server:
+                        server.starttls()
+                        server.login(sender, password)
+                        server.send_message(message)
+                    print("Email sent successfully")
+                except Exception as e:
+                    print(f"Error sending email: {e}")
             case 'portals':
                 tender_portals_response = requests.get('http://127.0.0.1:5000/api/tender_portals')
                 tender_portals = json.loads(tender_portals_response.text)
