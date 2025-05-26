@@ -3,12 +3,23 @@ interface LoginCredentials {
   password: string;
 }
 
-export const login = async (credentials: LoginCredentials) => {
-  const response = await fetch("http://localhost:5000/api/login", {
+interface AuthResponse {
+  msg: string;
+  success: boolean;
+}
+
+const API_BASE_URL = "http://localhost:5000";
+
+// Login function - flask-login will handle session creation
+export const login = async (
+  credentials: LoginCredentials
+): Promise<AuthResponse> => {
+  const response = await fetch(`${API_BASE_URL}/api/user/login`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
+    credentials: "include", // This ensures cookies are sent and received
     body: JSON.stringify(credentials),
   });
 
@@ -18,49 +29,62 @@ export const login = async (credentials: LoginCredentials) => {
   }
 
   const data = await response.json();
-
-  // Spara token i localStorage (för klient-side-autentisering)
-  localStorage.setItem("token", data.access_token);
-  localStorage.setItem("username", credentials.username);
-
-  // Spara token som cookie (för middleware)
-  document.cookie = `token=${data.access_token}; path=/; max-age=${
-    60 * 60 * 24 * 7
-  }`; // 7 dagars giltighetstid
-
   return data;
 };
 
-export const logout = () => {
-  // Ta bort från localStorage
-  localStorage.removeItem("token");
-  localStorage.removeItem("username");
+// Logout function - flask-login will clear session
+export const logout = async (): Promise<void> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/user/logout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include", // Ensures cookies are sent for authentication
+    });
 
-  // Ta bort cookie
-  document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    // Even if the request fails, we should redirect to login
+    // because the user wants to log out
+  } catch (error) {
+    console.error("Logout request failed:", error);
+    // Continue with logout even if request fails
+  }
+
+  // Redirect to login page
+  window.location.href = "/login";
 };
 
-export const isAuthenticated = (): boolean => {
+// Check if user is authenticated by checking session status
+export const isAuthenticated = async (): Promise<boolean> => {
   if (typeof window === "undefined") return false;
 
-  const token = localStorage.getItem("token");
-  if (!token) return false;
-
-  // Token validation (checks if token is expired)
   try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.exp * 1000 > Date.now();
+    const response = await fetch(`${API_BASE_URL}/api/status/api`, {
+      method: "GET",
+      credentials: "include", // Ensures cookies are sent
+    });
+
+    return response.ok;
   } catch {
     return false;
   }
 };
 
-export const getToken = (): string | null => {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("token");
-};
+// Get current user info from flask-login
+export const getCurrentUser = async (): Promise<any> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/user/profile`, {
+      method: "GET",
+      credentials: "include",
+    });
 
-export const getUsername = (): string | null => {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("username");
+    if (!response.ok) {
+      throw new Error("Failed to get user info");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error getting user info:", error);
+    throw error;
+  }
 };
