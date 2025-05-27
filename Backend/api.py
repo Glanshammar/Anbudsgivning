@@ -30,7 +30,6 @@ import threading
 import time
 import secrets
 import inspect
-from werkzeug.security import generate_password_hash, check_password_hash
 
 
 # Collection name constants
@@ -128,6 +127,18 @@ def initialize_connection_pool():
     if not _connection_pool_initialized:
         app.connection_pool = ZMQClientPool()
         _connection_pool_initialized = True
+
+
+@app.teardown_appcontext
+async def cleanup(exception=None):
+    """Cleanup resources when the application context is torn down"""
+    if hasattr(current_app, 'connection_pool'):
+        await current_app.connection_pool.close()
+
+
+@app.login_manager.unauthorized_handler
+def unauthorized():
+    return jsonify({"message": "You must be logged in to access this resource."}), 401
 
 
 def cleanup_task():
@@ -671,94 +682,8 @@ async def AgentManagement():
     except Exception as e:
         logger.error(f"Agent management failed: {str(e)}", extra={'error': str(e)})
         return jsonify({"error": str(e)}), 500
-
-@app.route('/api/agents/logs', methods=['GET'])
-@login_required
-async def GetAgentLogs():
-    try:
-        return await ServerRequest('get_agent_logs')
-    except Exception as e:
-        logger.error(f"Get agent logs failed: {str(e)}", extra={'error': str(e)})
-        return jsonify({"error": str(e)}), 500
 # ------------------------------------------------------------------------------------------------------------- #
-# ------------------------------------------------------------------------------------------------------------- #
-@app.route('/api/test/wait', methods=['GET'])
-async def TestWait():
-    await asyncio.sleep(15)
-    return http_200('Wait test done.')
-
-
-@app.route('/api/test/async', methods=['GET'])
-async def TestAsync():
-    """
-    Test endpoint to demonstrate async functionality.
-    Makes multiple concurrent requests to the server and measures total time.
-    
-    Returns:
-        JSON response with timing information and results
-    """
-    try:
-        import time
-        start_time = time.time()
-        
-        # Create multiple concurrent tasks
-        tasks = [
-            ServerRequest('status'),  # Server status
-            ServerRequest('get_agents'),  # Get all agents
-            DatabaseRequest('CompanyData', doc_id='CompanyProfile'),  # Company profile
-            DatabaseRequest('Consultants'),  # All consultants
-            DatabaseRequest('CompanyData', doc_id='Tenders')  # All tenders
-        ]
-        
-        # Execute all tasks concurrently
-        results = await asyncio.gather(*tasks)
-        
-        end_time = time.time()
-        total_time = end_time - start_time
-        
-        # Format results
-        response = {
-            "total_time_seconds": round(total_time, 3),
-            "requests_made": len(tasks),
-            "average_time_per_request": round(total_time / len(tasks), 3),
-            "results": [
-                {
-                    "request": task.__name__ if hasattr(task, '__name__') else str(task),
-                    "status_code": result[1] if isinstance(result, tuple) else 500,
-                    "data": result[0].get_json() if isinstance(result, tuple) else str(result)
-                }
-                for task, result in zip(tasks, results)
-            ]
-        }
-        
-        logger.info(
-            "Async test completed",
-            extra={
-                'total_time': total_time,
-                'requests_made': len(tasks),
-                'average_time': total_time / len(tasks)
-            }
-        )
-        
-        return jsonify(response), 200
-    except Exception as e:
-        logger.error(f"Async test failed: {str(e)}", extra={'error': str(e)})
-        return jsonify({"error": str(e)}), 500
-# ------------------------------------------------------------------------------------------------------------- #
-# ------------------------------------------------------------------------------------------------------------- #
-
-@app.teardown_appcontext
-async def cleanup(exception=None):
-    """Cleanup resources when the application context is torn down"""
-    if hasattr(current_app, 'connection_pool'):
-        await current_app.connection_pool.close()
-
-
-@app.login_manager.unauthorized_handler
-def unauthorized():
-    return jsonify({"message": "You must be logged in to access this resource."}), 401
-
-
+# -------------------------------------------- FIDO2 Authentication ------------------------------------------- #
 # --- FIDO2 Registration Begin ---
 @app.route('/api/fido2/register/begin', methods=['POST'])
 async def fido2_register_begin():
@@ -804,7 +729,8 @@ async def fido2_authenticate_complete():
         pass
     return jsonify(resp), status
 
-
+# ------------------------------------------------------------------------------------------------------------- #
+# -------------------------------------------- App Config & Startup -------------------------------- #
 if __name__ == '__main__':
     import hypercorn.asyncio
     import hypercorn.config
