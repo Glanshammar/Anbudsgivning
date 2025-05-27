@@ -575,10 +575,18 @@ async def TenderPortals():
         validated_portals.append(portal_obj.to_dict())
 
     if request.method == 'POST':
-        logger.info(f"Creating new portals {validated_portals} for user: {current_user_id}", extra={'user_id': current_user_id})
+        existing_data = current_app.db.collection(COMPANY_DATA).document('TenderPortals').get()
+        existing_portals = existing_data.to_dict().get('portals', []) if existing_data.exists else []
+
+        # Avoid duplicates by URL
+        existing_urls = {portal['url'] for portal in existing_portals}
+        new_portals = [portal for portal in validated_portals if portal['url'] not in existing_urls]
+        combined_portals = existing_portals + new_portals
+
+        logger.info(f"Adding new portals {new_portals} for user: {current_user_id}", extra={'user_id': current_user_id})
         return await DatabaseRequest(collection_name=COMPANY_DATA,
-                             data={"portals": validated_portals},
-                             doc_id='TenderPortals')
+                                     data={"portals": combined_portals},
+                                     doc_id='TenderPortals')
     
     elif request.method == 'PUT':
         logger.info(f"Updating portals {validated_portals} for user: {current_user_id}", extra={'user_id': current_user_id})
