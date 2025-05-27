@@ -12,9 +12,9 @@ from time import sleep
 from functools import wraps
 from typing import Tuple, Dict, Any, Optional
 from contextlib import asynccontextmanager
-from flask import Flask, request, jsonify, current_app
+from flask import Flask, request, jsonify, current_app, session, abort, make_response
 from flask_cors import CORS
-from flask_login import login_user, logout_user, login_required, current_user
+from flask_login import login_user, logout_user, login_required, current_user, LoginManager, UserMixin
 from google.cloud.firestore_v1.base_query import FieldFilter
 import zmq
 import zmq.asyncio
@@ -30,6 +30,7 @@ import threading
 import time
 import secrets
 import inspect
+from werkzeug.security import generate_password_hash, check_password_hash
 
 
 # Collection name constants
@@ -756,6 +757,52 @@ async def cleanup(exception=None):
 @app.login_manager.unauthorized_handler
 def unauthorized():
     return jsonify({"message": "You must be logged in to access this resource."}), 401
+
+
+# --- FIDO2 Registration Begin ---
+@app.route('/api/fido2/register/begin', methods=['POST'])
+async def fido2_register_begin():
+    data = request.get_json()
+    resp, status = await ServerRequest('fido2_register_begin', data)
+    if status == 200:
+        # Store state and user_id in session for completion
+        session['fido2_state'] = resp['state']
+        session['fido2_user_id'] = resp['user_id']
+        return jsonify(resp['registration_data']), 200
+    return jsonify(resp), status
+
+# --- FIDO2 Registration Complete ---
+@app.route('/api/fido2/register/complete', methods=['POST'])
+async def fido2_register_complete():
+    data = request.get_json()
+    # Add state and user_id from session
+    data['state'] = session.get('fido2_state')
+    data['user_id'] = session.get('fido2_user_id')
+    resp, status = await ServerRequest('fido2_register_complete', data)
+    return jsonify(resp), status
+
+# --- FIDO2 Authentication Begin ---
+@app.route('/api/fido2/authenticate/begin', methods=['POST'])
+async def fido2_authenticate_begin():
+    data = request.get_json()
+    resp, status = await ServerRequest('fido2_authenticate_begin', data)
+    if status == 200:
+        session['fido2_auth_state'] = resp['state']
+        session['fido2_user_id'] = resp['user_id']
+        return jsonify(resp['auth_data']), 200
+    return jsonify(resp), status
+
+# --- FIDO2 Authentication Complete ---
+@app.route('/api/fido2/authenticate/complete', methods=['POST'])
+async def fido2_authenticate_complete():
+    data = request.get_json()
+    data['state'] = session.get('fido2_auth_state')
+    data['user_id'] = session.get('fido2_user_id')
+    resp, status = await ServerRequest('fido2_authenticate_complete', data)
+    if status == 200:
+        # You may want to log in the user here if needed
+        pass
+    return jsonify(resp), status
 
 
 if __name__ == '__main__':
