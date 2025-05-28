@@ -1,11 +1,12 @@
 export interface Portal {
+  site: string
   url: string;
   username: string;
   password: string;
 }
 
 // Configuration
-const USE_DUMMY = false;
+const USE_DUMMY = true;
 const API_BASE_URL = "http://localhost:5000";
 const REQUEST_TIMEOUT = 15000; // 15 seconds - increased for slow servers
 const MAX_RETRIES = 1; // Reduced retries to prevent spam
@@ -65,14 +66,22 @@ const requestManager = new RequestManager();
 // Dummy data for fallback
 const dummyPortals: Portal[] = [
   {
+    site: "Portal 1",
     url: "https://example-portal1.com",
     username: "testuser1",
     password: "password1",
   },
   {
+    site: "Portal 2",
     url: "https://example-portal2.com",
     username: "testuser2",
     password: "password2",
+  },
+  {
+    site: "Portal 3",
+    url: "https://example-portal3.com",
+    username: "testuser3",
+    password: "password3",
   },
 ];
 
