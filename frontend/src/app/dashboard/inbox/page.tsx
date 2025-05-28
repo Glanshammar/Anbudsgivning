@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { getTenderPortals, setTenderPortals } from "@/services/api/portals";
 import { getTenders, Tender } from "@/services/api/tenders";
 import { Portal } from "@/services/api/portals";
+import { useTenderContext } from "@/contexts/TenderContext";
+import { useRouter } from "next/navigation";
 
 const agents = [
   {
@@ -20,22 +22,35 @@ const agents = [
 ];
 
 export default function InboxPage() {
+  const router = useRouter();
+  const {
+    getTendersByPhase,
+    addTender,
+    removeTender,
+    moveTenderToPhase,
+    tenderExists,
+    clearAllTenders,
+  } = useTenderContext();
+
   const [selectedAgents, setSelectedAgents] = useState<string[]>([
     "tender-finder",
   ]);
   const [portals, setPortals] = useState<Portal[]>([]);
   const [selectedPortal, setSelectedPortal] = useState<string>("");
   const [newPortal, setNewPortal] = useState<Portal>({
+    site: "",
     url: "",
     username: "",
     password: "",
   });
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [message, setMessage] = useState<string>("");
-  const [tenders, setTenders] = useState<Tender[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAgentSettings, setShowAgentSettings] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+
+  // Get tenders from context instead of local state
+  const inboxTenders = getTendersByPhase("inbox");
 
   // Ref to track if component is mounted and prevent duplicate requests
   const isMountedRef = useRef(true);
@@ -139,7 +154,12 @@ export default function InboxPage() {
     try {
       const data = await getTenders();
       if (isMountedRef.current) {
-        setTenders(data);
+        // Only add tenders that don't already exist in context
+        data.forEach((tender) => {
+          if (!tenderExists(tender.project_name)) {
+            addTender(tender);
+          }
+        });
       }
     } catch (error) {
       console.error("Error in fetchTenders:", error);
@@ -170,6 +190,7 @@ export default function InboxPage() {
       await setTenderPortals(updatedPortals);
       setMessage("Portal tillagd!");
       setNewPortal({
+        site: "",
         url: "",
         username: "",
         password: "",
@@ -205,6 +226,7 @@ export default function InboxPage() {
       setMessage("Portal uppdaterad!");
       setEditIndex(null);
       setNewPortal({
+        site: "",
         url: "",
         username: "",
         password: "",
@@ -236,10 +258,8 @@ export default function InboxPage() {
     }
   };
 
-  const handleRemoveTender = (tender: Tender) => {
-    setTenders((prevTenders) =>
-      prevTenders.filter((t) => t.project_name !== tender.project_name)
-    );
+  const handleRemoveTender = (tenderId: string) => {
+    removeTender(tenderId);
   };
 
   const handleAgentSelection = (agentId: string) => {
@@ -252,19 +272,34 @@ export default function InboxPage() {
     });
   };
 
-  const handleSendToEvaluation = (projectName: string) => {
-    // TODO: Implement send to evaluation functionality
-    console.log(`Sending ${projectName} to evaluation`);
-    alert(
-      `Funktionen "Skicka till bedömning" är inte implementerad än för: ${projectName}`
-    );
+  const handleSendToEvaluation = (tenderId: string) => {
+    moveTenderToPhase(tenderId, "evaluation");
+    router.push("/dashboard/evaluation");
   };
 
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="bg-white rounded-lg shadow p-3 sm:p-4 lg:p-6">
         <div className="flex justify-end mb-4 sm:mb-6">
-          <div className="relative">
+          <div className="relative flex gap-2">
+            {/* Debug button - remove in production */}
+            {process.env.NODE_ENV === "development" && (
+              <button
+                onClick={() => {
+                  if (
+                    confirm(
+                      "Vill du verkligen rensa all data? Detta kan inte ångras."
+                    )
+                  ) {
+                    clearAllTenders();
+                  }
+                }}
+                className="p-2 hover:bg-red-100 rounded-full transition-colors text-red-600"
+                title="Rensa all data (endast för utveckling)"
+              >
+                🗑️
+              </button>
+            )}
             <button
               onClick={() => setShowAgentSettings(!showAgentSettings)}
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -338,7 +373,7 @@ export default function InboxPage() {
                     <option value="">Välj en portal...</option>
                     {portals.map((portal) => (
                       <option key={portal.url} value={portal.url}>
-                        {portal.url}
+                        {portal.site}
                       </option>
                     ))}
                   </select>
@@ -371,6 +406,20 @@ export default function InboxPage() {
                   className="space-y-4"
                 >
                   <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Portalnamn
+                      </label>
+                      <input
+                        type="text"
+                        name="site"
+                        value={newPortal.site}
+                        onChange={handleInputChange}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        placeholder="t.ex. Upphandling24"
+                        required
+                      />
+                    </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700">
                         URL
@@ -431,6 +480,7 @@ export default function InboxPage() {
                         onClick={() => {
                           setEditIndex(null);
                           setNewPortal({
+                            site: "",
                             url: "",
                             username: "",
                             password: "",
@@ -462,7 +512,7 @@ export default function InboxPage() {
             </div>
           ) : (
             <div>
-              {tenders.length === 0 ? (
+              {inboxTenders.length === 0 ? (
                 <div className="text-center py-6 text-gray-500">
                   <p>Laddar...</p>
                   <p className="text-sm mt-2">
@@ -487,6 +537,12 @@ export default function InboxPage() {
                             scope="col"
                             className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                           >
+                            Beskrivning
+                          </th>
+                          <th
+                            scope="col"
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          >
                             Bransch
                           </th>
                           <th
@@ -504,11 +560,16 @@ export default function InboxPage() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {tenders.map((tender, index) => (
+                        {inboxTenders.map((tender, index) => (
                           <tr key={`${tender.project_name}-${index}`}>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td className="px-6 py-4">
                               <div className="text-sm font-medium text-gray-900">
                                 {tender.project_name}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="text-sm text-gray-500">
+                                {tender.brief_description}
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -523,7 +584,7 @@ export default function InboxPage() {
                             </td>
                             <td className="px-6 py-4 flex gap-2 text-sm font-medium">
                               <Button
-                                onClick={() => handleRemoveTender(tender)}
+                                onClick={() => handleRemoveTender(tender.id)}
                                 size="sm"
                                 variant="destructive"
                               >
@@ -531,7 +592,7 @@ export default function InboxPage() {
                               </Button>
                               <Button
                                 onClick={() =>
-                                  handleSendToEvaluation(tender.project_name)
+                                  handleSendToEvaluation(tender.id)
                                 }
                                 size="sm"
                               >
@@ -546,7 +607,7 @@ export default function InboxPage() {
 
                   {/* Mobile Card View */}
                   <div className="md:hidden space-y-4">
-                    {tenders.map((tender, index) => (
+                    {inboxTenders.map((tender, index) => (
                       <div
                         key={`${tender.project_name}-${index}`}
                         className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm"
@@ -558,6 +619,15 @@ export default function InboxPage() {
                             </h3>
                             <p className="text-sm text-gray-600">
                               {tender.project_name}
+                            </p>
+                          </div>
+
+                          <div>
+                            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                              Beskrivning
+                            </h4>
+                            <p className="text-sm text-gray-600">
+                              {tender.brief_description}
                             </p>
                           </div>
 
@@ -582,7 +652,7 @@ export default function InboxPage() {
 
                           <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-gray-100">
                             <Button
-                              onClick={() => handleRemoveTender(tender)}
+                              onClick={() => handleRemoveTender(tender.id)}
                               size="sm"
                               variant="destructive"
                               className="flex-1"
@@ -590,9 +660,7 @@ export default function InboxPage() {
                               Ta bort
                             </Button>
                             <Button
-                              onClick={() =>
-                                handleSendToEvaluation(tender.project_name)
-                              }
+                              onClick={() => handleSendToEvaluation(tender.id)}
                               size="sm"
                               className="flex-1"
                             >

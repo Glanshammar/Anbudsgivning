@@ -1,13 +1,15 @@
 export interface Tender {
   project_name: string;
+  brief_description: string;
   branch: string;
+  tender_document_link: string;
   deadline: string;
   end_date: string;
   start_date: string;
 }
 
 // Configuration
-const USE_DUMMY = false;
+const USE_DUMMY = true;
 const API_BASE_URL = "http://localhost:5000";
 const REQUEST_TIMEOUT = 15000; // 15 seconds - increased for slow servers
 const MAX_RETRIES = 1; // Reduced retries to prevent spam
@@ -68,21 +70,30 @@ const requestManager = new RequestManager();
 const dummyTenders: Tender[] = [
   {
     project_name: "Projekt 1",
+    brief_description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas.",
     branch: "Bygg & Anläggning",
+    tender_document_link: "https://example.com/projekt1.pdf",
     deadline: "2025-06-05",
     end_date: "2025-06-05",
     start_date: "2025-05-04",
   },
   {
     project_name: "Projekt 2",
+    brief_description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam.",
     branch: "Energi",
+    tender_document_link: "https://example.com/projekt2.pdf",
     deadline: "2025-06-05",
     end_date: "2025-05-15",
     start_date: "2025-05-08",
   },
   {
     project_name: "Projekt 3",
+    brief_description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
     branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt3.pdf",
     deadline: "2025-06-05",
     end_date: "2025-05-25",
     start_date: "2025-05-20",
