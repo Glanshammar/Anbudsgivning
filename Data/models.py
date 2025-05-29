@@ -21,42 +21,49 @@ Expertise = {index: value for index, value in enumerate(lines)}
 
 
 class TenderPortal:
-    def __init__(self, url:str, site_name:str, username:str, password:str):
+    def __init__(self, url:str, site:str, username:str, password:str):
         if not all(isinstance(arg, str) for arg in [url, username, password]):
             raise TypeError("All arguments (url, username, password) must be of type str")
         self.url = url
         self.username = username
         self.password = password
-        self.site_name = site_name
+        self.site = site
 
     def __str__(self):
-        return f"Tender Portal: {self.url}\nUsername: {self.username}\nSite: {self.site_name}"
+        return f"Tender Portal: {self.url}\nUsername: {self.username}\nSite: {self.site}"
     
     def to_dict(self):
         return {
             'url': self.url,
             'username': self.username,
-            'site_name': self.site_name
+            'password': self.password,
+            'site': self.site
         }
 
 
 class CompanyProfile:
-    def __init__(self, name: str, country: str, industry: str):
-        if not all(isinstance(var, str) for var in [name, country, industry]):
-            raise ValueError("Name, country, and industry must all be strings")
+    def __init__(self, name: str, country: str, province: str, industry: str, deadline_window: int = 7):
+        if not all(isinstance(var, str) for var in [name, country, province, industry]):
+            raise ValueError("Name, country, province, and industry must all be strings")
+        if not isinstance(deadline_window, int):
+            raise ValueError("Deadline window must be an integer")
 
         self.name = name
         self.country = country
+        self.province = province
         self.industry = industry
+        self.deadline_window = deadline_window
 
     def __str__(self):
-        return f"CompanyProfile(name={self.name}, country={self.country}, industry={self.industry})"
+        return f"CompanyProfile(name={self.name}, country={self.country}, industry={self.industry}, deadline_window={self.deadline_window})"
 
     def to_dict(self):
         return {
             'name': self.name,
             'country': self.country,
+            'province': self.province,
             'industry': self.industry,
+            'deadline_window': self.deadline_window
         }
 
 
