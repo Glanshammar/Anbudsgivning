@@ -7,6 +7,7 @@ import os
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 import re
+from dataclasses import dataclass, asdict
 
 fake = Faker()
 Faker.seed(42)
@@ -20,41 +21,49 @@ Expertise = {index: value for index, value in enumerate(lines)}
 
 
 class TenderPortal:
-    def __init__(self, url:str, username:str, password:str):
+    def __init__(self, url:str, site:str, username:str, password:str):
         if not all(isinstance(arg, str) for arg in [url, username, password]):
             raise TypeError("All arguments (url, username, password) must be of type str")
         self.url = url
         self.username = username
         self.password = password
+        self.site = site
 
     def __str__(self):
-        return f"Tender Portal: {self.url}\nUsername: {self.username}\nPassword: {self.password}"
+        return f"Tender Portal: {self.url}\nUsername: {self.username}\nSite: {self.site}"
     
     def to_dict(self):
         return {
             'url': self.url,
             'username': self.username,
-            'password': self.password
+            'password': self.password,
+            'site': self.site
         }
 
 
 class CompanyProfile:
-    def __init__(self, name: str, country: str, industry: str):
-        if not all(isinstance(var, str) for var in [name, country, industry]):
-            raise ValueError("Name, country, and industry must all be strings")
+    def __init__(self, name: str, country: str, province: str, industry: str, deadline_window: int = 7):
+        if not all(isinstance(var, str) for var in [name, country, province, industry]):
+            raise ValueError("Name, country, province, and industry must all be strings")
+        if not isinstance(deadline_window, int):
+            raise ValueError("Deadline window must be an integer")
 
         self.name = name
         self.country = country
+        self.province = province
         self.industry = industry
+        self.deadline_window = deadline_window
 
     def __str__(self):
-        return f"CompanyProfile(name={self.name}, country={self.country}, industry={self.industry})"
+        return f"CompanyProfile(name={self.name}, country={self.country}, industry={self.industry}, deadline_window={self.deadline_window})"
 
     def to_dict(self):
         return {
             'name': self.name,
             'country': self.country,
+            'province': self.province,
             'industry': self.industry,
+            'deadline_window': self.deadline_window
         }
 
 
@@ -93,9 +102,11 @@ class TenderDocument:
         self.start_date = start_date
         self.end_date = end_date
         self.project_name = project_name
+        self.tender_link = None
+        self.description = None
 
     def __repr__(self):
-        return f'TenderDocument(project_name={self.project_name}, branch={self.branch}, deadline={self.deadline}, start_date={self.start_date}, end_date={self.end_date})'
+        return f'TenderDocument(project_name={self.project_name}, branch={self.branch}, deadline={self.deadline}, start_date={self.start_date}, end_date={self.end_date}), \nurl'
         
     def to_dict(self):
         return {
@@ -104,6 +115,8 @@ class TenderDocument:
             'deadline': self.deadline.strftime("%Y-%m-%d"),
             'start_date': self.start_date.strftime("%Y-%m-%d"),
             'end_date': self.end_date.strftime("%Y-%m-%d"),
+            'url': self.tender_link,
+            'description': self.description
         }
 
 
@@ -233,6 +246,8 @@ class UserProfile:
         self.email = email
         self.password = password
         self.validated = False
+        self.consultant_id = None
+        self.role = 'User'
 
     def to_dict(self) -> dict:
         """Convert the profile to a dictionary, excluding None values"""
@@ -241,10 +256,26 @@ class UserProfile:
                 'username': self.username,
                 'email': self.email,
                 'password': self.password,
-                'validated': self.validated
+                'validated': self.validated,
+                'consultant_id': self.consultant_id,
+                'role': self.role
             }.items() if v is not None
         }
 
     def __str__(self) -> str:
-        return f"UserProfile(username={self.username}, email={self.email}, validated={self.validated})"
+        return f"UserProfile(username={self.username}, email={self.email}, validated={self.validated}, consultant_id={self.consultant_id}, role={self.role})"
+
+
+@dataclass
+class Fido2Credential:
+    credential_id: str  # base64url-encoded
+    public_key: str     # base64url-encoded
+    sign_count: int
+    transports: Optional[List[str]] = None
+    user_handle: Optional[str] = None
+    rp_id: Optional[str] = None
+    # Add any other fields as needed
+
+    def to_dict(self) -> dict:
+        return asdict(self)
 
