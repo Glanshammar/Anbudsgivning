@@ -12,9 +12,9 @@ from time import sleep
 from functools import wraps
 from typing import Tuple, Dict, Any, Optional
 from contextlib import asynccontextmanager
-from flask import Flask, request, jsonify, current_app
+from flask import Flask, request, jsonify, current_app, session, abort, make_response
 from flask_cors import CORS
-from flask_login import login_user, logout_user, login_required, current_user
+from flask_login import login_user, logout_user, login_required, current_user, LoginManager, UserMixin
 from google.cloud.firestore_v1.base_query import FieldFilter
 import zmq
 import zmq.asyncio
@@ -22,7 +22,7 @@ import bcrypt
 import re
 from httpcodes import *
 from Data import Consultant, CompanyProfile, Expertise, TenderDocument, TenderPortal, UserProfile
-from Agents import AgentType, AgentManager
+from Agents import AgentType, AgentManager, Agent
 from Backend.db_app import *
 from dotenv import load_dotenv
 from Logger.logger import LoggerManager
@@ -125,14 +125,16 @@ def initialize_connection_pool():
         _connection_pool_initialized = True
 
 
-def cleanup_task():
-    while True:
-        with app.app_context():
-            pass
-        time.sleep(900)
+@app.teardown_appcontext
+async def cleanup(exception=None):
+    """Cleanup resources when the application context is torn down"""
+    if hasattr(current_app, 'connection_pool'):
+        await current_app.connection_pool.close()
 
-thread = threading.Thread(target=cleanup_task, daemon=True)
-thread.start()
+
+@app.login_manager.unauthorized_handler
+def unauthorized():
+    return jsonify({"message": "You must be logged in to access this resource."}), 401
 # ------------------------------------------------------------------------------------------------------------- #
 # --------------------------------------------- Request Functions --------------------------------------------- #
 async def ServerRequest(command: str = None, params: dict = None) -> Tuple[Dict[str, Any], int]:
@@ -217,6 +219,58 @@ def ValidatePassword(password: str) -> bool:
     # Minimum 8 characters, at least one uppercase, one lowercase, one digit, one special character
     pattern = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()[\]{}<>.,;:|~`_+=-]).{8,}$'
     return bool(re.match(pattern, password))
+
+
+def RoleRequired(*roles: str):
+    """Decorator to require a user to have a specific role (or one of several roles), or be an Agent/AgentManager object."""
+    def decorator(func):
+        @wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            # Allow if current_user is Agent or AgentManager instance
+            if (
+                not hasattr(current_user, 'role') or
+                (
+                    current_user.role not in roles and
+                    not isinstance(current_user, Agent) and
+                    not isinstance(current_user, AgentManager)
+                )
+            ):
+                return http_403(f"You do not have the required role: {roles} or Agent/AgentManager access")
+            return await func(*args, **kwargs)
+        @wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            if (
+                not hasattr(current_user, 'role') or
+                (
+                    current_user.role not in roles and
+                    not isinstance(current_user, Agent) and
+                    not isinstance(current_user, AgentManager)
+                )
+            ):
+                return http_403(f"You do not have the required role: {roles} or Agent/AgentManager access")
+            return func(*args, **kwargs)
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        else:
+            return sync_wrapper
+    return decorator
+
+def BlockAgents(func):
+    """Decorator to block access for Agent and AgentManager objects."""
+    @wraps(func)
+    async def async_wrapper(*args, **kwargs):
+        if isinstance(current_user, Agent) or isinstance(current_user, AgentManager):
+            return http_403("Agent and AgentManager processes are not allowed to access this endpoint.")
+        return await func(*args, **kwargs)
+    @wraps(func)
+    def sync_wrapper(*args, **kwargs):
+        if isinstance(current_user, Agent) or isinstance(current_user, AgentManager):
+            return http_403("Agent and AgentManager processes are not allowed to access this endpoint.")
+        return func(*args, **kwargs)
+    if asyncio.iscoroutinefunction(func):
+        return async_wrapper
+    else:
+        return sync_wrapper
 # ------------------------------------------------------------------------------------------------------------- #
 # ---------------------------------------------- Route Functions ---------------------------------------------- #
 @app.route('/api/status/server', methods=['GET'])
@@ -232,11 +286,13 @@ async def ApiStatus() -> Tuple[Dict[str, Any], int]:
 
 
 @app.route('/api/user/register', methods=['POST'])
+@BlockAgents
 async def Register() -> Tuple[Dict[str, Any], int]:
     data = request.get_json()
     username = data.get("username")
     email = data.get("email")
     password = data.get("password")
+    role = data.get("role", "User")
 
     # Basic validation
     if not username or not email or not password:
@@ -263,7 +319,8 @@ async def Register() -> Tuple[Dict[str, Any], int]:
         "email": email,
         "password": hashed_pw,
         "validated": False,
-        "validation_code": validation_code
+        "validation_code": validation_code,
+        "role": role
     }
     user_ref = users_ref.add(user_data)
     logger.info(f"User registered: {username}", extra={'user_id': user_ref[1].id})
@@ -271,6 +328,7 @@ async def Register() -> Tuple[Dict[str, Any], int]:
 
 
 @app.route('/api/user/login', methods=['POST'])
+@BlockAgents
 async def Login() -> Tuple[Dict[str, Any], int]:
     data = request.get_json()
     username = data.get("username")
@@ -291,13 +349,17 @@ async def Login() -> Tuple[Dict[str, Any], int]:
     logger.info(f"User logged in: {username}", extra={'user_id': user_obj.id})
     return jsonify({"message": "Login successful"}), 200
 
+
 @app.route('/api/user/logout', methods=['POST'])
+@BlockAgents
 @login_required
 async def Logout() -> Tuple[Dict[str, Any], int]:
     logout_user()
     return jsonify({"message": "Successfully logged out"}), 200
 
+
 @app.route('/api/user/profile', methods=['GET'])
+@BlockAgents
 @login_required
 async def GetProfile():
     try:
@@ -308,7 +370,9 @@ async def GetProfile():
         logger.error(f"Get profile failed: {str(e)}", extra={'error': str(e)})
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/user/profile', methods=['PUT'])
+
+@app.route('/api/user/update', methods=['PUT'])
+@BlockAgents
 @login_required
 @ValidateModel(UserProfile)
 async def UpdateProfile():
@@ -326,7 +390,28 @@ async def UpdateProfile():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/api/user/delete', methods=['DELETE'])
+@BlockAgents
+@login_required
+async def DeleteUser() -> Tuple[Dict[str, Any], int]:
+    current_user_id = current_user.get_id()
+    logger.info(f"Deleting user: {current_user_id}", extra={'user_id': current_user_id})
+    return await DatabaseRequest(collection_name=USERS, data=None, doc_id=current_user_id)
+
+
+@app.route('/api/user/delete_other', methods=['POST'])
+@BlockAgents
+@login_required
+@RoleRequired('Admin')
+async def DeleteOtherUser() -> Tuple[Dict[str, Any], int]:
+    data = request.get_json()
+    user_id = data.get("user_id")
+    logger.info(f"Deleting user: {user_id}", extra={'user_id': user_id})
+    return await DatabaseRequest(collection_name=USERS, data=None, doc_id=user_id)
+
+
 @app.route('/api/user/validate', methods=['POST'])
+@BlockAgents
 async def ValidateUser() -> Tuple[Dict[str, Any], int]:
     data = request.get_json()
     email = data.get("email")
@@ -350,6 +435,12 @@ async def ValidateUser() -> Tuple[Dict[str, Any], int]:
     user_doc.reference.update({"validated": True, "validation_code": firestore.DELETE_FIELD})
     logger.info(f"User validated: {user_doc.id}", extra={'user_id': user_doc.id})
     return jsonify({"msg": "User validated successfully."}), 200
+
+
+@app.route('/api/user/get_role', methods=['GET'])
+@login_required
+async def GetRoles():
+    return jsonify({"role": current_user.role}), 200
 
 
 @app.route('/api/consultants', methods=['GET', 'POST', 'PUT', 'DELETE'])
@@ -446,12 +537,13 @@ async def TendersRequest():
     """
 
     current_user_id = current_user.get_id()
+    doc_id = 'Tenders'
 
     if request.method == 'GET':
         logger.info(f"Getting tenders for user: {current_user_id}", extra={'user_id': current_user_id})
         return await DatabaseRequest(collection_name=COMPANY_DATA,
                             data=None,
-                            doc_id='Tenders')
+                            doc_id=doc_id)
                             
     elif request.method in ['POST', 'PUT']:
         tender_data = request.get_json().get('tenders', [])
@@ -474,7 +566,7 @@ async def TendersRequest():
             logger.info(f"Creating new tenders {validated_tenders} for user: {current_user_id}", extra={'user_id': current_user_id})
             return await DatabaseRequest(collection_name=COMPANY_DATA,
                                 data={"tenders": validated_tenders},
-                                doc_id='Tenders')
+                                doc_id=doc_id)
         
         elif request.method == 'PUT':
             existing_data = current_app.db.collection(COMPANY_DATA).document('Tenders').get()
@@ -489,14 +581,14 @@ async def TendersRequest():
             logger.info(f"Updating tenders {combined_tenders} for user: {current_user_id}", extra={'user_id': current_user_id})
             return await DatabaseRequest(collection_name=COMPANY_DATA,
                                 data={"tenders": combined_tenders},
-                                doc_id='Tenders')
+                                doc_id=doc_id)
 
     elif request.method == 'DELETE':
         try:
             logger.info(f"Deleting tenders for user: {current_user_id}", extra={'user_id': current_user_id})
             return await DatabaseRequest(
                 collection_name=COMPANY_DATA,
-                doc_id='Tenders'
+                doc_id=doc_id
             )
         except Exception as e:
             logger.error(f"Error deleting tenders: {str(e)}", extra={'error': str(e)})
@@ -508,22 +600,23 @@ async def TendersRequest():
 async def ExpertiseRequest():
     try:
         current_user_id = current_user.get_id()
+        doc_id = 'Expertise'
         
         if request.method == 'POST':
             logger.info(f"Creating expertise by user: {current_user_id}", extra={'user_id': current_user_id})
             return await DatabaseRequest(collection_name=COMPANY_DATA,
                                   data=request.get_json(),
-                                  doc_id='Expertise')
+                                  doc_id=doc_id)
         elif request.method == 'GET':
             logger.info(f"Getting expertise by user: {current_user_id}", extra={'user_id': current_user_id})
             return await DatabaseRequest(collection_name=COMPANY_DATA,
                                   data=None,
-                                  doc_id='Expertise')
+                                  doc_id=doc_id)
         elif request.method == 'PUT':
             logger.info(f"Updating expertise by user: {current_user_id}", extra={'user_id': current_user_id})
             return await DatabaseRequest(collection_name=COMPANY_DATA,
                                   data=request.get_json(),
-                                  doc_id='Expertise')
+                                  doc_id=doc_id)
     except Exception as e:
         logger.error(f"Expertise request failed: {str(e)}", extra={'error': str(e)})
         return jsonify({"error": str(e)}), 500
@@ -537,11 +630,13 @@ async def TenderPortals():
     {
         "portals": [
             {
+            "site": "TenderPortal1",
             "url": "https://tenderportal1.example.com",
             "username": "username1",
             "password": "password1"
             },
             {
+            "site": "TenderPortal2",
             "url": "https://tenderportal2.example.com",
             "username": "username2",
             "password": "password2"
@@ -550,12 +645,13 @@ async def TenderPortals():
     }
     """
     current_user_id = current_user.get_id()
+    doc_id = 'TenderPortals'
 
     if request.method == 'GET':
         logger.info(f"Getting portals for user: {current_user_id}", extra={'user_id': current_user_id})
         return await DatabaseRequest(collection_name=COMPANY_DATA,
                              data=None,
-                             doc_id='TenderPortals')
+                             doc_id=doc_id)
 
     portals_data = request.get_json().get('portals', [])
     validated_portals = []
@@ -564,10 +660,18 @@ async def TenderPortals():
         validated_portals.append(portal_obj.to_dict())
 
     if request.method == 'POST':
-        logger.info(f"Creating new portals {validated_portals} for user: {current_user_id}", extra={'user_id': current_user_id})
+        existing_data = current_app.db.collection(COMPANY_DATA).document('TenderPortals').get()
+        existing_portals = existing_data.to_dict().get('portals', []) if existing_data.exists else []
+
+        # Avoid duplicates by URL
+        existing_urls = {portal['url'] for portal in existing_portals}
+        new_portals = [portal for portal in validated_portals if portal['url'] not in existing_urls]
+        combined_portals = existing_portals + new_portals
+
+        logger.info(f"Adding new portals {new_portals} for user: {current_user_id}", extra={'user_id': current_user_id})
         return await DatabaseRequest(collection_name=COMPANY_DATA,
-                             data={"portals": validated_portals},
-                             doc_id='TenderPortals')
+                                     data={"portals": combined_portals},
+                                     doc_id=doc_id)
     
     elif request.method == 'PUT':
         logger.info(f"Updating portals {validated_portals} for user: {current_user_id}", extra={'user_id': current_user_id})
@@ -583,45 +687,36 @@ async def TenderPortals():
         
         return await DatabaseRequest(collection_name=COMPANY_DATA,
                              data={"portals": combined_portals},
-                             doc_id='TenderPortals')
+                             doc_id=doc_id)
 
 
-@app.route('/api/company', methods=['GET', 'POST', 'PUT', 'DELETE'])
+@app.route('/api/company_profile', methods=['GET', 'POST', 'PUT', 'DELETE'])
 @login_required
+@RoleRequired('Admin')
+@ValidateModel(CompanyProfile)
 async def Company():
-    """
-    Handle all company operations:
-    GET: Get all companies or a specific company by ID
-    POST: Create a new company
-    PUT: Update an existing company
-    DELETE: Delete a company
-    """
     try:
-        company_id = request.args.get('id')
-        
+        doc_id = 'CompanyProfile'
         if request.method == 'GET':
-            logger.info(f"Getting company: {company_id}", extra={'company_id': company_id})
-            return await DatabaseRequest(COMPANY_DATA, doc_id=company_id)
+            logger.info(f"Getting company profile", extra={'doc_id': doc_id})
+            return await DatabaseRequest(COMPANY_DATA, data=None, doc_id=doc_id)
         elif request.method == 'POST':
-            logger.info("Creating new company")
-            return await DatabaseRequest(COMPANY_DATA, request.get_json())
+            logger.info("Creating company profile", extra={'doc_id': doc_id})
+            return await DatabaseRequest(COMPANY_DATA, data=request.validated_data, doc_id=doc_id)
         elif request.method == 'PUT':
-            if not company_id:
-                return http_400("Company ID is required for update")
-            logger.info(f"Updating company: {company_id}", extra={'company_id': company_id})
-            return await DatabaseRequest(COMPANY_DATA, request.get_json(), company_id)
+            logger.info(f"Updating company profile", extra={'doc_id': doc_id})
+            return await DatabaseRequest(COMPANY_DATA, data=request.validated_data, doc_id=doc_id)
         elif request.method == 'DELETE':
-            if not company_id:
-                return http_400("Company ID is required for deletion")
-            logger.info(f"Deleting company: {company_id}", extra={'company_id': company_id})
-            return await DatabaseRequest(COMPANY_DATA, doc_id=company_id)
+            logger.info(f"Deleting company profile", extra={'doc_id': doc_id})
+            return await DatabaseRequest(COMPANY_DATA, data=None, doc_id=doc_id)
     except Exception as e:
-        logger.error(f"Company operation failed: {str(e)}", extra={'error': str(e)})
+        logger.error(f"Company profile operation failed: {str(e)}", extra={'error': str(e)})
         return jsonify({"error": str(e)}), 500
 # ------------------------------------------------------------------------------------------------------------- #
 # --------------------------------------------- Agent Management ---------------------------------------------- #
 @app.route('/api/agents', methods=['POST', 'GET', 'DELETE'])
 @login_required
+@RoleRequired('Admin')
 async def AgentManagement():
     try:
         if request.method == 'POST':
@@ -651,94 +746,55 @@ async def AgentManagement():
     except Exception as e:
         logger.error(f"Agent management failed: {str(e)}", extra={'error': str(e)})
         return jsonify({"error": str(e)}), 500
-
-@app.route('/api/agents/logs', methods=['GET'])
-@login_required
-async def GetAgentLogs():
-    try:
-        return await ServerRequest('get_agent_logs')
-    except Exception as e:
-        logger.error(f"Get agent logs failed: {str(e)}", extra={'error': str(e)})
-        return jsonify({"error": str(e)}), 500
 # ------------------------------------------------------------------------------------------------------------- #
+# -------------------------------------------- FIDO2 Authentication ------------------------------------------- #
+# --- FIDO2 Registration Begin ---
+@app.route('/api/fido2/register/begin', methods=['POST'])
+async def fido2_register_begin():
+    data = request.get_json()
+    resp, status = await ServerRequest('fido2_register_begin', data)
+    if status == 200:
+        # Store state and user_id in session for completion
+        session['fido2_state'] = resp['state']
+        session['fido2_user_id'] = resp['user_id']
+        return jsonify(resp['registration_data']), 200
+    return jsonify(resp), status
+
+# --- FIDO2 Registration Complete ---
+@app.route('/api/fido2/register/complete', methods=['POST'])
+async def fido2_register_complete():
+    data = request.get_json()
+    # Add state and user_id from session
+    data['state'] = session.get('fido2_state')
+    data['user_id'] = session.get('fido2_user_id')
+    resp, status = await ServerRequest('fido2_register_complete', data)
+    return jsonify(resp), status
+
+# --- FIDO2 Authentication Begin ---
+@app.route('/api/fido2/authenticate/begin', methods=['POST'])
+async def fido2_authenticate_begin():
+    data = request.get_json()
+    resp, status = await ServerRequest('fido2_authenticate_begin', data)
+    if status == 200:
+        session['fido2_auth_state'] = resp['state']
+        session['fido2_user_id'] = resp['user_id']
+        return jsonify(resp['auth_data']), 200
+    return jsonify(resp), status
+
+# --- FIDO2 Authentication Complete ---
+@app.route('/api/fido2/authenticate/complete', methods=['POST'])
+async def fido2_authenticate_complete():
+    data = request.get_json()
+    data['state'] = session.get('fido2_auth_state')
+    data['user_id'] = session.get('fido2_user_id')
+    resp, status = await ServerRequest('fido2_authenticate_complete', data)
+    if status == 200:
+        # You may want to log in the user here if needed
+        pass
+    return jsonify(resp), status
+
 # ------------------------------------------------------------------------------------------------------------- #
-@app.route('/api/test/wait', methods=['GET'])
-async def TestWait():
-    await asyncio.sleep(15)
-    return http_200('Wait test done.')
-
-
-@app.route('/api/test/async', methods=['GET'])
-async def TestAsync():
-    """
-    Test endpoint to demonstrate async functionality.
-    Makes multiple concurrent requests to the server and measures total time.
-    
-    Returns:
-        JSON response with timing information and results
-    """
-    try:
-        import time
-        start_time = time.time()
-        
-        # Create multiple concurrent tasks
-        tasks = [
-            ServerRequest('status'),  # Server status
-            ServerRequest('get_agents'),  # Get all agents
-            DatabaseRequest('CompanyData', doc_id='CompanyProfile'),  # Company profile
-            DatabaseRequest('Consultants'),  # All consultants
-            DatabaseRequest('CompanyData', doc_id='Tenders')  # All tenders
-        ]
-        
-        # Execute all tasks concurrently
-        results = await asyncio.gather(*tasks)
-        
-        end_time = time.time()
-        total_time = end_time - start_time
-        
-        # Format results
-        response = {
-            "total_time_seconds": round(total_time, 3),
-            "requests_made": len(tasks),
-            "average_time_per_request": round(total_time / len(tasks), 3),
-            "results": [
-                {
-                    "request": task.__name__ if hasattr(task, '__name__') else str(task),
-                    "status_code": result[1] if isinstance(result, tuple) else 500,
-                    "data": result[0].get_json() if isinstance(result, tuple) else str(result)
-                }
-                for task, result in zip(tasks, results)
-            ]
-        }
-        
-        logger.info(
-            "Async test completed",
-            extra={
-                'total_time': total_time,
-                'requests_made': len(tasks),
-                'average_time': total_time / len(tasks)
-            }
-        )
-        
-        return jsonify(response), 200
-    except Exception as e:
-        logger.error(f"Async test failed: {str(e)}", extra={'error': str(e)})
-        return jsonify({"error": str(e)}), 500
-# ------------------------------------------------------------------------------------------------------------- #
-# ------------------------------------------------------------------------------------------------------------- #
-
-@app.teardown_appcontext
-async def cleanup(exception=None):
-    """Cleanup resources when the application context is torn down"""
-    if hasattr(current_app, 'connection_pool'):
-        await current_app.connection_pool.close()
-
-
-@app.login_manager.unauthorized_handler
-def unauthorized():
-    return jsonify({"message": "You must be logged in to access this resource."}), 401
-
-
+# -------------------------------------------- App Config & Startup -------------------------------- #
 if __name__ == '__main__':
     import hypercorn.asyncio
     import hypercorn.config
