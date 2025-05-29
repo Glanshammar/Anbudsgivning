@@ -1,41 +1,41 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// Funktion för att kontrollera om JWT token är giltig
-const isTokenValid = (token: string) => {
-  try {
-    // Validera token (kontrollera signatur, utgångsdatum osv.)
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.exp * 1000 > Date.now();
-  } catch {
-    return false;
-  }
-};
-
 export function middleware(request: NextRequest) {
-  // Hämta token från cookies eller auth header
-  const token =
-    request.cookies.get("token")?.value ||
-    request.headers.get("Authorization")?.substring(7);
+  // Get session cookie from flask-login (typically named 'session')
+  const sessionCookie = request.cookies.get("session")?.value;
 
-  // Kontrollera om rutten är en del av dashboard
+  // Check if the route is part of the dashboard
   const isDashboardRoute = request.nextUrl.pathname.startsWith("/dashboard");
 
-  // Om det är en dashboard-rutt men ingen giltig token finns, omdirigera till inloggningssidan
+  // If the route is part of the dashboard but no session exists, redirect to the login page
   if (isDashboardRoute) {
-    if (!token || !isTokenValid(token)) {
+    if (!sessionCookie) {
       const redirectUrl = new URL("/login", request.url);
       return NextResponse.redirect(redirectUrl);
+    }
+  }
+
+  // If user has a session and trying to access login/register, redirect to dashboard
+  if (sessionCookie) {
+    if (
+      request.nextUrl.pathname === "/login" ||
+      request.nextUrl.pathname === "/register"
+    ) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   }
 
   return NextResponse.next();
 }
 
-// Se till att middleware endast körs för relevanta rutter
+// Ensure middleware only runs for relevant routes
 export const config = {
   matcher: [
-    // Matcha alla dashboard-rutter
+    // Match all dashboard routes
     "/dashboard/:path*",
+    // Also check login/register for authenticated users
+    "/login",
+    "/register",
   ],
 };
