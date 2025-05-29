@@ -30,6 +30,7 @@ import threading
 import time
 import secrets
 import inspect
+import requests
 
 
 # Collection name constants
@@ -747,52 +748,70 @@ async def AgentManagement():
         logger.error(f"Agent management failed: {str(e)}", extra={'error': str(e)})
         return jsonify({"error": str(e)}), 500
 # ------------------------------------------------------------------------------------------------------------- #
-# -------------------------------------------- FIDO2 Authentication ------------------------------------------- #
-# --- FIDO2 Registration Begin ---
-@app.route('/api/fido2/register/begin', methods=['POST'])
-async def fido2_register_begin():
-    data = request.get_json()
-    resp, status = await ServerRequest('fido2_register_begin', data)
-    if status == 200:
-        # Store state and user_id in session for completion
-        session['fido2_state'] = resp['state']
-        session['fido2_user_id'] = resp['user_id']
-        return jsonify(resp['registration_data']), 200
-    return jsonify(resp), status
+# -------------------------------------------- Update Application --------------------------------------------- #
+def GetLatestRelease():
+    url = None
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        return data['tag_name'], data["assets"]
+    return None, None
 
-# --- FIDO2 Registration Complete ---
-@app.route('/api/fido2/register/complete', methods=['POST'])
-async def fido2_register_complete():
-    data = request.get_json()
-    # Add state and user_id from session
-    data['state'] = session.get('fido2_state')
-    data['user_id'] = session.get('fido2_user_id')
-    resp, status = await ServerRequest('fido2_register_complete', data)
-    return jsonify(resp), status
 
-# --- FIDO2 Authentication Begin ---
-@app.route('/api/fido2/authenticate/begin', methods=['POST'])
-async def fido2_authenticate_begin():
-    data = request.get_json()
-    resp, status = await ServerRequest('fido2_authenticate_begin', data)
-    if status == 200:
-        session['fido2_auth_state'] = resp['state']
-        session['fido2_user_id'] = resp['user_id']
-        return jsonify(resp['auth_data']), 200
-    return jsonify(resp), status
-
-# --- FIDO2 Authentication Complete ---
-@app.route('/api/fido2/authenticate/complete', methods=['POST'])
-async def fido2_authenticate_complete():
-    data = request.get_json()
-    data['state'] = session.get('fido2_auth_state')
-    data['user_id'] = session.get('fido2_user_id')
-    resp, status = await ServerRequest('fido2_authenticate_complete', data)
-    if status == 200:
-        # You may want to log in the user here if needed
-        pass
-    return jsonify(resp), status
-
+@app.route('/api/update_app', methods=['GET'])
+def GetUpdate():
+    # Create update directory in instance folder
+    update_dir = os.path.join(app.instance_path, 'updates')
+    os.makedirs(update_dir, exist_ok=True)
+    
+    # Version file path in update directory
+    version_path = os.path.join(update_dir, 'version.txt')
+    
+    # Create version file if it doesn't exist
+    if not os.path.exists(version_path):
+        with open(version_path, 'w') as file:
+            file.write('0.0.0')  # Initial version
+    
+    with open(version_path, 'r') as file:
+        current_version = file.read().strip()
+    
+    latest_version, assets = GetLatestRelease()
+    
+    if latest_version and latest_version != current_version and len(assets) >= 1:
+        # Find the main.py file in assets
+        main_asset = next((asset for asset in assets if asset['name'] == 'main.py'), None)
+        
+        if not main_asset:
+            return http_404("main.py not found in release assets")
+        
+        try:
+            # Download main.py
+            download_url = main_asset['browser_download_url']
+            file_path = os.path.join(update_dir, 'main.py')
+            
+            # Stream download to handle large files
+            with requests.get(download_url, stream=True) as response:
+                response.raise_for_status()
+                with open(file_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:  # Filter out keep-alive chunks
+                            f.write(chunk)
+            
+            # Update version after successful download
+            with open(version_path, 'w') as file:
+                file.write(latest_version)
+            
+            return http_200({
+                "status": "success",
+                "version": latest_version,
+                "downloaded_file": "main.py",
+                "update_path": update_dir
+            })
+        except Exception as e:
+            logger.error(f"Failed to download main.py: {str(e)}", extra={'error': str(e)})
+            return http_500(f"Failed to download main.py: {str(e)}")
+            
+    return http_404("Update not found.")
 # ------------------------------------------------------------------------------------------------------------- #
 # -------------------------------------------- App Config & Startup -------------------------------- #
 if __name__ == '__main__':
