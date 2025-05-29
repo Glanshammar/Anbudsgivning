@@ -92,12 +92,14 @@ def CreateApp(config=None):
             user_id: str,
             username: str,
             email: str,
-            validated: bool = False
+            validated: bool = False,
+            role: str = 'User'
         ):
             self.id = user_id
             self.username = username
             self.email = email
             self.validated = validated
+            self.role = role
 
         def get_id(self) -> str:
             return str(self.id)
@@ -113,7 +115,8 @@ def CreateApp(config=None):
                     user_id=user_doc.id,
                     username=data.get('username'),
                     email=data.get('email'),
-                    validated=data.get('validated', False)
+                    validated=data.get('validated', False),
+                    role=data.get('role', 'User')
                 )
             return None
 
@@ -133,7 +136,8 @@ def CreateApp(config=None):
                         user_id=user_doc.id,
                         username=user_data.get('username'),
                         email=user_data.get('email'),
-                        validated=user_data.get('validated', False)
+                        validated=user_data.get('validated', False),
+                        role=user_data.get('role', 'User')
                     )
             return None
 
