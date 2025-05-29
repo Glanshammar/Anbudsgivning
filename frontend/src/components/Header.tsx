@@ -8,9 +8,15 @@ import { logout } from "@/utils/auth";
 export default function Header() {
   const router = useRouter();
 
-  const handleLogout = () => {
-    logout();
-    router.push("/login");
+  const handleLogout = async () => {
+    try {
+      await logout();
+      // Logout function handles redirect to login
+    } catch (error) {
+      console.error("Logout error:", error);
+      // Still redirect to login even if logout request fails
+      router.push("/login");
+    }
   };
 
   return (

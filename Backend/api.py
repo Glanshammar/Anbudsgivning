@@ -311,7 +311,7 @@ async def Register() -> Tuple[Dict[str, Any], int]:
     hashed_pw = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
     # Generate a secure validation code
-    validation_code = secrets.token_urlsafe(8)
+    validation_code = secrets.token_urlsafe(16)
 
     # Store user in Firestore with validated=False and validation_code
     user_data = {
@@ -324,7 +324,6 @@ async def Register() -> Tuple[Dict[str, Any], int]:
     }
     user_ref = users_ref.add(user_data)
     logger.info(f"User registered: {username}", extra={'user_id': user_ref[1].id})
-    # For now, return the code in the response
     return jsonify({"message": "User registered successfully. Please validate your account.", "validation_code": validation_code}), 201
 
 
@@ -344,9 +343,8 @@ async def Login() -> Tuple[Dict[str, Any], int]:
         return http_401("Invalid credentials.")
 
     if not user_obj.validated:
-        return http_401("Account not validated. Please validate your account before logging in.")
+        return http_401("Account not validated. Please validate your account.")
 
-    print(f"User validated: {user_obj.validated}")
     login_user(user_obj)
     logger.info(f"User logged in: {username}", extra={'user_id': user_obj.id})
     return jsonify({"message": "Login successful"}), 200
@@ -416,19 +414,14 @@ async def DeleteOtherUser() -> Tuple[Dict[str, Any], int]:
 @BlockAgents
 async def ValidateUser() -> Tuple[Dict[str, Any], int]:
     data = request.get_json()
-    username = data.get("username")
     email = data.get("email")
     code = data.get("validation_code")
 
-    if not code or (not username and not email):
-        return http_400("Username or email and validation code are required.")
+    if not code or not email:
+        return http_400("Invalid input: Email and validation code are required.")
 
     users_ref = current_app.db.collection(USERS)
-    query = None
-    if username:
-        query = users_ref.where(filter=FieldFilter('username', '==', username)).limit(1)
-    elif email:
-        query = users_ref.where(filter=FieldFilter('email', '==', email)).limit(1)
+    query = users_ref.where(filter=FieldFilter('email', '==', email)).limit(1)
     user_docs = list(query.stream())
     if not user_docs:
         return http_404("User not found.")

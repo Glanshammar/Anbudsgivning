@@ -4,6 +4,9 @@ import time
 import asyncio
 import zmq.asyncio
 
+if sys.platform.startswith('win'):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(current_dir)
 sys.path.insert(0, root_dir)
@@ -235,7 +238,7 @@ operations = {
     'read': ReadDocument,
     'update': UpdateDocument,
     'delete': DeleteDocument,
-    'status': lambda params: 'Server is online!',
+    'status': lambda params: {'message': 'Server is online!'},
     'start_agent': StartAgent,
     'get_agents': GetAgents,
     'stop_agent': StopAgent,
