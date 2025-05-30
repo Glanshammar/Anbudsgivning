@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useTenderContext, TenderWithPhase } from "@/contexts/TenderContext";
 import { useRouter } from "next/navigation";
@@ -49,13 +49,62 @@ export default function EvaluationPage() {
 
   const evaluationTenders = getTendersByPhase("evaluation");
 
+  // Auto-save effect - sparar automatiskt när scores eller notes ändras
+  useEffect(() => {
+    if (!selectedTender) return;
+
+    // Vänta lite så användaren hinner fylla i flera fält utan att spara för varje klick
+    const timeoutId = setTimeout(() => {
+      const totalScore = calculateTotalScore();
+      const recommendation = getRecommendation(totalScore);
+
+      const evaluation = {
+        competenceMatch: scores.competenceMatch || 0,
+        competitionLevel: scores.competitionLevel || 0,
+        resourceAvailability: scores.resourceAvailability || 0,
+        profitability: scores.profitability || 0,
+        strategicValue: scores.strategicValue || 0,
+        notes,
+        totalScore,
+        recommendation,
+      };
+
+      updateTenderEvaluation(selectedTender.id, evaluation);
+      console.log(
+        `💾 Auto-saved evaluation for: ${selectedTender.project_name}`
+      );
+    }, 500); // Spara efter 500ms inaktivitet
+
+    return () => clearTimeout(timeoutId);
+  }, [scores, notes, selectedTender]);
+
   const handleScoreChange = (criterion: string, score: number) => {
-    setScores((prev) => ({ ...prev, [criterion]: score }));
+    setScores((prev) => {
+      // Om användaren klickar på samma betyg igen, ta bort det
+      if (prev[criterion] === score) {
+        const newScores = { ...prev };
+        delete newScores[criterion];
+        return newScores;
+      }
+      // Annars sätt det nya betyget
+      return { ...prev, [criterion]: score };
+    });
+  };
+
+  const handleNotesChange = (newNotes: string) => {
+    setNotes(newNotes);
+  };
+
+  const handleCloseModal = () => {
+    setSelectedTender(null);
+    setScores({});
+    setNotes("");
   };
 
   const calculateTotalScore = () => {
     const values = Object.values(scores);
-    if (values.length === 0) return 0;
+    // Kräv att alla 5 kriterier är ifyllda
+    if (values.length !== 5) return 0;
     return (
       Math.round(
         (values.reduce((sum, score) => sum + score, 0) / values.length) * 10
@@ -63,35 +112,53 @@ export default function EvaluationPage() {
     );
   };
 
+  const getMissingCriteriaCount = () => {
+    // Räkna hur många kriterier som saknas baserat på nuvarande scores
+    const requiredCriteria = [
+      "competenceMatch",
+      "competitionLevel",
+      "resourceAvailability",
+      "profitability",
+      "strategicValue",
+    ];
+    const filledCriteria = requiredCriteria.filter(
+      (criterion) => scores[criterion] && scores[criterion] > 0
+    );
+    return 5 - filledCriteria.length;
+  };
+
+  const isEvaluationComplete = (evaluation?: any) => {
+    // Om vi har en sparad evaluation, kolla den
+    if (evaluation) {
+      return (
+        evaluation.competenceMatch > 0 &&
+        evaluation.competitionLevel > 0 &&
+        evaluation.resourceAvailability > 0 &&
+        evaluation.profitability > 0 &&
+        evaluation.strategicValue > 0
+      );
+    }
+    // Kolla lokala scores - alla 5 kriterier måste ha värden
+    const requiredCriteria = [
+      "competenceMatch",
+      "competitionLevel",
+      "resourceAvailability",
+      "profitability",
+      "strategicValue",
+    ];
+    return requiredCriteria.every(
+      (criterion) => scores[criterion] && scores[criterion] > 0
+    );
+  };
+
   const getRecommendation = (
     totalScore: number
   ): "proceed" | "decline" | "pending" => {
+    // Endast ge rekommendation om alla kriterier är ifyllda
+    if (!isEvaluationComplete()) return "pending";
     if (totalScore >= 4) return "proceed";
     if (totalScore <= 2) return "decline";
     return "pending";
-  };
-
-  const handleSaveEvaluation = () => {
-    if (!selectedTender) return;
-
-    const totalScore = calculateTotalScore();
-    const recommendation = getRecommendation(totalScore);
-
-    const evaluation = {
-      competenceMatch: scores.competenceMatch || 0,
-      competitionLevel: scores.competitionLevel || 0,
-      resourceAvailability: scores.resourceAvailability || 0,
-      profitability: scores.profitability || 0,
-      strategicValue: scores.strategicValue || 0,
-      notes,
-      totalScore,
-      recommendation,
-    };
-
-    updateTenderEvaluation(selectedTender.id, evaluation);
-    setSelectedTender(null);
-    setScores({});
-    setNotes("");
   };
 
   const handleProceedToDrafts = (tenderId: string) => {
@@ -229,15 +296,20 @@ export default function EvaluationPage() {
                           : "Starta bedömning"}
                       </Button>
 
-                      {tender.evaluation?.recommendation === "proceed" && (
-                        <Button
-                          onClick={() => handleProceedToDrafts(tender.id)}
-                          size="sm"
-                          className="bg-green-600 hover:bg-green-700"
-                        >
-                          Gå till utkast
-                        </Button>
-                      )}
+                      {tender.evaluation?.recommendation === "proceed" &&
+                        tender.evaluation.competenceMatch > 0 &&
+                        tender.evaluation.competitionLevel > 0 &&
+                        tender.evaluation.resourceAvailability > 0 &&
+                        tender.evaluation.profitability > 0 &&
+                        tender.evaluation.strategicValue > 0 && (
+                          <Button
+                            onClick={() => handleProceedToDrafts(tender.id)}
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            Gå till utkast
+                          </Button>
+                        )}
 
                       {tender.evaluation?.recommendation === "decline" && (
                         <Button
@@ -274,11 +346,11 @@ export default function EvaluationPage() {
                           Bedöm: {selectedTender.project_name}
                         </h3>
                         <p className="text-sm text-gray-500 mt-1">
-                          Betygsätt varje kriterium från 1 (låg) till 5 (hög)
+                          Betygsätt varje kriterium från 1 (låg) till 5 (hög).
                         </p>
                       </div>
                       <button
-                        onClick={() => setSelectedTender(null)}
+                        onClick={handleCloseModal}
                         className="text-gray-400 hover:text-gray-500"
                       >
                         <svg
@@ -332,7 +404,7 @@ export default function EvaluationPage() {
                         </label>
                         <textarea
                           value={notes}
-                          onChange={(e) => setNotes(e.target.value)}
+                          onChange={(e) => handleNotesChange(e.target.value)}
                           rows={4}
                           className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
                           placeholder="Lägg till kommentarer eller motivering för din bedömning..."
@@ -359,23 +431,15 @@ export default function EvaluationPage() {
                               )}
                             </span>
                           </div>
+                          {!isEvaluationComplete() && (
+                            <div className="mt-2 text-xs text-orange-600">
+                              ⚠️ Fyll i alla {getMissingCriteriaCount()}{" "}
+                              återstående kriterier för att få korrekt
+                              totalpoäng
+                            </div>
+                          )}
                         </div>
                       )}
-                    </div>
-
-                    <div className="flex justify-end gap-3 mt-8">
-                      <Button
-                        onClick={() => setSelectedTender(null)}
-                        variant="outline"
-                      >
-                        Avbryt
-                      </Button>
-                      <Button
-                        onClick={handleSaveEvaluation}
-                        disabled={Object.keys(scores).length === 0}
-                      >
-                        Spara bedömning
-                      </Button>
                     </div>
                   </div>
                 </div>
