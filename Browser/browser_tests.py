@@ -2,6 +2,7 @@ import os
 import sys
 import json
 from time import sleep
+import asyncio
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -10,6 +11,7 @@ sys.path.insert(0, parent_dir)
 from Browser.text import extract_tender_data
 from Browser.browser import Browser
 from bs4 import BeautifulSoup
+from Browser.browser_use_test import BrowserUseTest
 
 ted = "https://ted.europa.eu/en/search/result?classification-cpv=core&search-scope=ACTIVE"
 tendium = "https://tendium.ai/se/upphandlingar/"
@@ -255,3 +257,19 @@ match test:
             if 'browser' in locals():
                 browser.Quit()
                 print("Browser closed")
+    case 'agent':
+        async def run_browser_use_test():
+            test = BrowserUseTest(model_name="phi")
+            task = "Go to Reddit, search for 'runescape', and summarize the first post."
+            result = await test.run_test(task)
+            
+            print("\nTest Results:")
+            print(f"Status: {result['status']}")
+            print(f"Task: {result['task']}")
+            if result['status'] == 'success':
+                print(f"Result: {result['result']}")
+            else:
+                print(f"Error: {result['error']}")
+            print(f"Model used: {result['model']}")
+        
+        asyncio.run(run_browser_use_test())
