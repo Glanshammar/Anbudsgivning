@@ -23,9 +23,15 @@ export const login = async (
     body: JSON.stringify(credentials),
   });
 
+  let errorMessage = "Inloggningen misslyckades";
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.message || "Inloggningen misslyckades");
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.message || errorData.error || errorMessage;
+    } catch (e) {
+      // If response is not JSON, keep default error message
+    }
+    throw new Error(errorMessage);
   }
 
   const data = await response.json();
