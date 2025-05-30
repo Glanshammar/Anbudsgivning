@@ -8,7 +8,6 @@ sys.path.insert(0, root_dir)
 import zmq
 import time
 from enum import Enum
-from Logger import GetLogger
 from multiprocessing import Process
 from .agents import Agent, COMMAND_PORT, STATUS_PORT, AgentStatus
 from Browser.browser import Browser

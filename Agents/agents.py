@@ -8,7 +8,7 @@ sys.path.insert(0, root_dir)
 import zmq
 import time
 from enum import Enum
-from Logger import GetLogger
+from Logger import get_logger
 from multiprocessing import Process, Value, Lock
 
 
@@ -36,7 +36,7 @@ class Agent(Process):
         self.running = False
         self._status = Value('i', 0)  # Shared integer value for status
         self._status_lock = Lock()    # Lock for thread-safe status updates
-        self.logger = GetLogger(f'agent_{agent_id}', log_to_console=True)
+        self.logger = get_logger(f'agent_{agent_id}', log_to_console=True)
         self.context = None
         self.command_socket = None
         self.status_socket = None
@@ -162,7 +162,7 @@ class AgentManager(Process):
             self._processes = {}  # Store process info
             self.context = None
             self.status_socket = None
-            self.logger = GetLogger('agent_manager', log_to_console=True)
+            self.logger = get_logger('agent_manager', log_to_console=True)
             self.initialized = True
     
     @property

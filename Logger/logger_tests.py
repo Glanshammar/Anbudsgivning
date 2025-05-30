@@ -1,13 +1,13 @@
 import os
 import logging
-from .logger import GetLogger, LoggerManager
+from .logger import get_logger, LoggerManager
 
 def run_logger_tests():
     """Run a series of tests on the logger functionality"""
     print("\n=== Starting Logger Tests ===")
     
     # Test 1: Basic logging with different levels
-    logger = GetLogger('test_basic', log_to_console=True)
+    logger = get_logger('test_basic', log_to_console=True)
     logger.debug("This is a debug message")
     logger.info("This is an info message")
     logger.warning("This is a warning message")
@@ -18,7 +18,7 @@ def run_logger_tests():
     # Test 2: Test file rotation
     # Set rotation parameters before creating the logger
     LoggerManager.set_default_rotation(max_bytes=1024, backup_count=3)
-    rotation_logger = GetLogger(
+    rotation_logger = get_logger(
         'test_rotation',
         filename='logs/rotation_test.log',
         log_to_console=True
@@ -30,15 +30,15 @@ def run_logger_tests():
     print("✓ File rotation test completed")
     
     # Test 3: Test logger caching
-    logger1 = GetLogger('test_cache')
-    logger2 = GetLogger('test_cache')
+    logger1 = get_logger('test_cache')
+    logger2 = get_logger('test_cache')
     logger1.info("This message should appear only once in the log file")
     logger2.info("This message should appear only once in the log file")
     print("✓ Logger caching test completed")
 
     # Test 4: Test error handling with invalid path
     try:
-        invalid_logger = GetLogger(
+        invalid_logger = get_logger(
             'test_error',
             filename='/invalid/path/test.log',
             log_to_console=True
@@ -51,12 +51,12 @@ def run_logger_tests():
     LoggerManager.set_default_level(logging.DEBUG)
     LoggerManager.set_default_rotation(max_bytes=2048, backup_count=2)
     
-    new_logger = GetLogger('test_defaults')
+    new_logger = get_logger('test_defaults')
     new_logger.debug("This debug message should be visible due to changed default level")
     print("✓ Default settings test completed")
     
     # Test 6: Test with different encodings
-    unicode_logger = GetLogger('test_unicode', log_to_console=True)
+    unicode_logger = get_logger('test_unicode', log_to_console=True)
     unicode_logger.info("Testing Unicode: 你好世界")
     unicode_logger.info("Testing special chars: !@#$%^&*()")
     print("✓ Encoding test completed")
