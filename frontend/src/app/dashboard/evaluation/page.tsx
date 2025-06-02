@@ -49,11 +49,11 @@ export default function EvaluationPage() {
 
   const evaluationTenders = getTendersByPhase("evaluation");
 
-  // Auto-save effect - sparar automatiskt när scores eller notes ändras
+  // Auto-save effect - save automatically when scores or notes change
   useEffect(() => {
     if (!selectedTender) return;
 
-    // Vänta lite så användaren hinner fylla i flera fält utan att spara för varje klick
+    // Wait a bit so the user can fill in multiple fields without saving for each click
     const timeoutId = setTimeout(() => {
       const totalScore = calculateTotalScore();
       const recommendation = getRecommendation(totalScore);
@@ -73,20 +73,20 @@ export default function EvaluationPage() {
       console.log(
         `💾 Auto-saved evaluation for: ${selectedTender.project_name}`
       );
-    }, 500); // Spara efter 500ms inaktivitet
+    }, 500); // Save after 500ms of inactivity
 
     return () => clearTimeout(timeoutId);
   }, [scores, notes, selectedTender]);
 
   const handleScoreChange = (criterion: string, score: number) => {
     setScores((prev) => {
-      // Om användaren klickar på samma betyg igen, ta bort det
+      // If the user clicks the same score again, remove it
       if (prev[criterion] === score) {
         const newScores = { ...prev };
         delete newScores[criterion];
         return newScores;
       }
-      // Annars sätt det nya betyget
+      // Otherwise set the new score
       return { ...prev, [criterion]: score };
     });
   };
@@ -102,9 +102,9 @@ export default function EvaluationPage() {
   };
 
   const calculateTotalScore = () => {
-    const values = Object.values(scores);
-    // Kräv att alla 5 kriterier är ifyllda
-    if (values.length !== 5) return 0;
+    const values = Object.values(scores).filter((score) => score > 0);
+    // Calculate average based on filled criteria
+    if (values.length === 0) return 0;
     return (
       Math.round(
         (values.reduce((sum, score) => sum + score, 0) / values.length) * 10
@@ -112,50 +112,10 @@ export default function EvaluationPage() {
     );
   };
 
-  const getMissingCriteriaCount = () => {
-    // Räkna hur många kriterier som saknas baserat på nuvarande scores
-    const requiredCriteria = [
-      "competenceMatch",
-      "competitionLevel",
-      "resourceAvailability",
-      "profitability",
-      "strategicValue",
-    ];
-    const filledCriteria = requiredCriteria.filter(
-      (criterion) => scores[criterion] && scores[criterion] > 0
-    );
-    return 5 - filledCriteria.length;
-  };
-
-  const isEvaluationComplete = (evaluation?: any) => {
-    // Om vi har en sparad evaluation, kolla den
-    if (evaluation) {
-      return (
-        evaluation.competenceMatch > 0 &&
-        evaluation.competitionLevel > 0 &&
-        evaluation.resourceAvailability > 0 &&
-        evaluation.profitability > 0 &&
-        evaluation.strategicValue > 0
-      );
-    }
-    // Kolla lokala scores - alla 5 kriterier måste ha värden
-    const requiredCriteria = [
-      "competenceMatch",
-      "competitionLevel",
-      "resourceAvailability",
-      "profitability",
-      "strategicValue",
-    ];
-    return requiredCriteria.every(
-      (criterion) => scores[criterion] && scores[criterion] > 0
-    );
-  };
-
   const getRecommendation = (
     totalScore: number
   ): "proceed" | "decline" | "pending" => {
-    // Endast ge rekommendation om alla kriterier är ifyllda
-    if (!isEvaluationComplete()) return "pending";
+    // Calculate recommendation based on total score
     if (totalScore >= 4) return "proceed";
     if (totalScore <= 2) return "decline";
     return "pending";
@@ -296,20 +256,13 @@ export default function EvaluationPage() {
                           : "Starta bedömning"}
                       </Button>
 
-                      {tender.evaluation?.recommendation === "proceed" &&
-                        tender.evaluation.competenceMatch > 0 &&
-                        tender.evaluation.competitionLevel > 0 &&
-                        tender.evaluation.resourceAvailability > 0 &&
-                        tender.evaluation.profitability > 0 &&
-                        tender.evaluation.strategicValue > 0 && (
-                          <Button
-                            onClick={() => handleProceedToDrafts(tender.id)}
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            Gå till utkast
-                          </Button>
-                        )}
+                      <Button
+                        onClick={() => handleProceedToDrafts(tender.id)}
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                      Skicka till utkast
+                      </Button>
 
                       {tender.evaluation?.recommendation === "decline" && (
                         <Button
@@ -411,33 +364,22 @@ export default function EvaluationPage() {
                         />
                       </div>
 
-                      {Object.keys(scores).length > 0 && (
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                          <div className="flex justify-between items-center">
-                            <span className="font-medium">Totalpoäng:</span>
-                            <span className="text-lg font-bold">
-                              {calculateTotalScore()}/5
+                      {calculateTotalScore() > 0 && (
+                        <div className="mt-4 p-3 rounded-lg border">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-700">
+                              Totalpoäng: {calculateTotalScore()}/5
                             </span>
-                          </div>
-                          <div className="mt-2">
                             <span
-                              className={`px-3 py-1 rounded-full text-sm font-medium ${getRecommendationColor(
+                              className={`px-2 py-1 rounded-full text-xs font-medium ${getRecommendationColor(
                                 getRecommendation(calculateTotalScore())
                               )}`}
                             >
-                              Rekommendation:{" "}
                               {getRecommendationText(
                                 getRecommendation(calculateTotalScore())
                               )}
                             </span>
                           </div>
-                          {!isEvaluationComplete() && (
-                            <div className="mt-2 text-xs text-orange-600">
-                              ⚠️ Fyll i alla {getMissingCriteriaCount()}{" "}
-                              återstående kriterier för att få korrekt
-                              totalpoäng
-                            </div>
-                          )}
                         </div>
                       )}
                     </div>
