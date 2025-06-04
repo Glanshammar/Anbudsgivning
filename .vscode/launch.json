@@ -3,7 +3,7 @@
     "configurations": [
         {
             "name": "Main",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
             "console": "integratedTerminal",
@@ -11,43 +11,39 @@
         },
         {
             "name": "API",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/Backend/api.py",
             "console": "integratedTerminal",
             "envFile": "${workspaceFolder}/.env"
         },
         {
-            "name": "Agent",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}/Agents/agents.py",
-            "console": "integratedTerminal",
-            "envFile": "${workspaceFolder}/.env"
-        },
-        {
             "name": "Server",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/Backend/server.py",
             "console": "integratedTerminal",
             "envFile": "${workspaceFolder}/.env"
         },
+        {
+            "name": "Website",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/frontend",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": ["run", "dev"],
+            "console": "integratedTerminal"
+        }
     ],
     "compounds": [
-        {
-            "name": "Server+Main",
-            "configurations": ["Server", "Main"],
-            "stopAll": true
-        },
         {
             "name": "Server+API",
             "configurations": ["Server", "API"],
             "stopAll": true
         },
         {
-            "name": "Server+API+Main",
-            "configurations": ["Server", "API", "Main"],
+            "name": "Server+API+Website",
+            "configurations": ["Server", "API", "Website"],
             "stopAll": true
         }
     ]

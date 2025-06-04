@@ -1,6 +1,10 @@
-from Data import (Company, Consultant, TenderDocument, Calendar, Expertise, GetLinksFromResponse,
-                   Page, GetLinksFromPage, PromptAI,  mock_response_tender_pages, mock_response_document_links)
-from Agents import AgentManager, AgentType
+from Data import (CompanyProfile, Consultant, TenderDocument, Calendar, Expertise, GetLinksFromResponse,
+                   mock_response_tender_pages, mock_response_document_links, PromptAI)
+from Agents import AgentManager, AgentType, WebCrawler, COMMAND_PORT, STATUS_PORT
+from Logger.logger_tests import run_logger_tests
+from Data.ai import DownloadDocument
+from Browser.browser import Browser
+import zmq
 from selenium import webdriver
 import requests
 from time import sleep
@@ -11,14 +15,22 @@ import re
 import pymupdf
 from datetime import datetime, timedelta
 from Matching import IsTenderMatch
+from dotenv import load_dotenv
+import smtplib
+from email.mime.text import MIMEText
 
+
+load_dotenv()
 documents_folder = userpaths.get_my_documents()
+current_dir = os.path.dirname(os.path.abspath(__file__))
+agent_dir = os.path.join(current_dir, 'Agents')
 app_folder = os.path.join(documents_folder, 'AnbudApp')
 os.makedirs(app_folder, exist_ok=True)
 API_URL = 'http://127.0.0.1:5000'
 ted_portal = 'https://ted.europa.eu/en/search/result?classification-cpv=core&search-scope=ACTIVE'
 tender_url = 'https://ted.europa.eu/en/notice/-/detail/266375-2025'
 tendium_portal = 'https://tendium.ai/se/upphandlingar/'
+tender_document = 'https://ted.europa.eu/en/notice/298174-2025/pdf'
 tendersontime_portal = 'https://www.tendersontime.com/sweden-tenders/'
 
 
@@ -27,6 +39,46 @@ if __name__ == "__main__":
         command = input(">> ").lower()
         
         match command:
+            case 'email':
+                sender = os.getenv('EMAIL_SENDER')
+                password = os.getenv('EMAIL_PASSWORD')
+                receiver = os.getenv('EMAIL_RECEIVER')
+                subject = 'Test Email'
+                body = 'This is a test email'
+                message = MIMEText(body)
+                message['Subject'] = subject
+                message['From'] = sender
+                message['To'] = receiver
+
+                try:
+                    with smtplib.SMTP('smtp.gmail.com', 587) as server:
+                        server.starttls()
+                        server.login(sender, password)
+                        server.send_message(message)
+                    print("Email sent successfully")
+                except Exception as e:
+                    print(f"Error sending email: {e}")
+            case 'portals':
+                tender_portals_response = requests.get('http://127.0.0.1:5000/api/tender_portals')
+                tender_portals = json.loads(tender_portals_response.text)
+                portals = tender_portals['portals']
+                for portal in portals:
+                    print(f"URL: {portal['url']}, Username: {portal['username']}, Password: {portal['password']}")
+                with open(os.path.join(agent_dir, 'urls.json'), 'w') as f:
+                    json.dump(portals, f, indent=4)
+            case 'agent':
+                manager = AgentManager()
+                manager.start()
+                web_crawler = manager.Create(AgentType.WEB_CRAWLER, urls_to_crawl=[ted_portal, tendium_portal, tendersontime_portal])
+                manager.Start(web_crawler.agent_id)
+                ctx = zmq.Context()
+                sock = ctx.socket(zmq.REQ)
+                sock.connect(f"tcp://localhost:{COMMAND_PORT + web_crawler.agent_id}")
+                sock.send_string("test")
+                response = sock.recv_string()
+                print("Response:", response)
+                sock.close()
+                ctx.term()
             case 'ted':
                 url = "https://api.ted.europa.eu/v3/notices/search"
                 ted_api_key = os.getenv("TED_API_KEY")
@@ -50,26 +102,38 @@ if __name__ == "__main__":
                 else:
                     print(f"Error: {response.status_code} - {response.text}")
             case 'pages':
-                Page(ted_portal)
-                Page(tender_url)
+                browser = Browser()
+                try:
+                    browser.OpenPage(ted_portal)
+                    browser.OpenPage(tender_url)
+                finally:
+                    browser.Quit()
             case 'urls':
-                urls = GetLinksFromPage(tendersontime_portal)
-                for url in urls:
-                    print(url)
+                browser = Browser()
+                try:
+                    urls = browser.GetLinksFromPage(tendersontime_portal)
+                    for url in urls:
+                        print(url)
+                finally:
+                    browser.Quit()
             case 'tenders':
                 # Get all the URLs from a tender portal (TED as example), and prompts the LLM which ones are tender pages.
-                urls = GetLinksFromPage(tendersontime_portal)
-                urls_string = "\n".join(urls)
-                prompt = urls_string + """\n\n From the links I provide, extract only the URLs that lead to individual tender detail pages. By "tender detail page," I mean the specific page for a single procurement opportunity, which you access by clicking on a tender in a list or search results on a procurement website.
-                Only include links that match the pattern for tender detail pages. Output a list of these URLs only, and no duplicates."""
+                browser = Browser()
+                try:
+                    urls = browser.GetLinksFromPage(tendersontime_portal)
+                    urls_string = "\n".join(urls)
+                    prompt = urls_string + """\n\n From the links I provide, extract only the URLs that lead to individual tender detail pages. By "tender detail page," I mean the specific page for a single procurement opportunity, which you access by clicking on a tender in a list or search results on a procurement website.
+                    Only include links that match the pattern for tender detail pages. Output a list of these URLs only, and no duplicates."""
 
-                print('Waiting for LLM to answer...')
-                response = PromptAI(prompt=prompt)
-                print(response.choices[0].message.content)
-                response_string = response.choices[0].message.content
-                tender_urls = GetLinksFromResponse(response_text=response_string)
-                print("\n\nHere's a list of links to tender pages:")
-                print('\n'.join(str(item) for item in tender_urls))
+                    print('Waiting for LLM to answer...')
+                    response = PromptAI(prompt=prompt)
+                    print(response.choices[0].message.content)
+                    response_string = response.choices[0].message.content
+                    tender_urls = GetLinksFromResponse(response_text=response_string)
+                    print("\n\nHere's a list of links to tender pages:")
+                    print('\n'.join(str(item) for item in tender_urls))
+                finally:
+                    browser.Quit()
             case 'tenders2':
                 # Parses the links from the response from the AI useing a mock response.
                 tender_urls = GetLinksFromResponse(response_text=mock_response_tender_pages)
@@ -90,14 +154,19 @@ if __name__ == "__main__":
                 # Get the document links from a tender page and finds the document links.
                 language = input('What language do you want the documents?: ')
                 prompt = f"Analyze the following links and return all tender document links as a list (PDF, DOC, DOCX, TXT, etc.) that are either explicitly marked as {language} or are most likely to be in {language}. Make a list of only the links that you found and nothing else."
-                urls = GetLinksFromPage(tender_url)
-                urls_string = "\n".join(urls)
-                print(urls_string, '\n\n')
-                response = PromptAI(urls_string + '\n\n' + prompt)
-                print(response.choices[0].message.content)
-                response_string = response.choices[0].message.content
-                document_urls = GetLinksFromResponse(response_text=response_string)
-                print('\n'.join(str(item) for item in document_urls))
+                
+                browser = Browser()
+                try:
+                    urls = browser.GetLinksFromPage(tender_url)
+                    urls_string = "\n".join(urls)
+                    print(urls_string, '\n\n')
+                    response = PromptAI(urls_string + '\n\n' + prompt)
+                    print(response.choices[0].message.content)
+                    response_string = response.choices[0].message.content
+                    document_urls = GetLinksFromResponse(response_text=response_string)
+                    print('\n'.join(str(item) for item in document_urls))
+                finally:
+                    browser.Quit()
             case 'doc2':
                 # Get the document links from a tender page and finds the document links using a mock response.
                 document_urls = GetLinksFromResponse(response_text=mock_response_document_links)
@@ -176,6 +245,10 @@ if __name__ == "__main__":
                     calendar=calendar
                 )
                 print("Is Tender Match:", result)
+            case 'logger':
+                # Create logs directory if it doesn't exist
+                os.makedirs('logs', exist_ok=True)
+                run_logger_tests()
             case 'exit':
                 break
             case _:
