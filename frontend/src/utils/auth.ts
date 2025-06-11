@@ -9,7 +9,7 @@ interface AuthResponse {
 }
 
 // TEMPORARY DEBUG MODE - Set to true to bypass authentication
-const DEBUG_BYPASS_AUTH = true; // Change this to false when Firebase is fixed
+const DEBUG_BYPASS_AUTH = false; // Changed to false - using real authentication now
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
@@ -17,40 +17,28 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 export const login = async (
   credentials: LoginCredentials
 ): Promise<AuthResponse> => {
-  // TEMPORARY: Mock successful login in debug mode
-  if (DEBUG_BYPASS_AUTH) {
-    console.log("🚨 DEBUG MODE: Login bypassed");
-    // Set a mock session in localStorage for consistency
-    if (typeof window !== "undefined") {
-      localStorage.setItem("debug_session", "mock_user_session");
-      localStorage.setItem(
-        "debug_user",
-        JSON.stringify({
-          id: "debug_user_123",
-          username: credentials.username || "debug_user",
-          email: "debug@example.com",
-        })
-      );
-    }
-    return { msg: "Debug login successful", success: true };
-  }
+  const response = await fetch(`${API_BASE_URL}/api/user/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include", // This ensures cookies are sent and received
+    body: JSON.stringify(credentials),
+  });
 
   try {
-    const response = await fetch(`${API_BASE_URL}/api/user/login`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include", // Important for cookies
-      body: JSON.stringify(credentials),
-    });
-
-    const data = await response.json();
-
+    let errorMessage = "Inloggningen misslyckades";
     if (!response.ok) {
-      throw new Error(data.message || "Login failed");
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.error || errorMessage;
+      } catch (e) {
+        // If response is not JSON, keep default error message
+      }
+      throw new Error(errorMessage);
     }
 
+    const data = await response.json();
     return { msg: data.message, success: true };
   } catch (error) {
     console.error("Login error:", error);
