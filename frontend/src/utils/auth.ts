@@ -9,7 +9,7 @@ interface AuthResponse {
 }
 
 // TEMPORARY DEBUG MODE - Set to true to bypass authentication
-const DEBUG_BYPASS_AUTH = false; // Change this to false when Firebase is fixed
+const DEBUG_BYPASS_AUTH = true; // Change this to false when Firebase is fixed
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 

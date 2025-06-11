@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, X } from "lucide-react";
-import { getTenders, addTender, type Tender } from "@/services/api/tenders";
+import { getTenders, type Tender } from "@/services/api/tenders";
 
 export default function InboxPage() {
   const [tenders, setTenders] = useState<Tender[]>([]);
@@ -64,7 +64,7 @@ export default function InboxPage() {
     }));
   };
 
-  const handleAddTender = async () => {
+  const handleAddTender = () => {
     // Validate required fields
     if (
       !formData.project_name.trim() ||
@@ -78,37 +78,28 @@ export default function InboxPage() {
       return;
     }
 
-    try {
-      // Prepare tender data
-      const newTender: Tender = {
-        ...formData,
-        project_name: formData.project_name.trim(),
-        brief_description: formData.brief_description.trim(),
-        branch: formData.branch.trim(),
-        tender_document_link: formData.tender_document_link.trim() || "",
-      };
+    // Add new tender to the top of the list
+    const newTender: Tender = {
+      ...formData,
+      project_name: formData.project_name.trim(),
+      brief_description: formData.brief_description.trim(),
+      branch: formData.branch.trim(),
+      tender_document_link: formData.tender_document_link.trim() || "#",
+    };
 
-      // Add tender via API
-      const updatedTenders = await addTender(newTender);
-      setTenders(updatedTenders);
+    setTenders((prev) => [newTender, ...prev]);
 
-      // Reset form and hide it
-      setFormData({
-        project_name: "",
-        brief_description: "",
-        branch: "",
-        tender_document_link: "",
-        deadline: "",
-        end_date: "",
-        start_date: "",
-      });
-      setShowAddForm(false);
-
-      console.log("Tender added successfully!");
-    } catch (error) {
-      console.error("Error adding tender:", error);
-      alert("Fel vid tillägg av upphandling. Försök igen.");
-    }
+    // Reset form and hide it
+    setFormData({
+      project_name: "",
+      brief_description: "",
+      branch: "",
+      tender_document_link: "",
+      deadline: "",
+      end_date: "",
+      start_date: "",
+    });
+    setShowAddForm(false);
   };
 
   const handleCancelAdd = () => {
