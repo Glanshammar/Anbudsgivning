@@ -9,7 +9,7 @@ export interface Tender {
 }
 
 // Configuration
-const USE_DUMMY = true;
+const USE_DUMMY = false;
 const API_BASE_URL = "http://localhost:5000";
 const REQUEST_TIMEOUT = 15000; // 15 seconds - increased for slow servers
 const MAX_RETRIES = 1; // Reduced retries to prevent spam
@@ -74,9 +74,9 @@ const dummyTenders: Tender[] = [
       "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas.",
     branch: "Bygg & Anläggning",
     tender_document_link: "https://example.com/projekt1.pdf",
-    deadline: "2025-06-05",
-    end_date: "2025-06-05",
-    start_date: "2025-05-04",
+    deadline: "2025-06-13",
+    end_date: "2025-08-26",
+    start_date: "2025-07-04",
   },
   {
     project_name: "Projekt 2",
@@ -84,9 +84,9 @@ const dummyTenders: Tender[] = [
       "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam.",
     branch: "Energi",
     tender_document_link: "https://example.com/projekt2.pdf",
-    deadline: "2025-06-05",
-    end_date: "2025-05-15",
-    start_date: "2025-05-08",
+    deadline: "2025-06-18",
+    end_date: "2025-08-18",
+    start_date: "2025-07-08",
   },
   {
     project_name: "Projekt 3",
@@ -94,9 +94,9 @@ const dummyTenders: Tender[] = [
       "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
     branch: "Fastighetsskötsel",
     tender_document_link: "https://example.com/projekt3.pdf",
-    deadline: "2025-06-05",
-    end_date: "2025-05-25",
-    start_date: "2025-05-20",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
   },
 ];
 
@@ -226,6 +226,61 @@ export async function getTenders(): Promise<Tender[]> {
 
       console.warn("Falling back to dummy tender data");
       return dummyTenders;
+    }
+  });
+}
+
+/**
+ * Adds a single tender to the database
+ */
+export async function addTender(tender: Tender): Promise<Tender[]> {
+  return requestManager.executeRequest("addTender", async () => {
+    if (USE_DUMMY) {
+      console.log("Using dummy mode - tender not actually saved");
+      return [tender, ...dummyTenders];
+    }
+
+    try {
+      console.log("Adding tender...", tender);
+
+      const response = await withRetry(async () => {
+        const res = await fetchWithTimeout(`${API_BASE_URL}/api/tenders/add`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify(tender),
+        });
+
+        if (!res.ok) {
+          throw new ApiError(
+            `Failed to add tender: ${res.statusText}`,
+            res.status
+          );
+        }
+
+        return res;
+      });
+
+      const data = await response.json();
+      console.log("Tender added successfully:", data);
+
+      if (data && data.tenders && Array.isArray(data.tenders)) {
+        return data.tenders;
+      }
+
+      console.warn("Unexpected add tender API response format", data);
+      return [tender, ...dummyTenders];
+    } catch (error) {
+      console.error("Error adding tender:", error);
+
+      if (error instanceof ApiError) {
+        throw error;
+      }
+
+      console.warn("Falling back to dummy tender data");
+      return [tender, ...dummyTenders];
     }
   });
 }

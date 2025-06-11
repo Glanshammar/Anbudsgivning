@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+// TEMPORARY DEBUG MODE - Set to true to bypass authentication
+const DEBUG_BYPASS_AUTH = true; // Change this to false when Firebase is fixed
+
 export function middleware(request: NextRequest) {
+  // TEMPORARY: Bypass all auth checks if debug mode is enabled
+  if (DEBUG_BYPASS_AUTH) {
+    console.log("🚨 DEBUG MODE: Authentication bypassed");
+    return NextResponse.next();
+  }
+
   // Get session cookie from flask-login (typically named 'session')
   const sessionCookie = request.cookies.get("session")?.value;
 
