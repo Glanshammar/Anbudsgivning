@@ -149,6 +149,7 @@ tender_data/
 config.yaml
 migrate_to_firebase.py
 
-.cursor
+.cursor/
+*.cursor
+.cursor*
 development
-credentials.json
