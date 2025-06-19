@@ -10,7 +10,11 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getTenders, type Tender } from "@/services/api/tenders";
+import {
+  getTendersByState,
+  type Tender,
+  TENDER_STATES,
+} from "@/services/api/tenders";
 
 export default function SubmittedPage() {
   const [tenders, setTenders] = useState<Tender[]>([]);
@@ -19,9 +23,8 @@ export default function SubmittedPage() {
   useEffect(() => {
     const fetchTenders = async () => {
       try {
-        const data = await getTenders();
-        // Simulate submitted phase - take first few as submitted
-        setTenders(data.slice(0, 2));
+        const data = await getTendersByState(TENDER_STATES.SENT_BIDS);
+        setTenders(data);
       } catch (err) {
         console.error("Error fetching tenders:", err);
         setTenders([]);
@@ -45,7 +48,9 @@ export default function SubmittedPage() {
       <CardContent>
         <div className="space-y-2">
           <div className="text-sm text-gray-600 mb-2">
-            {tender.brief_description.substring(0, 100)}...
+            {tender.description
+              ? tender.description.substring(0, 100) + "..."
+              : "Ingen beskrivning tillgänglig"}
           </div>
           <div className="flex justify-between">
             <span className="text-sm text-gray-600">Deadline:</span>

@@ -6,7 +6,7 @@ export interface Portal {
 }
 
 // Configuration
-const USE_DUMMY = true;
+const USE_DUMMY = false;
 const API_BASE_URL = "http://localhost:5000";
 const REQUEST_TIMEOUT = 15000; // 15 seconds - increased for slow servers
 const MAX_RETRIES = 1; // Reduced retries to prevent spam

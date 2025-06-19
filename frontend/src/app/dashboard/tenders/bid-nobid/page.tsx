@@ -10,7 +10,12 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getTenders, type Tender } from "@/services/api/tenders";
+import {
+  getTendersByState,
+  updateTenderState,
+  type Tender,
+  TENDER_STATES,
+} from "@/services/api/tenders";
 
 export default function BidNoBidPage() {
   const [tenders, setTenders] = useState<Tender[]>([]);
@@ -19,9 +24,8 @@ export default function BidNoBidPage() {
   useEffect(() => {
     const fetchTenders = async () => {
       try {
-        const data = await getTenders();
-        // Simulate bid/no-bid phase - take middle slice
-        setTenders(data.slice(1, 3));
+        const data = await getTendersByState(TENDER_STATES.BID_NOBID);
+        setTenders(data);
       } catch (err) {
         console.error("Error fetching tenders:", err);
         setTenders([]);
@@ -32,6 +36,24 @@ export default function BidNoBidPage() {
 
     fetchTenders();
   }, []);
+
+  const handleBid = async (tender: Tender, index: number) => {
+    try {
+      await updateTenderState(tender.project_name, TENDER_STATES.SKA_BJUDAS_PA);
+      setTenders((prev) => prev.filter((_, i) => i !== index));
+    } catch (error) {
+      console.error("Failed to move tender to prepare bid phase:", error);
+    }
+  };
+
+  const handleReject = async (tender: Tender, index: number) => {
+    try {
+      // For now, just remove from list. You can add a "no-bid" state later
+      setTenders((prev) => prev.filter((_, i) => i !== index));
+    } catch (error) {
+      console.error("Failed to reject tender:", error);
+    }
+  };
 
   const renderTenderCard = (tender: Tender, index: number) => (
     <Card key={index} className="hover:shadow-md transition-shadow">
@@ -45,7 +67,9 @@ export default function BidNoBidPage() {
       <CardContent>
         <div className="space-y-2">
           <div className="text-sm text-gray-600 mb-2">
-            {tender.brief_description.substring(0, 100)}...
+            {tender.description
+              ? tender.description.substring(0, 100) + "..."
+              : "Ingen beskrivning tillgänglig"}
           </div>
           <div className="flex justify-between">
             <span className="text-sm text-gray-600">Deadline:</span>
@@ -66,10 +90,18 @@ export default function BidNoBidPage() {
               Visa dokument
             </a>
           </Button>
-          <Button size="sm" variant="default">
+          <Button
+            size="sm"
+            variant="default"
+            onClick={() => handleBid(tender, index)}
+          >
             Bjud på →
           </Button>
-          <Button size="sm" variant="destructive">
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => handleReject(tender, index)}
+          >
             No-bid
           </Button>
         </div>

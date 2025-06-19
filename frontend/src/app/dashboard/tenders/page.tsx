@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function TendersPage() {
   const router = useRouter();
@@ -24,7 +23,7 @@ export default function TendersPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div>
         <div className="mb-8 bg-white rounded-lg shadow-sm border">
           <Tabs
             value={getActiveTab()}

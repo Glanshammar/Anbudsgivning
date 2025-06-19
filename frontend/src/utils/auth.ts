@@ -8,9 +8,6 @@ interface AuthResponse {
   success: boolean;
 }
 
-// TEMPORARY DEBUG MODE - Set to true to bypass authentication
-const DEBUG_BYPASS_AUTH = false; // Changed to false - using real authentication now
-
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 // Login function
@@ -32,7 +29,7 @@ export const login = async (
       try {
         const errorData = await response.json();
         errorMessage = errorData.message || errorData.error || errorMessage;
-      } catch (e) {
+      } catch {
         // If response is not JSON, keep default error message
       }
       throw new Error(errorMessage);
@@ -48,16 +45,6 @@ export const login = async (
 
 // Logout function
 export const logout = async (): Promise<void> => {
-  // TEMPORARY: Clear debug session in debug mode
-  if (DEBUG_BYPASS_AUTH) {
-    console.log("🚨 DEBUG MODE: Logout bypassed");
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("debug_session");
-      localStorage.removeItem("debug_user");
-    }
-    return;
-  }
-
   try {
     await fetch(`${API_BASE_URL}/api/user/logout`, {
       method: "POST",
@@ -70,19 +57,6 @@ export const logout = async (): Promise<void> => {
 
 // Check if user is authenticated by checking session status
 export const isAuthenticated = async (): Promise<boolean> => {
-  // TEMPORARY: Always return true in debug mode if debug session exists
-  if (DEBUG_BYPASS_AUTH) {
-    if (typeof window !== "undefined") {
-      const hasDebugSession = localStorage.getItem("debug_session");
-      console.log(
-        "🚨 DEBUG MODE: Auth check bypassed -",
-        hasDebugSession ? "authenticated" : "not authenticated"
-      );
-      return !!hasDebugSession;
-    }
-    return true; // Default to authenticated in debug mode on server
-  }
-
   if (typeof window === "undefined") return false;
 
   try {
@@ -98,23 +72,7 @@ export const isAuthenticated = async (): Promise<boolean> => {
 };
 
 // Get current user info from flask-login
-export const getCurrentUser = async (): Promise<any> => {
-  // TEMPORARY: Return mock user in debug mode
-  if (DEBUG_BYPASS_AUTH) {
-    if (typeof window !== "undefined") {
-      const debugUser = localStorage.getItem("debug_user");
-      if (debugUser) {
-        console.log("🚨 DEBUG MODE: Returning mock user");
-        return JSON.parse(debugUser);
-      }
-    }
-    return {
-      id: "debug_user_123",
-      username: "debug_user",
-      email: "debug@example.com",
-    };
-  }
-
+export const getCurrentUser = async (): Promise<Record<string, unknown>> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/user/profile`, {
       method: "GET",

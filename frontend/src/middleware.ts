@@ -1,37 +1,34 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// TEMPORARY DEBUG MODE - Set to true to bypass authentication
-const DEBUG_BYPASS_AUTH = true; // Change this to false when Firebase is fixed
-
-export function middleware(request: NextRequest) {
-  // TEMPORARY: Bypass all auth checks if debug mode is enabled
-  if (DEBUG_BYPASS_AUTH) {
-    console.log("🚨 DEBUG MODE: Authentication bypassed");
-    return NextResponse.next();
-  }
-
-  // Get session cookie from flask-login (typically named 'session')
-  const sessionCookie = request.cookies.get("session")?.value;
+export async function middleware(request: NextRequest) {
+  const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
   // Check if the route is part of the dashboard
   const isDashboardRoute = request.nextUrl.pathname.startsWith("/dashboard");
 
-  // If the route is part of the dashboard but no session exists, redirect to the login page
+  // For dashboard routes, verify authentication with backend
   if (isDashboardRoute) {
-    if (!sessionCookie) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/status/api`, {
+        method: "GET",
+        headers: {
+          // Forward cookies from the request
+          Cookie: request.headers.get("cookie") || "",
+        },
+      });
+
+      if (!response.ok) {
+        // Not authenticated, redirect to login
+        const redirectUrl = new URL("/login", request.url);
+        return NextResponse.redirect(redirectUrl);
+      }
+    } catch (error) {
+      // Network error or server down, redirect to login
+      console.error("Auth check failed:", error);
       const redirectUrl = new URL("/login", request.url);
       return NextResponse.redirect(redirectUrl);
-    }
-  }
-
-  // If user has a session and trying to access login/register, redirect to dashboard
-  if (sessionCookie) {
-    if (
-      request.nextUrl.pathname === "/login" ||
-      request.nextUrl.pathname === "/register"
-    ) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   }
 

@@ -7,10 +7,8 @@ import { logout } from "@/utils/auth";
 import { useState, useRef, useEffect } from "react";
 import { Menu } from "lucide-react";
 
-// Active section type for navigation
 type ActiveSection = "tenders" | "bid-authoring" | "post-bid" | null;
 
-// Notification interface
 interface Notification {
   id: number;
   title: string;
@@ -20,7 +18,6 @@ interface Notification {
   read: boolean;
 }
 
-// Mock notifications data
 const mockNotifications: Notification[] = [
   {
     id: 1,
@@ -50,12 +47,10 @@ const mockNotifications: Notification[] = [
 
 interface HeaderProps {
   activeSection?: ActiveSection;
-  setActiveSection?: (section: ActiveSection) => void;
 }
 
 export default function Header({
   activeSection: propActiveSection,
-  setActiveSection,
 }: HeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -104,6 +99,7 @@ export default function Header({
   const handleLogout = async () => {
     try {
       await logout();
+      router.push("/login");
     } catch (error) {
       console.error("Logout error:", error);
       router.push("/login");
@@ -130,21 +126,21 @@ export default function Header({
   };
 
   const handleStatisticsClick = () => {
-    console.log("Statistics clicked - navigating to statistics");
-    // TODO: Navigate to statistics page or show statistics modal
+    router.push("/dashboard/statistics");
   };
 
   const handleDocumentsClick = () => {
-    console.log("Documents clicked - navigating to documents");
-    // TODO: Navigate to documents page or show documents modal
+    router.push("/dashboard/documents");
   };
 
   const handleHelpClick = () => {
-    console.log("Help clicked - showing context-sensitive help");
-    // TODO: Show help modal or navigate to help page
+    router.push("/dashboard/help");
   };
 
-  // Desktop Navigation items
+  const handleProfileClick = () => {
+    router.push("/dashboard/userprofile");
+  };
+
   const desktopNavigationItems = (
     <>
       <button
@@ -188,7 +184,6 @@ export default function Header({
     </>
   );
 
-  // Mobile Navigation items - optimized for mobile space
   const mobileNavigationItems = (
     <>
       <button
@@ -346,21 +341,8 @@ export default function Header({
                       Kommande deadlines
                     </h3>
                     <div className="space-y-2">
-                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                        <div className="text-sm font-medium text-red-800">
-                          Anbudsfrist: IT-tjänster Stockholm
-                        </div>
-                        <div className="text-xs text-red-600">
-                          2024-02-15 23:59
-                        </div>
-                      </div>
-                      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <div className="text-sm font-medium text-yellow-800">
-                          Komplettera certifikat
-                        </div>
-                        <div className="text-xs text-yellow-600">
-                          2024-01-18 09:00
-                        </div>
+                      <div className="text-sm text-gray-500 text-center py-4">
+                        Inga kommande deadlines
                       </div>
                     </div>
                   </div>
@@ -583,8 +565,7 @@ export default function Header({
                     <button
                       className="flex items-center gap-3 text-gray-700 hover:text-black p-2 rounded-lg hover:bg-gray-100 transition-colors"
                       onClick={() => {
-                        // TODO: Navigate to profile or show profile options
-                        console.log("Profile clicked");
+                        handleProfileClick();
                         setIsMobileMenuOpen(false);
                       }}
                     >
@@ -630,7 +611,11 @@ export default function Header({
 
             {/* User Profile - Desktop only */}
             <div className="hidden md:flex items-center gap-2">
-              <div className="h-8 w-8 bg-gray-300 rounded-full flex items-center justify-center">
+              <button
+                onClick={handleProfileClick}
+                className="h-8 w-8 bg-gray-300 rounded-full flex items-center justify-center hover:bg-gray-400 transition-colors"
+                title="Profil"
+              >
                 <svg
                   className="h-5 w-5 text-gray-600"
                   viewBox="0 0 24 24"
@@ -638,11 +623,12 @@ export default function Header({
                 >
                   <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
                 </svg>
-              </div>
+              </button>
               <Button
                 variant="ghost"
                 onClick={handleLogout}
                 className="text-gray-700 hover:text-gray-900 text-sm px-4"
+                title="Logga ut"
               >
                 <svg
                   className="h-5 w-5 mr-2"

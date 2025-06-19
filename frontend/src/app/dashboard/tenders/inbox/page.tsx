@@ -21,7 +21,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, X } from "lucide-react";
-import { getTenders, type Tender } from "@/services/api/tenders";
+import {
+  getTendersByState,
+  updateTenderState,
+  createTender,
+  type Tender,
+  TENDER_STATES,
+} from "@/services/api/tenders";
 
 export default function InboxPage() {
   const [tenders, setTenders] = useState<Tender[]>([]);
@@ -30,19 +36,20 @@ export default function InboxPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [formData, setFormData] = useState<Tender>({
     project_name: "",
-    brief_description: "",
+    description: "",
     branch: "",
     tender_document_link: "",
     deadline: "",
     end_date: "",
     start_date: "",
+    state: TENDER_STATES.NYINKOMMET,
   });
 
   useEffect(() => {
     const fetchTenders = async () => {
       try {
         setLoading(true);
-        const data = await getTenders();
+        const data = await getTendersByState(TENDER_STATES.NYINKOMMET);
         setTenders(data);
       } catch (err) {
         setError(
@@ -64,11 +71,10 @@ export default function InboxPage() {
     }));
   };
 
-  const handleAddTender = () => {
-    // Validate required fields
+  const handleAddTender = async () => {
     if (
       !formData.project_name.trim() ||
-      !formData.brief_description.trim() ||
+      !formData.description.trim() ||
       !formData.branch.trim() ||
       !formData.deadline
     ) {
@@ -78,41 +84,81 @@ export default function InboxPage() {
       return;
     }
 
-    // Add new tender to the top of the list
-    const newTender: Tender = {
-      ...formData,
-      project_name: formData.project_name.trim(),
-      brief_description: formData.brief_description.trim(),
-      branch: formData.branch.trim(),
-      tender_document_link: formData.tender_document_link.trim() || "#",
-    };
+    try {
+      // Create tender data without state (will be set to NYINKOMMET by API)
+      const tenderData = {
+        project_name: formData.project_name.trim(),
+        description: formData.description.trim(),
+        branch: formData.branch.trim(),
+        tender_document_link: formData.tender_document_link.trim() || "#",
+        deadline: formData.deadline,
+        end_date: formData.end_date,
+        start_date: formData.start_date,
+        bid_data: formData.bid_data,
+        submission_date: formData.submission_date,
+      };
 
-    setTenders((prev) => [newTender, ...prev]);
+      // Save to database
+      console.log("Creating tender with data:", tenderData);
+      const newTender = await createTender(tenderData);
+      console.log("Created tender:", newTender);
 
-    // Reset form and hide it
-    setFormData({
-      project_name: "",
-      brief_description: "",
-      branch: "",
-      tender_document_link: "",
-      deadline: "",
-      end_date: "",
-      start_date: "",
-    });
-    setShowAddForm(false);
+      // Add new tender to the top of the list
+      setTenders((prev) => {
+        console.log("Previous tenders:", prev);
+        console.log("Adding new tender:", newTender);
+        const newList = [newTender, ...prev];
+        console.log("New tender list:", newList);
+        return newList;
+      });
+
+      // Reset form and hide it
+      setFormData({
+        project_name: "",
+        description: "",
+        branch: "",
+        tender_document_link: "",
+        deadline: "",
+        end_date: "",
+        start_date: "",
+        state: TENDER_STATES.NYINKOMMET,
+      });
+      setShowAddForm(false);
+    } catch (error) {
+      console.error("Failed to create tender:", error);
+      alert(
+        `Kunde inte spara upphandlingen: ${
+          error instanceof Error ? error.message : "Okänt fel"
+        }`
+      );
+    }
   };
 
   const handleCancelAdd = () => {
     setFormData({
       project_name: "",
-      brief_description: "",
+      description: "",
       branch: "",
       tender_document_link: "",
       deadline: "",
       end_date: "",
       start_date: "",
+      state: TENDER_STATES.NYINKOMMET,
     });
     setShowAddForm(false);
+  };
+
+  const handleMoveToSort = async (tender: Tender, index: number) => {
+    try {
+      await updateTenderState(
+        tender.project_name,
+        TENDER_STATES.ATT_FINSORTERA
+      );
+      // Remove tender from local state
+      setTenders((prev) => prev.filter((_, i) => i !== index));
+    } catch (error) {
+      console.error("Failed to move tender to sort phase:", error);
+    }
   };
 
   const renderTenderCard = (tender: Tender, index: number) => (
@@ -127,7 +173,9 @@ export default function InboxPage() {
       <CardContent>
         <div className="space-y-2">
           <div className="text-sm text-gray-600 mb-2">
-            {tender.brief_description.substring(0, 100)}...
+            {tender.description
+              ? tender.description.substring(0, 100) + "..."
+              : "Ingen beskrivning tillgänglig"}
           </div>
           <div className="flex justify-between">
             <span className="text-sm text-gray-600">Deadline:</span>
@@ -141,16 +189,11 @@ export default function InboxPage() {
           )}
         </div>
         <div className="mt-4 flex gap-2 flex-wrap">
-          <Button size="sm" variant="outline" asChild>
-            <a
-              href={tender.tender_document_link}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Visa dokument
-            </a>
-          </Button>
-          <Button size="sm" variant="default">
+          <Button
+            size="sm"
+            variant="default"
+            onClick={() => handleMoveToSort(tender, index)}
+          >
             Finsortera →
           </Button>
         </div>
@@ -163,7 +206,7 @@ export default function InboxPage() {
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Nyinkommet upphandlingar
+            Nyinkomna upphandlingar
           </h2>
           <p className="text-gray-600">Laddar upphandlingar...</p>
         </div>
@@ -176,7 +219,7 @@ export default function InboxPage() {
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Nyinkommet upphandlingar
+            Nyinkomna upphandlingar
           </h2>
           <p className="text-red-600">Fel vid laddning: {error}</p>
         </div>
@@ -189,7 +232,7 @@ export default function InboxPage() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Nyinkommet upphandlingar
+            Nyinkomna upphandlingar
           </h2>
           <p className="text-gray-600">
             Nya upphandlingar som behöver granskas och sorteras
@@ -266,12 +309,12 @@ export default function InboxPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="brief_description">Beskrivning *</Label>
+              <Label htmlFor="description">Beskrivning *</Label>
               <Textarea
-                id="brief_description"
-                value={formData.brief_description}
+                id="description"
+                value={formData.description}
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                  handleInputChange("brief_description", e.target.value)
+                  handleInputChange("description", e.target.value)
                 }
                 placeholder="Beskriv upphandlingen..."
                 rows={3}

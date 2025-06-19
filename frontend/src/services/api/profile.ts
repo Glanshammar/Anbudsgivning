@@ -13,7 +13,7 @@ const API_BASE_URL = "http://localhost:5000";
  */
 export const updateProfile = async (data: ProfileUpdateData) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/user/profile`, {
+    const response = await fetch(`${API_BASE_URL}/api/user/update`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
