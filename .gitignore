@@ -151,3 +151,4 @@ migrate_to_firebase.py
 
 .cursor
 development
+credentials.json
