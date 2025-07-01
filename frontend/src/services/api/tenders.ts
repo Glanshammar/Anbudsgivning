@@ -6,7 +6,8 @@ export interface Tender {
   deadline: string;
   end_date: string;
   start_date: string;
-  state: string;
+  state: string; // Keep for backward compatibility
+  states?: string[]; // New: array of states for multiple simultaneous states - allows tenders to exist in multiple workflows
   bid_data?: Record<string, unknown>;
   submission_date?: string;
 }
@@ -14,10 +15,9 @@ export interface Tender {
 // Define all states as constants
 export const TENDER_STATES = {
   NYINKOMMET: "nyinkommet",
-  ATT_FINSORTERA: "att_finsortera",
-  BID_NOBID: "bid_nobid",
+  UNDER_UTREDNING: "under_utredning",
   SKA_BJUDAS_PA: "ska_bjudas_pa",
-  BID_AUTHORING: "bid_authoring",
+  BID_AUTHORING: "bid_authoring", // Special state: tenders here also remain in SKA_BJUDAS_PA for multi-state visibility
   SENT_BIDS: "sent_bids",
 } as const;
 
@@ -25,21 +25,24 @@ export type TenderState = (typeof TENDER_STATES)[keyof typeof TENDER_STATES];
 
 // Mapping for Swedish display names
 export const TENDER_STATE_LABELS = {
-  [TENDER_STATES.NYINKOMMET]: "Nyinkommet",
-  [TENDER_STATES.ATT_FINSORTERA]: "Att finsortera",
-  [TENDER_STATES.BID_NOBID]: "Bid/No bid?!",
-  [TENDER_STATES.SKA_BJUDAS_PA]: "Ska bjudas på",
+  [TENDER_STATES.NYINKOMMET]: "Inbox",
+  [TENDER_STATES.UNDER_UTREDNING]: "Under Review",
+  [TENDER_STATES.SKA_BJUDAS_PA]: "Preparing Bid",
   [TENDER_STATES.BID_AUTHORING]: "Bid Authoring",
-  [TENDER_STATES.SENT_BIDS]: "Upphandlingar vi bjudit på",
+  [TENDER_STATES.SENT_BIDS]: "Submitted Bids",
 } as const;
 
 // Configuration
-const USE_DUMMY = false;
+const USE_DUMMY = true;
 const API_BASE_URL = "http://localhost:5000";
 const REQUEST_TIMEOUT = 15000; // 15 seconds - increased for slow servers
 const MAX_RETRIES = 1; // Reduced retries to prevent spam
 
-// Global request manager to prevent duplicate requests
+/**
+ * Global request manager to prevent duplicate API requests
+ * This ensures that if multiple components try to fetch the same data simultaneously,
+ * only one actual API call is made and the result is shared
+ */
 class RequestManager {
   private activeRequests = new Map<string, Promise<unknown>>();
 
@@ -103,6 +106,7 @@ const dummyTenders: Tender[] = [
     end_date: "2025-08-26",
     start_date: "2025-07-04",
     state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
   },
   {
     project_name: "Projekt 2",
@@ -113,7 +117,8 @@ const dummyTenders: Tender[] = [
     deadline: "2025-06-18",
     end_date: "2025-08-18",
     start_date: "2025-07-08",
-    state: TENDER_STATES.ATT_FINSORTERA,
+    state: TENDER_STATES.UNDER_UTREDNING,
+    states: [TENDER_STATES.UNDER_UTREDNING],
   },
   {
     project_name: "Projekt 3",
@@ -124,11 +129,231 @@ const dummyTenders: Tender[] = [
     deadline: "2025-06-14",
     end_date: "2025-08-25",
     start_date: "2025-07-20",
-    state: TENDER_STATES.BID_NOBID,
+    state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
+  },
+  {
+    project_name: "Projekt 4",
+    description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
+    branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt4.pdf",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
+    state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
+  },
+  {
+    project_name: "Projekt 5",
+    description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
+    branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt5.pdf",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
+    state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
+  },
+  {
+    project_name: "Projekt 6",
+    description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
+    branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt6.pdf",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
+    state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
+  },
+  {
+    project_name: "Projekt 7",
+    description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
+    branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt7.pdf",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
+    state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
+  },
+  {
+    project_name: "Projekt 8",
+    description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
+    branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt8.pdf",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
+    state: TENDER_STATES.SKA_BJUDAS_PA,
+    states: [TENDER_STATES.SKA_BJUDAS_PA],
+  },
+  {
+    project_name: "Projekt 9",
+    description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
+    branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt9.pdf",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
+    state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
+  },
+  {
+    project_name: "Projekt 10",
+    description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
+    branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt10.pdf",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
+    state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
+  },
+  {
+    project_name: "Projekt 11",
+    description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
+    branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt11.pdf",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
+    state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
+  },
+  {
+    project_name: "Projekt 12",
+    description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
+    branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt12.pdf",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
+    state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
+  },
+  {
+    project_name: "Projekt 13",
+    description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
+    branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt13.pdf",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
+    state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
+  },
+  {
+    project_name: "Projekt 14",
+    description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
+    branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt14.pdf",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
+    state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
+  },
+  {
+    project_name: "Projekt 15",
+    description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
+    branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt15.pdf",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
+    state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
+  },
+  {
+    project_name: "Projekt 16",
+    description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
+    branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt16.pdf",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
+    state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
+  },
+  {
+    project_name: "Projekt 17",
+    description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
+    branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt17.pdf",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
+    state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
+  },
+  {
+    project_name: "Projekt 18",
+    description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
+    branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt18.pdf",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
+    state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
+  },
+  {
+    project_name: "Projekt 19",
+    description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
+    branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt19.pdf",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
+    state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
+  },
+  {
+    project_name: "Projekt 20",
+    description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
+    branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt20.pdf",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
+    state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
+  },
+  {
+    project_name: "Projekt 21",
+    description:
+      "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa.",
+    branch: "Fastighetsskötsel",
+    tender_document_link: "https://example.com/projekt21.pdf",
+    deadline: "2025-06-14",
+    end_date: "2025-08-25",
+    start_date: "2025-07-20",
+    state: TENDER_STATES.NYINKOMMET,
+    states: [TENDER_STATES.NYINKOMMET],
   },
 ];
 
-// Custom error class for API errors
+/**
+ * Custom error class for API-specific errors
+ * Distinguishes between operational errors (expected) and programming errors
+ */
 class ApiError extends Error {
   constructor(
     message: string,
@@ -141,7 +366,10 @@ class ApiError extends Error {
   }
 }
 
-// Utility function to create fetch with timeout
+/**
+ * Utility function to add timeout to fetch requests
+ * Prevents requests from hanging indefinitely
+ */
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
@@ -166,7 +394,10 @@ async function fetchWithTimeout(
   }
 }
 
-// Retry wrapper for API calls
+/**
+ * Retry wrapper for API calls with exponential backoff
+ * Handles transient failures gracefully
+ */
 async function withRetry<T>(
   operation: () => Promise<T>,
   retries: number = MAX_RETRIES
@@ -179,13 +410,13 @@ async function withRetry<T>(
     } catch (error) {
       lastError = error as Error;
 
-      // Don't retry on certain errors
+      // Don't retry on certain errors (client errors, authentication, etc.)
       if (error instanceof ApiError && error.status && error.status < 500) {
         throw error;
       }
 
       if (attempt < retries) {
-        const delay = Math.min(2000 * Math.pow(2, attempt), 8000); // Exponential backoff
+        const delay = Math.min(2000 * Math.pow(2, attempt), 8000); // Exponential backoff capped at 8 seconds
         console.log(
           `API call failed, retrying in ${delay}ms... (attempt ${attempt + 1}/${
             retries + 1
@@ -269,7 +500,17 @@ export async function updateTenderState(
     console.log(`🔄 Updating tender ${tenderId} to state ${newState}...`);
 
     if (USE_DUMMY) {
-      console.log(`✅ Dummy mode: Updated tender ${tenderId} to ${newState}`);
+      // update the dummy data
+      const tenderIndex = dummyTenders.findIndex(
+        (tender) => tender.project_name === tenderId
+      );
+      if (tenderIndex !== -1) {
+        dummyTenders[tenderIndex].state = newState;
+        dummyTenders[tenderIndex].states = [newState];
+        console.log(`✅ Dummy mode: Updated tender ${tenderId} to ${newState}`);
+      } else {
+        console.warn(`⚠️ Dummy mode: Tender ${tenderId} not found`);
+      }
       return;
     }
 
@@ -292,6 +533,7 @@ export async function updateTenderState(
 
 /**
  * Hämta tenders baserat på state
+ * Supports both single state and multi-state system for backward compatibility
  */
 export async function getTendersByState(state: TenderState): Promise<Tender[]> {
   return requestManager.executeRequest(
@@ -299,9 +541,10 @@ export async function getTendersByState(state: TenderState): Promise<Tender[]> {
     async () => {
       if (USE_DUMMY) {
         console.log(`Dummy: Getting tenders with state ${state}`);
-        const filtered = dummyTenders.filter(
-          (tender) => tender.state === state
-        );
+        const filtered = dummyTenders.filter((tender) => {
+          // Check both old state property and new states array for multi-state support
+          return tender.state === state || tender.states?.includes(state);
+        });
         return new Promise<Tender[]>((resolve) =>
           setTimeout(() => resolve(filtered), 300)
         );
@@ -352,11 +595,86 @@ export async function getTendersByState(state: TenderState): Promise<Tender[]> {
 
         // Fallback to filtered dummy data if enabled
         if (USE_DUMMY) {
-          return dummyTenders.filter((tender) => tender.state === state);
+          return dummyTenders.filter((tender) => {
+            // Check both old state property and new states array
+            return tender.state === state || tender.states?.includes(state);
+          });
         }
 
         throw error;
       }
     }
   );
+}
+
+/**
+ * Add a state to a tender (for multiple states simultaneously)
+ * This is key for the multi-state system where tenders can exist in multiple workflows
+ * Example: A tender can be both "ska_bjudas_pa" and "bid_authoring" at the same time
+ */
+export async function addTenderState(
+  tenderId: string,
+  newState: TenderState
+): Promise<void> {
+  const requestKey = `add-tender-state-${tenderId}-${newState}`;
+
+  return requestManager.executeRequest(requestKey, async () => {
+    console.log(`🔄 Adding state ${newState} to tender ${tenderId}...`);
+
+    if (USE_DUMMY) {
+      const tenderIndex = dummyTenders.findIndex(
+        (tender) => tender.project_name === tenderId
+      );
+      if (tenderIndex !== -1) {
+        const tender = dummyTenders[tenderIndex];
+        // Initialize states array if it doesn't exist (backward compatibility)
+        if (!tender.states) {
+          tender.states = [tender.state];
+        }
+        // Add new state if not already present
+        if (!tender.states.includes(newState)) {
+          tender.states.push(newState);
+          // Update primary state to the most recent one
+          tender.state = newState;
+        }
+        console.log(
+          `✅ Dummy mode: Added state ${newState} to tender ${tenderId}`
+        );
+      } else {
+        console.warn(`⚠️ Dummy mode: Tender ${tenderId} not found`);
+      }
+      return;
+    }
+
+    // TODO: Implement real API call when backend supports multi-state system
+    console.log(`Would add state ${newState} to tender ${tenderId} via API`);
+  });
+}
+
+/**
+ * Delete/remove a tender
+ */
+export async function deleteTender(tenderId: string): Promise<void> {
+  const requestKey = `delete-tender-${tenderId}`;
+
+  return requestManager.executeRequest(requestKey, async () => {
+    console.log(`🔄 Deleting tender ${tenderId}...`);
+
+    if (USE_DUMMY) {
+      // Remove from dummy data
+      const tenderIndex = dummyTenders.findIndex(
+        (tender) => tender.project_name === tenderId
+      );
+      if (tenderIndex !== -1) {
+        dummyTenders.splice(tenderIndex, 1);
+        console.log(`✅ Dummy mode: Deleted tender ${tenderId}`);
+      } else {
+        console.warn(`⚠️ Dummy mode: Tender ${tenderId} not found`);
+      }
+      return;
+    }
+
+    // TODO: Implement real API call when backend is ready
+    console.log(`Would delete tender ${tenderId} via API`);
+  });
 }

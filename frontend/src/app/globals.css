@@ -3,6 +3,10 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/**
+ * Tailwind CSS theme configuration
+ * Integrates with Next.js app's CSS variables for consistent theming
+ */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -116,7 +120,36 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/**
+ * Enhanced horizontal scroll behavior for card containers
+ * Provides smooth scrolling with hidden scrollbars while maintaining touch support
+ */
+.scroll-horizontal {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  /* Prevents page scroll when reaching scroll bounds */
+  overscroll-behavior-y: auto;
+  scroll-behavior: smooth;
+  /* Smooth scrolling animation */
+  touch-action: pan-x;
+  /* Enable horizontal touch scrolling only */
+  -webkit-overflow-scrolling: touch;
+  /* iOS momentum scrolling */
+  scrollbar-width: none;
+  /* Firefox: hide scrollbar */
+}
+
+/**
+ * Hide scrollbars completely while maintaining scroll functionality
+ * Works across WebKit browsers (Chrome, Safari, Edge)
+ */
+.scroll-horizontal::-webkit-scrollbar {
+  display: none;
 }

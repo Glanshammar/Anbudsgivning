@@ -1,20 +1,25 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+/**
+ * Next.js middleware for protecting dashboard routes with authentication
+ * Runs on the Edge Runtime before pages are rendered
+ */
 export async function middleware(request: NextRequest) {
   const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
-  // Check if the route is part of the dashboard
+  // Check if the route is part of the dashboard that requires authentication
   const isDashboardRoute = request.nextUrl.pathname.startsWith("/dashboard");
 
   // For dashboard routes, verify authentication with backend
   if (isDashboardRoute) {
     try {
+      // Verify session by calling backend status endpoint
       const response = await fetch(`${API_BASE_URL}/api/status/api`, {
         method: "GET",
         headers: {
-          // Forward cookies from the request
+          // Forward cookies from the request to maintain session context
           Cookie: request.headers.get("cookie") || "",
         },
       });
@@ -25,7 +30,7 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(redirectUrl);
       }
     } catch (error) {
-      // Network error or server down, redirect to login
+      // Network error or server down, redirect to login for safety
       console.error("Auth check failed:", error);
       const redirectUrl = new URL("/login", request.url);
       return NextResponse.redirect(redirectUrl);
@@ -35,12 +40,12 @@ export async function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-// Ensure middleware only runs for relevant routes
+// Ensure middleware only runs for relevant routes to optimize performance
 export const config = {
   matcher: [
     // Match all dashboard routes
     "/dashboard/:path*",
-    // Also check login/register for authenticated users
+    // Also check login/register for authenticated users (future enhancement)
     "/login",
     "/register",
   ],

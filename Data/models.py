@@ -89,11 +89,9 @@ class TenderDocument:
     # Define all states for tender documents
     VALID_STATES = [
         "nyinkommet",                    # Nyinkommet (Inbox)
-        "att_finsortera",               # Att finsortera (Sort)
-        "bid_nobid",                    # Bid/No bid?! (Bid/No-bid decision)
-        "ska_bjudas_pa",               # Ska bjudas på (Prepare bid)
+        "under_utredning",              # Under utredning (Under investigation)
         "bid_authoring",               # Bid Authoring (Writing the bid)
-        "sent_bids",                   # Upphandlingar vi bjudit på (Submitted/Post-bid monitoring)
+        "sent_bids",                   # Upphandlingar vi bjudit på (Submitted)
     ]
     
     def __init__(self, project_name: str, branch: str, deadline: datetime, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, state: str = "nyinkommet"):
@@ -164,11 +162,9 @@ class TenderDocument:
             
         # Definiera giltiga övergångar
         valid_transitions = {
-            "nyinkommet": ["att_finsortera"],
-            "att_finsortera": ["bid_nobid", "nyinkommet"],  # Kan gå tillbaka
-            "bid_nobid": ["ska_bjudas_pa", "att_finsortera"],  # Kan gå tillbaka eller framåt
-            "ska_bjudas_pa": ["bid_authoring", "bid_nobid"],
-            "bid_authoring": ["sent_bids", "ska_bjudas_pa"],
+            "nyinkommet": ["under_utredning"],
+            "under_utredning": "nyinkommet",  # Kan gå tillbaka till inbox eller framåt
+            "bid_authoring": "sent_bids",
             "sent_bids": []  # Slutstadium, inga övergångar
         }
         

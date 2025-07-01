@@ -756,9 +756,7 @@ async def get_tender_states():
         "states": TenderDocument.VALID_STATES,
         "state_labels": {
             "nyinkommet": "Nyinkommet",
-            "att_finsortera": "Att finsortera",
-            "bid_nobid": "Bid/No bid?!",
-            "ska_bjudas_pa": "Ska bjudas på",
+            "under_utredning": "Under utredning",
             "bid_authoring": "Bid Authoring",
             "sent_bids": "Upphandlingar vi bjudit på"
         }

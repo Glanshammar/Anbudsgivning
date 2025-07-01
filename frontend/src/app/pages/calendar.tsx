@@ -141,9 +141,9 @@ export default function CalendarPage() {
     <div>
       <h1 className="text-3xl font-bold mb-6">Kalender</h1>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="flex gap-6 scroll-horizontal">
         {/* Calendar Input */}
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-lg shadow p-6 flex-shrink-0 w-96">
           <h2 className="text-xl font-semibold mb-4">Välj datum</h2>
           <input
             type="date"
@@ -157,7 +157,7 @@ export default function CalendarPage() {
               Händelser {new Date(selectedDate).toLocaleDateString("sv-SE")}
             </h3>
             {selectedDateEvents.length === 0 ? (
-              <p className="text-gray-500">Inga händelser detta datum</p>
+              <p className="text-gray-500">No events on this date</p>
             ) : (
               <div className="space-y-3">
                 {selectedDateEvents.map((event) => (
@@ -185,12 +185,12 @@ export default function CalendarPage() {
         </div>
 
         {/* Upcoming Events */}
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-lg shadow p-6 flex-shrink-0 w-96">
           <h2 className="text-xl font-semibold mb-4">
             Kommande händelser (7 dagar)
           </h2>
           {upcomingEvents.length === 0 ? (
-            <p className="text-gray-500">Inga kommande händelser</p>
+            <p className="text-gray-500">No upcoming events</p>
           ) : (
             <div className="space-y-3">
               {upcomingEvents.map((event) => (

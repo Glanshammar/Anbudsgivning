@@ -1,0 +1,102 @@
+[
+  {
+    "title": "Tenders",
+    "path": "tenders",
+    "description": "Manage incoming and ongoing tenders.",
+    "children": [
+      {
+        "title": "Inbox",
+        "path": "inbox",
+        "description": "All new tenders that match your profile."
+      },
+      {
+        "title": "Under Review",
+        "path": "under-utredning",
+        "description": "Tenders being evaluated for further action."
+      },
+      {
+        "title": "Preparing Bid",
+        "path": "prepare-bid",
+        "description": "Start and manage bid preparation work."
+      },
+      {
+        "title": "Submitted",
+        "path": "submitted",
+        "description": "View status and follow up on submitted bids."
+      }
+    ]
+  },
+  {
+    "title": "Bids",
+    "path": "bids",
+    "description": "Manage all bid documents.",
+    "children": [
+      {
+        "title": "Not Started",
+        "path": "not-started",
+        "description": "Bids that haven't been started yet."
+      },
+      {
+        "title": "Authoring",
+        "path": "authoring",
+        "description": "Bids currently being written."
+      },
+      {
+        "title": "Reviewing",
+        "path": "reviewing",
+        "description": "Bids under review."
+      },
+      {
+        "title": "Submitted",
+        "path": "submitted",
+        "description": "Submitted bids."
+      },
+      {
+        "title": "Ongoing Dialog",
+        "path": "ongoing-dialog",
+        "description": "Bids with ongoing dialog."
+      },
+      {
+        "title": "Won/Lost",
+        "path": "won-lost",
+        "description": "Completed bids - won or lost."
+      }
+    ]
+  },
+  {
+    "title": "Statistics",
+    "path": "statistics",
+    "description": "View statistics for your bids.",
+    "icon": "S"
+  },
+  {
+    "title": "Library",
+    "path": "documents",
+    "description": "Manage your document library.",
+    "icon": "L"
+  },
+  {
+    "title": "Help",
+    "path": "help",
+    "description": "Get help and support.",
+    "icon": "H"
+  },
+  {
+    "title": "Calendar",
+    "path": "calendar",
+    "description": "View important dates in the calendar.",
+    "icon": "C"
+  },
+  {
+    "title": "Notifications",
+    "path": "notifications",
+    "description": "View your notifications.",
+    "icon": "N"
+  },
+  {
+    "title": "Profile",
+    "path": "userprofile",
+    "description": "Manage your user profile.",
+    "icon": "P"
+  }
+]

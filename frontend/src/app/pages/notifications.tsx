@@ -141,7 +141,7 @@ export default function NotificationsPage() {
                 d="M15 17h5l-5 5v-5zM9 7H4l5-5v5zm6 0h5l-5-5v5z"
               />
             </svg>
-            <p className="text-lg">Inga notifieringar att visa</p>
+            <p className="text-lg">No notifications to display</p>
           </div>
         ) : (
           filteredNotifications.map((notification) => (

@@ -1,3 +1,7 @@
+/**
+ * Interface for bid authoring data structure
+ * Contains all sections needed for a complete bid document
+ */
 export interface BidAuthoringData {
   personuppgifter: {
     companyName: string;
@@ -7,10 +11,10 @@ export interface BidAuthoringData {
     email: string;
     phone: string;
   };
-  summary: string;
-  keySkills: string;
-  history: string;
-  status: number;
+  summary: string; // Executive summary of the bid
+  keySkills: string; // Key competencies and skills
+  history: string; // Company history and relevant experience
+  status: number; // Draft status (0 = draft, 1 = completed, etc.)
   last_modified?: string;
 }
 
@@ -21,7 +25,10 @@ export interface BidAuthoringRequest {
 
 const API_BASE_URL = "http://localhost:5000";
 
-// Default company data (can be fetched from company profile later)
+/**
+ * Default company data template
+ * Used when no existing bid data is found - can be fetched from user profile in future
+ */
 const DEFAULT_COMPANY_DATA = {
   companyName: "Mitt Företag AB",
   orgNumber: "556123-4567",
@@ -33,6 +40,7 @@ const DEFAULT_COMPANY_DATA = {
 
 /**
  * Get bid authoring data for a specific tender
+ * Returns default structure if no data exists yet
  */
 export async function getBidAuthoringData(
   tenderId: string
@@ -49,7 +57,7 @@ export async function getBidAuthoringData(
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include",
+        credentials: "include", // Include session cookies for authentication
       }
     );
 
@@ -59,23 +67,24 @@ export async function getBidAuthoringData(
       Object.fromEntries(response.headers.entries())
     );
 
+    // Handle authentication failure
     if (response.status === 401) {
       console.error("❌ Authentication required - user not logged in");
       throw new Error("Du måste vara inloggad för att komma åt denna resurs.");
     }
 
+    // Handle case where no bid data exists yet - return sensible defaults
     if (response.status === 404) {
       console.log(
         "ℹ️ No bid authoring data exists yet, returning default structure"
       );
-      // No bid authoring data exists yet, return default structure
       return {
         personuppgifter: DEFAULT_COMPANY_DATA,
         summary: "",
         keySkills: "• Teknisk expertis\n• Projektledning\n• Kvalitetssäkring",
         history:
           "• Tidigare projekt och erfarenheter\n• Framgångsrika leveranser\n• Nöjda kunder",
-        status: 0,
+        status: 0, // Draft status
       };
     }
 
@@ -91,7 +100,7 @@ export async function getBidAuthoringData(
   } catch (error) {
     console.error("💥 Error fetching bid authoring data:", error);
 
-    // If it's a network error, provide more specific error message
+    // Provide user-friendly error messages for network issues
     if (
       error instanceof TypeError &&
       error.message.includes("Failed to fetch")
@@ -107,6 +116,7 @@ export async function getBidAuthoringData(
 
 /**
  * Save bid authoring data for a specific tender
+ * Uses PUT method for create/update operations
  */
 export async function saveBidAuthoringData(
   tenderId: string,
@@ -119,7 +129,7 @@ export async function saveBidAuthoringData(
     };
 
     const response = await fetch(`${API_BASE_URL}/api/bid-authoring`, {
-      method: "PUT", // Use PUT for create/update
+      method: "PUT", // Use PUT for create/update (idempotent operation)
       headers: {
         "Content-Type": "application/json",
       },

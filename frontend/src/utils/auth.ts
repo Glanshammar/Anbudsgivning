@@ -10,7 +10,10 @@ interface AuthResponse {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
-// Login function
+/**
+ * Authenticates user with backend and establishes session
+ * Uses cookies for session management (Flask-Login compatible)
+ */
 export const login = async (
   credentials: LoginCredentials
 ): Promise<AuthResponse> => {
@@ -19,7 +22,7 @@ export const login = async (
     headers: {
       "Content-Type": "application/json",
     },
-    credentials: "include", // This ensures cookies are sent and received
+    credentials: "include", // Critical: ensures cookies are sent and received for session management
     body: JSON.stringify(credentials),
   });
 
@@ -43,26 +46,31 @@ export const login = async (
   }
 };
 
-// Logout function
+/**
+ * Logs out user and destroys session
+ */
 export const logout = async (): Promise<void> => {
   try {
     await fetch(`${API_BASE_URL}/api/user/logout`, {
       method: "POST",
-      credentials: "include",
+      credentials: "include", // Include session cookies for logout
     });
   } catch (error) {
     console.error("Logout error:", error);
   }
 };
 
-// Check if user is authenticated by checking session status
+/**
+ * Check if user is authenticated by verifying session status
+ * Used by components to conditionally render content
+ */
 export const isAuthenticated = async (): Promise<boolean> => {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined") return false; // Prevent SSR issues
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/status/api`, {
       method: "GET",
-      credentials: "include", // Ensures cookies are sent
+      credentials: "include", // Ensures session cookies are sent
     });
 
     return response.ok;
@@ -71,12 +79,14 @@ export const isAuthenticated = async (): Promise<boolean> => {
   }
 };
 
-// Get current user info from flask-login
+/**
+ * Retrieves current user information from Flask-Login session
+ */
 export const getCurrentUser = async (): Promise<Record<string, unknown>> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/user/profile`, {
       method: "GET",
-      credentials: "include",
+      credentials: "include", // Include session cookies
     });
 
     if (!response.ok) {

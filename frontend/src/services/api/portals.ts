@@ -1,17 +1,20 @@
 export interface Portal {
-  site: string
+  site: string;
   url: string;
   username: string;
   password: string;
 }
 
 // Configuration
-const USE_DUMMY = false;
+const USE_DUMMY = true;
 const API_BASE_URL = "http://localhost:5000";
 const REQUEST_TIMEOUT = 15000; // 15 seconds - increased for slow servers
 const MAX_RETRIES = 1; // Reduced retries to prevent spam
 
-// Global request manager to prevent duplicate requests
+/**
+ * Request Manager class - identical pattern to tenders.ts
+ * Prevents duplicate API requests when multiple components need same data
+ */
 class RequestManager {
   private activeRequests = new Map<string, Promise<any>>();
 
@@ -19,7 +22,7 @@ class RequestManager {
     key: string,
     requestFn: () => Promise<T>
   ): Promise<T> {
-    // If request is already in progress, return the existing promise
+    // Reuse existing request if already in progress
     if (this.activeRequests.has(key)) {
       console.log(
         `🔄 Request ${key} already in progress, reusing existing promise...`
@@ -29,7 +32,7 @@ class RequestManager {
 
     console.log(`🚀 Starting new request: ${key}`);
 
-    // Create new request
+    // Create new request with cleanup
     const requestPromise = requestFn()
       .then((result) => {
         console.log(`✅ Request ${key} completed successfully`);
@@ -63,7 +66,7 @@ class RequestManager {
 
 const requestManager = new RequestManager();
 
-// Dummy data for fallback
+// Dummy data for fallback/development
 const dummyPortals: Portal[] = [
   {
     site: "Portal 1",
@@ -85,7 +88,9 @@ const dummyPortals: Portal[] = [
   },
 ];
 
-// Custom error class for API errors
+/**
+ * Custom error class for API errors - same pattern as other services
+ */
 class ApiError extends Error {
   constructor(
     message: string,
@@ -98,7 +103,9 @@ class ApiError extends Error {
   }
 }
 
-// Utility function to create fetch with timeout
+/**
+ * Fetch with timeout wrapper - prevents hanging requests
+ */
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
@@ -123,7 +130,9 @@ async function fetchWithTimeout(
   }
 }
 
-// Retry wrapper for API calls
+/**
+ * Retry mechanism with exponential backoff
+ */
 async function withRetry<T>(
   operation: () => Promise<T>,
   retries: number = MAX_RETRIES
@@ -136,7 +145,7 @@ async function withRetry<T>(
     } catch (error) {
       lastError = error as Error;
 
-      // Don't retry on certain errors
+      // Don't retry client errors (4xx status codes)
       if (error instanceof ApiError && error.status && error.status < 500) {
         throw error;
       }

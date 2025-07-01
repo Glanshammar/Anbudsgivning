@@ -1,9 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { getProfile, updateProfile } from "@/services/api/profile";
+import { logout } from "@/utils/auth";
 
 export default function UserProfile() {
+  const router = useRouter();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -77,10 +80,20 @@ export default function UserProfile() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await logout();
+      router.push("/login");
+    } catch (error) {
+      console.error("Logout error:", error);
+      router.push("/login");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[40vh]">
-        <span className="text-gray-500 text-lg">Laddar...</span>
+        <span className="text-gray-500 text-lg">Loading...</span>
       </div>
     );
   }
@@ -190,6 +203,28 @@ export default function UserProfile() {
             Uppdatera lösenord
           </button>
         </form>
+      </div>
+
+      <div className="bg-white shadow-md rounded-lg p-6 border-t-4 border-red-500">
+        <button
+          onClick={handleLogout}
+          className="bg-red-500 text-white px-6 py-2 rounded-lg hover:bg-red-600 transition-colors flex items-center gap-2"
+        >
+          <svg
+            className="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+            />
+          </svg>
+          Logga ut
+        </button>
       </div>
     </div>
   );

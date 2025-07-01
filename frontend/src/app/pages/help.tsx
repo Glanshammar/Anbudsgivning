@@ -45,22 +45,22 @@ export default function HelpPage() {
         <h2 className="text-xl font-semibold mb-4">
           Snabbguide för Anbudsgivning
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="text-center p-4 bg-blue-50 rounded-lg">
+        <div className="flex gap-4 scroll-horizontal">
+          <div className="text-center p-4 bg-blue-50 rounded-lg flex-shrink-0 w-80">
             <div className="text-2xl mb-2">📝</div>
             <h3 className="font-semibold mb-2">1. Förbered</h3>
             <p className="text-sm text-gray-600">
               Samla alla nödvändiga dokument och information
             </p>
           </div>
-          <div className="text-center p-4 bg-green-50 rounded-lg">
+          <div className="text-center p-4 bg-green-50 rounded-lg flex-shrink-0 w-80">
             <div className="text-2xl mb-2">✏️</div>
             <h3 className="font-semibold mb-2">2. Fyll i</h3>
             <p className="text-sm text-gray-600">
               Komplettera anbudsformuläret noggrant
             </p>
           </div>
-          <div className="text-center p-4 bg-purple-50 rounded-lg">
+          <div className="text-center p-4 bg-purple-50 rounded-lg flex-shrink-0 w-80">
             <div className="text-2xl mb-2">🚀</div>
             <h3 className="font-semibold mb-2">3. Skicka</h3>
             <p className="text-sm text-gray-600">
