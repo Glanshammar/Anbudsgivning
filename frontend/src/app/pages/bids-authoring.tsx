@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { ResponsiveCard } from "@/components/ui/ResponsiveCard";
 import { Textarea } from "@/components/ui/textarea";
 import {
   getBidsByState,
@@ -101,62 +100,13 @@ export default function BidsAuthoringPage() {
 
   return (
     <div className="flex flex-col h-full gap-4">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Authoring</h2>
-        <p className="text-gray-600">
-          Bids currently being authored. Click "Edit" to modify content or send
-          for review.
-        </p>
-      </div>
       <div className="flex-grow flex flex-col gap-4">
         {bids.length === 0 ? (
           <p className="text-center text-gray-500 py-8">
             No bids currently being authored.
           </p>
         ) : (
-          bids.map((bid, index) => (
-            <ResponsiveCard
-              key={bid.id}
-              title={bid.title}
-              branch={bid.branch}
-              description={`Created: ${bid.created_date} | Last edited by: ${bid.author}`}
-              badgeText="Authoring"
-              details={[
-                { label: "Deadline", value: bid.deadline },
-                { label: "Text", value: bid.content || "No content yet" },
-              ]}
-            >
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => handleEditBid(bid)}
-                className="bg-gray-500 hover:bg-gray-600 text-white"
-              >
-                Edit
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSendForReview(bid, index);
-                }}
-                className="bg-blue-500 hover:bg-blue-600 text-white"
-              >
-                Send for Review
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteBid(bid, index);
-                }}
-              >
-                Delete
-              </Button>
-            </ResponsiveCard>
-          ))
+          bids.map((bid, index) => <BidCard key={bid.id} bid={bid} />)
         )}
       </div>
 
@@ -192,3 +142,40 @@ export default function BidsAuthoringPage() {
     </div>
   );
 }
+
+const BidCard = ({ bid }: { bid: Bid }) => {
+  const router = useRouter();
+
+  const handleCardClick = () => {
+    const encodedBidId = encodeURIComponent(bid.id);
+    router.push(`/dashboard/bids/authoring/${encodedBidId}`);
+  };
+
+  return (
+    <div
+      onClick={handleCardClick}
+      className="bg-white p-4 rounded-2xl border-4 border-black/80 shadow-md hover:shadow-xl hover:border-blue-500 transition-all duration-300 cursor-pointer"
+    >
+      <div className="flex justify-between items-start">
+        <div className="flex-1">
+          <h3 className="text-lg font-bold text-gray-800">{bid.title}</h3>
+          <p className="text-sm text-gray-600 mt-1">{bid.branch}</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Upphandling: {bid.tender_name}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Created: {bid.created_date} | Last edited by: {bid.author}
+          </p>
+          <p className="text-sm text-gray-500 mt-2">
+            <span className="font-semibold">Deadline:</span> {bid.deadline}
+          </p>
+          {bid.content && (
+            <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+              {bid.content}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

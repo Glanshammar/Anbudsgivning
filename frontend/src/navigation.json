@@ -40,8 +40,8 @@
         "title": "Authoring",
         "path": "authoring",
         "description": "Bids currently being written."
-      },
-      {
+  },
+  {
         "title": "Reviewing",
         "path": "reviewing",
         "description": "Bids under review."

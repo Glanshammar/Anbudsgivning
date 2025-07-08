@@ -4,6 +4,7 @@ import { useRouter, useParams } from "next/navigation";
 import React, { useState, useEffect } from "react";
 import navigationData from "@/navigation.json";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Tender,
   getTendersByState,
@@ -17,9 +18,16 @@ import {
   createBid,
   getBidsByState,
   getBidByTenderName,
+  getBidById,
+  updateBidState,
+  updateBidContent,
+  deleteBid,
   BID_STATES,
+  BID_STATE_LABELS,
+  type Bid,
 } from "@/services/api/bids";
 import Checklist from "../../pages/checklist";
+import CollaborateModal from "@/components/CollaborateModal";
 
 // --- Page Imports ---
 import UserProfilePage from "../../pages/userprofile";
@@ -50,6 +58,7 @@ const TenderDetailPage = ({ tenderName }: { tenderName: string }) => {
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
   const [showChecklist, setShowChecklist] = useState(false);
+  const [showCollaborateModal, setShowCollaborateModal] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -152,15 +161,22 @@ const TenderDetailPage = ({ tenderName }: { tenderName: string }) => {
         await updateTenderState(tender.project_name, nextState as any);
       }
 
-      // Navigate to appropriate dashboard section based on new state
+      // Navigate to appropriate tender detail page based on new state (same as bid behavior)
+      const tenderIdEncoded = encodeURIComponent(tender.project_name);
       if (nextState === TENDER_STATES.UNDER_UTREDNING) {
-        router.push(`/dashboard/tenders/under-utredning?t=${Date.now()}`);
+        router.push(
+          `/dashboard/tenders/under-utredning/${tenderIdEncoded}?t=${Date.now()}`
+        );
       } else if (nextState === TENDER_STATES.SKA_BJUDAS_PA) {
-        router.push(`/dashboard/tenders/prepare-bid?t=${Date.now()}`);
+        router.push(
+          `/dashboard/tenders/prepare-bid/${tenderIdEncoded}?t=${Date.now()}`
+        );
       } else if (nextState === TENDER_STATES.BID_AUTHORING) {
         router.push(`/dashboard/bids/not-started`);
       } else if (nextState === TENDER_STATES.SENT_BIDS) {
-        router.push(`/dashboard/tenders/submitted?t=${Date.now()}`);
+        router.push(
+          `/dashboard/tenders/submitted/${tenderIdEncoded}?t=${Date.now()}`
+        );
       }
     } catch (error) {
       console.error("Failed to update tender state:", error);
@@ -190,11 +206,16 @@ const TenderDetailPage = ({ tenderName }: { tenderName: string }) => {
     try {
       await updateTenderState(tender.project_name, previousState as any);
 
-      // Redirect to appropriate page based on previous state
+      // Navigate to appropriate tender detail page based on previous state (same as bid behavior)
+      const tenderIdEncoded = encodeURIComponent(tender.project_name);
       if (previousState === TENDER_STATES.UNDER_UTREDNING) {
-        router.push(`/dashboard/tenders/under-utredning?t=${Date.now()}`);
+        router.push(
+          `/dashboard/tenders/under-utredning/${tenderIdEncoded}?t=${Date.now()}`
+        );
       } else if (previousState === TENDER_STATES.SKA_BJUDAS_PA) {
-        router.push(`/dashboard/tenders/prepare-bid?t=${Date.now()}`);
+        router.push(
+          `/dashboard/tenders/prepare-bid/${tenderIdEncoded}?t=${Date.now()}`
+        );
       }
     } catch (error) {
       console.error("Failed to update tender state:", error);
@@ -213,7 +234,7 @@ const TenderDetailPage = ({ tenderName }: { tenderName: string }) => {
       // Use the new deleteTender API function
       await deleteTender(tender.project_name);
 
-      // Redirect back to appropriate list
+      // Navigate back to appropriate list page (since tender is deleted)
       if (tender.state === TENDER_STATES.UNDER_UTREDNING) {
         router.push(`/dashboard/tenders/under-utredning?t=${Date.now()}`);
       } else if (tender.state === TENDER_STATES.SKA_BJUDAS_PA) {
@@ -245,28 +266,29 @@ const TenderDetailPage = ({ tenderName }: { tenderName: string }) => {
         // Navigate to existing bid based on its current state
         console.log("Found existing bid document:", existingBid);
 
-        // Route to appropriate bid section
+        // Route to appropriate bid detail page
+        const bidId = encodeURIComponent(existingBid.id);
         switch (existingBid.state) {
           case BID_STATES.NOT_STARTED:
-            router.push(`/dashboard/bids/not-started`);
+            router.push(`/dashboard/bids/not-started/${bidId}`);
             break;
           case BID_STATES.AUTHORING:
-            router.push(`/dashboard/bids/authoring`);
+            router.push(`/dashboard/bids/authoring/${bidId}`);
             break;
           case BID_STATES.REVIEWING:
-            router.push(`/dashboard/bids/reviewing`);
+            router.push(`/dashboard/bids/reviewing/${bidId}`);
             break;
           case BID_STATES.SUBMITTED:
-            router.push(`/dashboard/bids/submitted`);
+            router.push(`/dashboard/bids/submitted/${bidId}`);
             break;
           case BID_STATES.ONGOING_DIALOG:
-            router.push(`/dashboard/bids/ongoing-dialog`);
+            router.push(`/dashboard/bids/ongoing-dialog/${bidId}`);
             break;
           case BID_STATES.WON_LOST:
-            router.push(`/dashboard/bids/won-lost`);
+            router.push(`/dashboard/bids/won-lost/${bidId}`);
             break;
           default:
-            router.push(`/dashboard/bids/not-started`);
+            router.push(`/dashboard/bids/not-started/${bidId}`);
         }
       } else {
         // Create new bid document and navigate to it
@@ -278,7 +300,8 @@ const TenderDetailPage = ({ tenderName }: { tenderName: string }) => {
         );
 
         console.log("Created new bid document:", newBid);
-        router.push(`/dashboard/bids/not-started`);
+        const bidId = encodeURIComponent(newBid.id);
+        router.push(`/dashboard/bids/not-started/${bidId}`);
       }
     } catch (error) {
       console.error("Failed to create/link to bid document:", error);
@@ -439,6 +462,17 @@ const TenderDetailPage = ({ tenderName }: { tenderName: string }) => {
               </Button>
             )}
 
+            {(tender.state === TENDER_STATES.UNDER_UTREDNING ||
+              tender.state === TENDER_STATES.SKA_BJUDAS_PA) && (
+              <Button
+                variant="outline"
+                onClick={() => setShowCollaborateModal(true)}
+                className="bg-green-500 hover:bg-green-600 text-white"
+              >
+                Collaborate
+              </Button>
+            )}
+
             {tender.state === TENDER_STATES.SKA_BJUDAS_PA && (
               <Button
                 variant="outline"
@@ -458,6 +492,563 @@ const TenderDetailPage = ({ tenderName }: { tenderName: string }) => {
           tenderName={tender.project_name}
           onClose={() => setShowChecklist(false)}
         />
+      )}
+
+      {showCollaborateModal && (
+        <CollaborateModal
+          isOpen={showCollaborateModal}
+          onClose={() => setShowCollaborateModal(false)}
+          tenderId={tender.project_name}
+          tenderName={tender.project_name}
+        />
+      )}
+    </div>
+  );
+};
+
+/**
+ * Bid Detail Component - Displays individual bid information with state management
+ * Handles bid workflow transitions through authoring lifecycle
+ */
+const BidDetailPage = ({
+  bidId,
+  onTitleUpdate,
+}: {
+  bidId: string;
+  onTitleUpdate?: (title: string) => void;
+}) => {
+  const [bid, setBid] = useState<Bid | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [updating, setUpdating] = useState(false);
+  const [showCollaborateModal, setShowCollaborateModal] = useState(false);
+  const [showAuthoringModal, setShowAuthoringModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [bidContent, setBidContent] = useState("");
+  const router = useRouter();
+
+  useEffect(() => {
+    const fetchBidDetails = async () => {
+      try {
+        setLoading(true);
+        const foundBid = await getBidById(decodeURIComponent(bidId));
+        setBid(foundBid);
+
+        // Update the navigation title when bid data is loaded
+        if (foundBid && onTitleUpdate) {
+          onTitleUpdate(foundBid.tender_name);
+        }
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to fetch bid details"
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBidDetails();
+  }, [bidId]);
+
+  /**
+   * Defines the workflow progression for bids
+   * Each state has a logical next step in the authoring process
+   */
+  const getNextBidState = (currentState: string) => {
+    switch (currentState) {
+      case BID_STATES.NOT_STARTED:
+        return BID_STATES.AUTHORING;
+      case BID_STATES.AUTHORING:
+        return BID_STATES.REVIEWING;
+      case BID_STATES.REVIEWING:
+        return BID_STATES.SUBMITTED;
+      case BID_STATES.SUBMITTED:
+        return BID_STATES.ONGOING_DIALOG;
+      case BID_STATES.ONGOING_DIALOG:
+        return BID_STATES.WON_LOST;
+      default:
+        return null;
+    }
+  };
+
+  const getBidActionButtonText = (currentState: string) => {
+    switch (currentState) {
+      case BID_STATES.NOT_STARTED:
+        return "Start Authoring";
+      case BID_STATES.AUTHORING:
+        return "Submit for Review";
+      case BID_STATES.REVIEWING:
+        return "Submit Bid";
+      case BID_STATES.SUBMITTED:
+        return "Start Dialog";
+      case BID_STATES.ONGOING_DIALOG:
+        return "Mark as Won/Lost";
+      default:
+        return "Next Step";
+    }
+  };
+
+  /**
+   * Handles starting authoring for NOT_STARTED bids by opening modal
+   */
+  const handleStartAuthoring = async () => {
+    if (!bid) return;
+
+    setUpdating(true);
+    try {
+      // Update bid state to AUTHORING
+      await updateBidState(bid.id, BID_STATES.AUTHORING);
+
+      // Open modal for content editing
+      setShowAuthoringModal(true);
+      setBidContent(bid.content || ""); // Start with existing content or empty
+    } catch (error) {
+      console.error("Failed to start authoring:", error);
+      setError("Failed to start authoring");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  /**
+   * Handles saving content and closing the authoring modal
+   */
+  const handleCloseAuthoringModal = async () => {
+    if (bid && bidContent.trim()) {
+      try {
+        // Save the content to the bid
+        await updateBidContent(bid.id, bidContent);
+        console.log("Saved bid content:", bidContent);
+      } catch (error) {
+        console.error("Failed to save bid content:", error);
+      }
+    }
+
+    setShowAuthoringModal(false);
+    setBidContent("");
+
+    // Navigate to authoring page
+    if (bid) {
+      const bidIdEncoded = encodeURIComponent(bid.id);
+      router.push(`/dashboard/bids/authoring/${bidIdEncoded}?t=${Date.now()}`);
+    }
+  };
+
+  /**
+   * Handles opening the edit modal for authoring bids
+   */
+  const handleEditBid = () => {
+    if (!bid) return;
+    setShowEditModal(true);
+    setBidContent(bid.content || "");
+  };
+
+  /**
+   * Handles saving content and closing the edit modal
+   */
+  const handleCloseEditModal = async () => {
+    if (bid && bidContent.trim()) {
+      try {
+        // Save the content to the bid
+        await updateBidContent(bid.id, bidContent);
+        console.log("Saved bid content:", bidContent);
+
+        // Update local bid state to reflect the new content
+        setBid((prev) => (prev ? { ...prev, content: bidContent } : null));
+      } catch (error) {
+        console.error("Failed to save bid content:", error);
+        setError("Failed to save bid content");
+      }
+    }
+
+    setShowEditModal(false);
+    setBidContent("");
+  };
+
+  /**
+   * Handles clicking outside the modal to close it
+   */
+  const handleModalClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      handleCloseAuthoringModal();
+    }
+  };
+
+  /**
+   * Handles clicking outside the edit modal to close it
+   */
+  const handleEditModalClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      handleCloseEditModal();
+    }
+  };
+
+  /**
+   * Handles bid state transitions through the authoring workflow
+   */
+  const handleMoveBidToNextState = async () => {
+    if (!bid) return;
+
+    // Special handling for NOT_STARTED state - open modal instead of direct transition
+    if (bid.state === BID_STATES.NOT_STARTED) {
+      handleStartAuthoring();
+      return;
+    }
+
+    const nextState = getNextBidState(bid.state);
+    if (!nextState) return;
+
+    setUpdating(true);
+    try {
+      await updateBidState(bid.id, nextState);
+
+      // Navigate to appropriate bid detail page based on new state
+      const bidIdEncoded = encodeURIComponent(bid.id);
+      switch (nextState) {
+        case BID_STATES.AUTHORING:
+          router.push(
+            `/dashboard/bids/authoring/${bidIdEncoded}?t=${Date.now()}`
+          );
+          break;
+        case BID_STATES.REVIEWING:
+          router.push(
+            `/dashboard/bids/reviewing/${bidIdEncoded}?t=${Date.now()}`
+          );
+          break;
+        case BID_STATES.SUBMITTED:
+          router.push(
+            `/dashboard/bids/submitted/${bidIdEncoded}?t=${Date.now()}`
+          );
+          break;
+        case BID_STATES.ONGOING_DIALOG:
+          router.push(
+            `/dashboard/bids/ongoing-dialog/${bidIdEncoded}?t=${Date.now()}`
+          );
+          break;
+        case BID_STATES.WON_LOST:
+          router.push(
+            `/dashboard/bids/won-lost/${bidIdEncoded}?t=${Date.now()}`
+          );
+          break;
+        default:
+          router.push(
+            `/dashboard/bids/not-started/${bidIdEncoded}?t=${Date.now()}`
+          );
+      }
+    } catch (error) {
+      console.error("Failed to update bid state:", error);
+      setError("Failed to update bid status");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleMoveBidToPreviousState = async () => {
+    if (!bid) return;
+
+    let previousState: string | null = null;
+    switch (bid.state) {
+      case BID_STATES.AUTHORING:
+        previousState = BID_STATES.NOT_STARTED;
+        break;
+      case BID_STATES.REVIEWING:
+        previousState = BID_STATES.AUTHORING;
+        break;
+      case BID_STATES.SUBMITTED:
+        previousState = BID_STATES.REVIEWING;
+        break;
+      case BID_STATES.ONGOING_DIALOG:
+        previousState = BID_STATES.SUBMITTED;
+        break;
+    }
+
+    if (!previousState) return;
+
+    setUpdating(true);
+    try {
+      await updateBidState(bid.id, previousState);
+
+      // Navigate to appropriate bid detail page based on previous state
+      const bidIdEncoded = encodeURIComponent(bid.id);
+      switch (previousState) {
+        case BID_STATES.NOT_STARTED:
+          router.push(
+            `/dashboard/bids/not-started/${bidIdEncoded}?t=${Date.now()}`
+          );
+          break;
+        case BID_STATES.AUTHORING:
+          router.push(
+            `/dashboard/bids/authoring/${bidIdEncoded}?t=${Date.now()}`
+          );
+          break;
+        case BID_STATES.REVIEWING:
+          router.push(
+            `/dashboard/bids/reviewing/${bidIdEncoded}?t=${Date.now()}`
+          );
+          break;
+        case BID_STATES.SUBMITTED:
+          router.push(
+            `/dashboard/bids/submitted/${bidIdEncoded}?t=${Date.now()}`
+          );
+          break;
+      }
+    } catch (error) {
+      console.error("Failed to update bid state:", error);
+      setError("Failed to update bid status");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleDeleteBid = async () => {
+    if (!bid) return;
+
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete the bid "${bid.title}"? This action cannot be undone.`
+    );
+
+    if (!confirmDelete) return;
+
+    setUpdating(true);
+    try {
+      await deleteBid(bid.id);
+
+      // Navigate back to the authoring bids list after deletion
+      router.push(`/dashboard/bids/authoring?t=${Date.now()}`);
+    } catch (error) {
+      console.error("Failed to delete bid:", error);
+      setError("Failed to delete bid");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6 h-full flex flex-col">
+        <header className="mb-6">
+          <h1 className="text-3xl font-bold text-gray-800">
+            Loading bid details...
+          </h1>
+        </header>
+      </div>
+    );
+  }
+
+  if (error || !bid) {
+    return (
+      <div className="p-6 h-full flex flex-col">
+        <header className="mb-6">
+          <h1 className="text-3xl font-bold text-gray-800">Bid Not Found</h1>
+        </header>
+        <div className="text-red-500">
+          <p>{error || "Could not find bid"}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 h-full flex flex-col">
+      {error && (
+        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+          {error}
+        </div>
+      )}
+
+      <div className="flex-grow overflow-y-auto">
+        <div className="p-6">
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">{bid.title}</h1>
+          <p className="text-gray-600 mb-2">{bid.branch}</p>
+          <p className="text-sm text-gray-500 mb-6">
+            Upphandling: {bid.tender_name}
+          </p>
+
+          <h2 className="text-xl font-bold text-gray-800 mb-4">Description</h2>
+          <p className="text-gray-700 leading-relaxed mb-6">
+            {bid.description}
+          </p>
+
+          {bid.content && (
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-gray-800 mb-4">
+                Bid Content
+              </h2>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-gray-700 leading-relaxed">{bid.content}</p>
+              </div>
+            </div>
+          )}
+
+          <h2 className="text-xl font-bold text-gray-800 mb-4">Information</h2>
+          <div className="flex gap-4 mb-6 scroll-horizontal">
+            <div className="flex-shrink-0 w-80">
+              <p className="text-sm font-semibold text-gray-600">Status</p>
+              <p className="text-gray-800">
+                {BID_STATE_LABELS[bid.state as keyof typeof BID_STATE_LABELS] ||
+                  bid.state}
+              </p>
+            </div>
+            <div className="flex-shrink-0 w-80">
+              <p className="text-sm font-semibold text-gray-600">Deadline</p>
+              <p className="text-gray-800">{bid.deadline}</p>
+            </div>
+            <div className="flex-shrink-0 w-80">
+              <p className="text-sm font-semibold text-gray-600">
+                Created Date
+              </p>
+              <p className="text-gray-800">{bid.created_date}</p>
+            </div>
+            <div className="flex-shrink-0 w-80">
+              <p className="text-sm font-semibold text-gray-600">
+                Last Modified
+              </p>
+              <p className="text-gray-800">{bid.last_modified}</p>
+            </div>
+            <div className="flex-shrink-0 w-80">
+              <p className="text-sm font-semibold text-gray-600">Author</p>
+              <p className="text-gray-800">{bid.author}</p>
+            </div>
+          </div>
+
+          <h2 className="text-xl font-bold text-gray-800 mb-4">Actions</h2>
+          <div className="flex flex-wrap gap-4 mb-6">
+            {/* Show "Delete" button for Authoring state */}
+            {bid.state === BID_STATES.AUTHORING && (
+              <Button
+                variant="outline"
+                onClick={handleDeleteBid}
+                disabled={updating}
+                className="bg-red-500 hover:bg-red-600 text-white"
+              >
+                {updating ? "Deleting..." : "Delete"}
+              </Button>
+            )}
+
+            {/* Show "Move Back" button for other states that can go backwards (except Not Started, Authoring, and Won/Lost) */}
+            {bid.state !== BID_STATES.NOT_STARTED &&
+              bid.state !== BID_STATES.AUTHORING &&
+              bid.state !== BID_STATES.SUBMITTED &&
+              bid.state !== BID_STATES.ONGOING_DIALOG &&
+              bid.state !== BID_STATES.WON_LOST && (
+                <Button
+                  variant="outline"
+                  onClick={handleMoveBidToPreviousState}
+                  disabled={updating}
+                >
+                  {updating ? "Updating..." : "Move Back"}
+                </Button>
+              )}
+
+            {/* Show Edit button for Authoring state */}
+            {bid.state === BID_STATES.AUTHORING && (
+              <Button
+                variant="outline"
+                onClick={handleEditBid}
+                className="bg-gray-500 hover:bg-gray-600 text-white"
+              >
+                Edit
+              </Button>
+            )}
+
+            {/* Show next step button for all states except final state */}
+            {getNextBidState(bid.state) && (
+              <Button
+                onClick={handleMoveBidToNextState}
+                disabled={updating}
+                className="bg-blue-500 hover:bg-blue-600 text-white"
+              >
+                {updating ? "Updating..." : getBidActionButtonText(bid.state)}
+              </Button>
+            )}
+
+            {/* Show collaborate button for all states except Won/Lost */}
+            <Button
+              variant="outline"
+              onClick={() => setShowCollaborateModal(true)}
+              className="bg-green-500 hover:bg-green-600 text-white"
+            >
+              Collaborate
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {showCollaborateModal && (
+        <CollaborateModal
+          isOpen={showCollaborateModal}
+          onClose={() => setShowCollaborateModal(false)}
+          tenderId={bid.tender_name}
+          tenderName={bid.title}
+        />
+      )}
+
+      {/* Modal for authoring bid content */}
+      {showAuthoringModal && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={handleModalClick}
+        >
+          <div
+            className="bg-white rounded-lg p-8 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-2xl font-bold mb-6">Authoring: {bid.title}</h3>
+            <p className="text-lg text-gray-600 mb-6">
+              Industry: {bid.branch} | Deadline: {bid.deadline}
+            </p>
+
+            <div className="mb-6">
+              <Textarea
+                value={bidContent}
+                onChange={(e) => setBidContent(e.target.value)}
+                placeholder="Start writing your bid content here..."
+                className="w-full h-[600px] resize-none text-base"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex justify-end gap-4">
+              <Button variant="outline" onClick={handleCloseAuthoringModal}>
+                Save & Continue
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal for editing bid content */}
+      {showEditModal && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={handleEditModalClick}
+        >
+          <div
+            className="bg-white rounded-lg p-8 w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-2xl font-bold mb-6">Edit Bid: {bid.title}</h3>
+            <p className="text-lg text-gray-600 mb-6">
+              Industry: {bid.branch} | Deadline: {bid.deadline}
+            </p>
+
+            <div className="mb-6">
+              <Textarea
+                value={bidContent}
+                onChange={(e) => setBidContent(e.target.value)}
+                placeholder="Write your bid content here..."
+                className="w-full h-[600px] resize-none text-base"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex justify-end gap-4">
+              <Button variant="outline" onClick={handleCloseEditModal}>
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -559,9 +1150,9 @@ const NavCard = ({
     const isBid = item.title && item.tender_name;
 
     if (isBid) {
-      // For bids, navigate to the bids section they belong to
-      // This will take them to the full list where they can then click on the specific bid
-      router.push(path);
+      // For bids, navigate to bid detail page
+      const bidId = encodeURIComponent(item.id);
+      router.push(`${path}/${bidId}`);
     } else {
       // For tenders, navigate to tender detail page
       const tenderId = encodeURIComponent(item.project_name);
@@ -741,6 +1332,7 @@ export default function DynamicDashboardPage() {
   const params = useParams();
   const slug = (params.slug as string[]) || [];
   const componentMapKey = slug.join("/");
+  const [bidTitle, setBidTitle] = useState<string | null>(null);
 
   // Check if this is a tender detail page (ends with an encoded tender name)
   const isTenderDetailPage =
@@ -750,13 +1342,34 @@ export default function DynamicDashboardPage() {
       slug[slug.length - 1]
     );
 
+  // Check if this is a bid detail page (ends with an encoded bid id)
+  const isBidDetailPage =
+    slug.length >= 3 &&
+    slug[0] === "bids" &&
+    ![
+      "not-started",
+      "authoring",
+      "reviewing",
+      "submitted",
+      "ongoing-dialog",
+      "won-lost",
+    ].includes(slug[slug.length - 1]);
+
+  // Reset bid title when navigating to different bid
+  useEffect(() => {
+    if (isBidDetailPage) {
+      setBidTitle(null);
+    }
+  }, [slug.join("/"), isBidDetailPage]);
+
   // Find the current node to check if it's a leaf
   let currentNode: NavItem | undefined = {
     children: navigationData as NavItem[],
   } as NavItem;
 
-  // For tender detail pages, we need to check the parent path (without the tender name)
-  const navigationSlug = isTenderDetailPage ? slug.slice(0, -1) : slug;
+  // For detail pages, we need to check the parent path (without the item name)
+  const navigationSlug =
+    isTenderDetailPage || isBidDetailPage ? slug.slice(0, -1) : slug;
 
   for (const segment of navigationSlug) {
     currentNode = currentNode?.children?.find(
@@ -791,7 +1404,7 @@ export default function DynamicDashboardPage() {
     currentItems = activeItem.children || [];
   }
 
-  // If this is a tender detail page, add the tender name as a shrunken level
+  // If this is a detail page, add the item name as a shrunken level
   if (isTenderDetailPage) {
     const tenderName = decodeURIComponent(slug[slug.length - 1]);
     levels.push({
@@ -800,9 +1413,18 @@ export default function DynamicDashboardPage() {
       activeSegment: slug[slug.length - 1],
       isShrunken: true,
     });
+  } else if (isBidDetailPage) {
+    const bidId = decodeURIComponent(slug[slug.length - 1]);
+    const displayTitle = bidTitle || "Bid Details";
+    levels.push({
+      items: [{ title: displayTitle, path: slug[slug.length - 1] }],
+      basePath: basePath,
+      activeSegment: slug[slug.length - 1],
+      isShrunken: true,
+    });
   }
 
-  // Check if we should render a tender detail page
+  // Check if we should render a detail page
   if (isTenderDetailPage) {
     const tenderName = slug[slug.length - 1];
     return (
@@ -821,6 +1443,29 @@ export default function DynamicDashboardPage() {
         {/* Render the tender detail page */}
         <div className="flex-1 overflow-y-auto">
           <TenderDetailPage tenderName={tenderName} />
+        </div>
+      </div>
+    );
+  }
+
+  if (isBidDetailPage) {
+    const bidId = slug[slug.length - 1];
+    return (
+      <div className="flex flex-col h-full">
+        {/* Render all navigation levels */}
+        {levels.map((level, index) => (
+          <NavigationLevel
+            key={index}
+            items={level.items}
+            basePath={level.basePath}
+            activeSegment={level.activeSegment}
+            isShrunken={level.isShrunken}
+          />
+        ))}
+
+        {/* Render the bid detail page */}
+        <div className="flex-1 overflow-y-auto">
+          <BidDetailPage bidId={bidId} onTitleUpdate={setBidTitle} />
         </div>
       </div>
     );

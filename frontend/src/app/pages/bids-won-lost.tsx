@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { ResponsiveCard } from "@/components/ui/ResponsiveCard";
+
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -57,12 +57,6 @@ export default function BidsWonLostPage() {
 
   return (
     <div className="flex flex-col h-full gap-4">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Won/Lost</h2>
-        <p className="text-gray-600">
-          Completed bids with known results - won or lost projects.
-        </p>
-      </div>
       <div className="flex-grow flex flex-col gap-4">
         {bids.length === 0 ? (
           <p className="text-center text-gray-500 py-8">No completed bids.</p>
@@ -71,33 +65,51 @@ export default function BidsWonLostPage() {
             const result = getBidResult(bid);
             const isWon = result === "won";
 
-            return (
-              <ResponsiveCard
-                key={bid.id}
-                title={bid.title}
-                branch={bid.branch}
-                description={`Completed: ${bid.last_modified} | Author: ${bid.author}`}
-                badgeText={isWon ? "WON" : "LOST"}
-                details={[{ label: "Deadline", value: bid.deadline }]}
-                onClick={() => handleCardClick(bid)}
-              >
-                <Button size="sm" variant="outline">
-                  View Summary
-                </Button>
-                {isWon && (
-                  <Button
-                    size="sm"
-                    variant="default"
-                    className="bg-green-500 hover:bg-green-600 text-white"
-                  >
-                    Manage Contract
-                  </Button>
-                )}
-              </ResponsiveCard>
-            );
+            return <BidCard key={bid.id} bid={bid} isWon={isWon} />;
           })
         )}
       </div>
     </div>
   );
 }
+
+const BidCard = ({ bid, isWon }: { bid: Bid; isWon: boolean }) => {
+  const router = useRouter();
+
+  const handleCardClick = () => {
+    const encodedBidId = encodeURIComponent(bid.id);
+    router.push(`/dashboard/bids/won-lost/${encodedBidId}`);
+  };
+
+  return (
+    <div
+      onClick={handleCardClick}
+      className="bg-white p-4 rounded-2xl border-4 border-black/80 shadow-md hover:shadow-xl hover:border-blue-500 transition-all duration-300 cursor-pointer"
+    >
+      <div className="flex justify-between items-start">
+        <div className="flex-1">
+          <h3 className="text-lg font-bold text-gray-800">{bid.title}</h3>
+          <p className="text-sm text-gray-600 mt-1">{bid.branch}</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Upphandling: {bid.tender_name}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Completed: {bid.last_modified} | Author: {bid.author}
+          </p>
+          <p className="text-sm text-gray-500 mt-2">
+            <span className="font-semibold">Deadline:</span> {bid.deadline}
+          </p>
+        </div>
+        <div className="ml-4 flex flex-col gap-2">
+          <span
+            className={`inline-block text-xs px-2 py-1 rounded-full ${
+              isWon ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+            }`}
+          >
+            {isWon ? "WON" : "LOST"}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};

@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { ResponsiveCard } from "@/components/ui/ResponsiveCard";
+
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -65,49 +65,47 @@ export default function BidsOngoingDialogPage() {
 
   return (
     <div className="flex flex-col h-full gap-4">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
-          Ongoing Dialog
-        </h2>
-        <p className="text-gray-600">
-          Bids with ongoing dialog with the client. Negotiations or
-          clarifications in progress.
-        </p>
-      </div>
       <div className="flex-grow flex flex-col gap-4">
         {bids.length === 0 ? (
           <p className="text-center text-gray-500 py-8">
             No bids with ongoing dialog.
           </p>
         ) : (
-          bids.map((bid, index) => (
-            <ResponsiveCard
-              key={bid.id}
-              title={bid.title}
-              branch={bid.branch}
-              description={`Dialog since: ${bid.last_modified} | Author: ${bid.author}`}
-              badgeText="Ongoing Dialog"
-              details={[{ label: "Deadline", value: bid.deadline }]}
-              onClick={() => handleCardClick(bid)}
-            >
-              <Button size="sm" variant="outline">
-                Manage Dialog
-              </Button>
-              <Button
-                size="sm"
-                variant="default"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleMarkWonLost(bid, index);
-                }}
-                className="bg-purple-500 hover:bg-purple-600 text-white"
-              >
-                Mark as Completed
-              </Button>
-            </ResponsiveCard>
-          ))
+          bids.map((bid, index) => <BidCard key={bid.id} bid={bid} />)
         )}
       </div>
     </div>
   );
 }
+
+const BidCard = ({ bid }: { bid: Bid }) => {
+  const router = useRouter();
+
+  const handleCardClick = () => {
+    const encodedBidId = encodeURIComponent(bid.id);
+    router.push(`/dashboard/bids/ongoing-dialog/${encodedBidId}`);
+  };
+
+  return (
+    <div
+      onClick={handleCardClick}
+      className="bg-white p-4 rounded-2xl border-4 border-black/80 shadow-md hover:shadow-xl hover:border-blue-500 transition-all duration-300 cursor-pointer"
+    >
+      <div className="flex justify-between items-start">
+        <div className="flex-1">
+          <h3 className="text-lg font-bold text-gray-800">{bid.title}</h3>
+          <p className="text-sm text-gray-600 mt-1">{bid.branch}</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Upphandling: {bid.tender_name}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Dialog since: {bid.last_modified} | Author: {bid.author}
+          </p>
+          <p className="text-sm text-gray-500 mt-2">
+            <span className="font-semibold">Deadline:</span> {bid.deadline}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};

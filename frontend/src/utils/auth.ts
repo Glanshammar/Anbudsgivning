@@ -1,3 +1,12 @@
+// Import the login API service
+import {
+  login as apiLogin,
+  logout as apiLogout,
+  isAuthenticated as apiIsAuthenticated,
+  getCurrentUser as apiGetCurrentUser,
+  type User,
+} from "@/services/api/login";
+
 interface LoginCredentials {
   username: string;
   password: string;
@@ -6,40 +15,17 @@ interface LoginCredentials {
 interface AuthResponse {
   msg: string;
   success: boolean;
+  user?: User;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-
 /**
- * Authenticates user with backend and establishes session
- * Uses cookies for session management (Flask-Login compatible)
+ * Authenticates user using the API service (mock or real backend)
  */
 export const login = async (
   credentials: LoginCredentials
 ): Promise<AuthResponse> => {
-  const response = await fetch(`${API_BASE_URL}/api/user/login`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include", // Critical: ensures cookies are sent and received for session management
-    body: JSON.stringify(credentials),
-  });
-
   try {
-    let errorMessage = "Inloggningen misslyckades";
-    if (!response.ok) {
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.message || errorData.error || errorMessage;
-      } catch {
-        // If response is not JSON, keep default error message
-      }
-      throw new Error(errorMessage);
-    }
-
-    const data = await response.json();
-    return { msg: data.message, success: true };
+    return await apiLogin(credentials);
   } catch (error) {
     console.error("Login error:", error);
     throw error;
@@ -47,53 +33,33 @@ export const login = async (
 };
 
 /**
- * Logs out user and destroys session
+ * Logs out user using the API service (mock or real backend)
  */
 export const logout = async (): Promise<void> => {
   try {
-    await fetch(`${API_BASE_URL}/api/user/logout`, {
-      method: "POST",
-      credentials: "include", // Include session cookies for logout
-    });
+    await apiLogout();
   } catch (error) {
     console.error("Logout error:", error);
   }
 };
 
 /**
- * Check if user is authenticated by verifying session status
- * Used by components to conditionally render content
+ * Check if user is authenticated using the API service (mock or real backend)
  */
 export const isAuthenticated = async (): Promise<boolean> => {
-  if (typeof window === "undefined") return false; // Prevent SSR issues
-
   try {
-    const response = await fetch(`${API_BASE_URL}/api/status/api`, {
-      method: "GET",
-      credentials: "include", // Ensures session cookies are sent
-    });
-
-    return response.ok;
+    return await apiIsAuthenticated();
   } catch {
     return false;
   }
 };
 
 /**
- * Retrieves current user information from Flask-Login session
+ * Retrieves current user information using the API service (mock or real backend)
  */
-export const getCurrentUser = async (): Promise<Record<string, unknown>> => {
+export const getCurrentUser = async (): Promise<User> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/user/profile`, {
-      method: "GET",
-      credentials: "include", // Include session cookies
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to get user info");
-    }
-
-    return await response.json();
+    return await apiGetCurrentUser();
   } catch (error) {
     console.error("Error getting user info:", error);
     throw error;

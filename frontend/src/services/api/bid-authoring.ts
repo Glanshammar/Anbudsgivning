@@ -23,7 +23,9 @@ export interface BidAuthoringRequest {
   bid_data: BidAuthoringData;
 }
 
-const API_BASE_URL = "http://localhost:5000";
+// Configuration - set to true to use mock data instead of backend
+const USE_DUMMY = true;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 /**
  * Default company data template
@@ -38,13 +40,70 @@ const DEFAULT_COMPANY_DATA = {
   phone: "08-123 456 78",
 };
 
+// Mock bid authoring data - simulates stored bid data for different tenders
+const mockBidAuthoringData: Record<string, BidAuthoringData> = {
+  "Projekt 2": {
+    personuppgifter: DEFAULT_COMPANY_DATA,
+    summary:
+      "Vi föreslår en innovativ lösning som kombinerar teknisk expertis med hållbar utveckling för att leverera högkvalitativa resultat.",
+    keySkills:
+      "• Teknisk expertis inom IT och automation\n• Projektledning enligt Agile metoder\n• Kvalitetssäkring och testning\n• Hållbar systemutveckling",
+    history:
+      "• 15+ års erfarenhet av liknande projekt\n• Levererat 50+ framgångsrika system\n• 95% kundnöjdhet\n• Certifierade enligt ISO 9001",
+    status: 1,
+    last_modified: "2025-01-20T10:30:00Z",
+  },
+  "Projekt 22": {
+    personuppgifter: DEFAULT_COMPANY_DATA,
+    summary:
+      "Komplett IT-plattform med fokus på användardata och systemintegration.",
+    keySkills:
+      "• Databassystem och integration\n• API-utveckling\n• Säkerhet och dataskydd\n• Skalbar arkitektur",
+    history:
+      "• Specialist på datahantering\n• GDPR-kompatibla lösningar\n• Säkra integrationslösningar",
+    status: 0,
+    last_modified: "2025-01-15T14:20:00Z",
+  },
+};
+
 /**
- * Get bid authoring data for a specific tender
- * Returns default structure if no data exists yet
+ * Mock implementation for getting bid authoring data
  */
-export async function getBidAuthoringData(
+const mockGetBidAuthoringData = async (
   tenderId: string
-): Promise<BidAuthoringData | null> {
+): Promise<BidAuthoringData | null> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const existingData = mockBidAuthoringData[tenderId];
+
+      if (existingData) {
+        console.log(
+          `🎭 Mock: Found bid authoring data for tender: ${tenderId}`
+        );
+        resolve(existingData);
+      } else {
+        console.log(
+          `🎭 Mock: No data found, returning default structure for: ${tenderId}`
+        );
+        resolve({
+          personuppgifter: DEFAULT_COMPANY_DATA,
+          summary: "",
+          keySkills: "• Teknisk expertis\n• Projektledning\n• Kvalitetssäkring",
+          history:
+            "• Tidigare projekt och erfarenheter\n• Framgångsrika leveranser\n• Nöjda kunder",
+          status: 0,
+        });
+      }
+    }, 300);
+  });
+};
+
+/**
+ * Real backend implementation for getting bid authoring data
+ */
+const realGetBidAuthoringData = async (
+  tenderId: string
+): Promise<BidAuthoringData | null> => {
   try {
     console.log("🔍 Fetching bid authoring data for tender:", tenderId);
 
@@ -57,7 +116,7 @@ export async function getBidAuthoringData(
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include", // Include session cookies for authentication
+        credentials: "include",
       }
     );
 
@@ -84,7 +143,7 @@ export async function getBidAuthoringData(
         keySkills: "• Teknisk expertis\n• Projektledning\n• Kvalitetssäkring",
         history:
           "• Tidigare projekt och erfarenheter\n• Framgångsrika leveranser\n• Nöjda kunder",
-        status: 0, // Draft status
+        status: 0,
       };
     }
 
@@ -112,16 +171,50 @@ export async function getBidAuthoringData(
 
     throw error;
   }
+};
+
+/**
+ * Get bid authoring data for a specific tender - uses mock or real based on USE_DUMMY flag
+ * Returns default structure if no data exists yet
+ */
+export async function getBidAuthoringData(
+  tenderId: string
+): Promise<BidAuthoringData | null> {
+  if (USE_DUMMY) {
+    return mockGetBidAuthoringData(tenderId);
+  } else {
+    return realGetBidAuthoringData(tenderId);
+  }
 }
 
 /**
- * Save bid authoring data for a specific tender
- * Uses PUT method for create/update operations
+ * Mock implementation for saving bid authoring data
  */
-export async function saveBidAuthoringData(
+const mockSaveBidAuthoringData = async (
   tenderId: string,
   bidData: BidAuthoringData
-): Promise<void> {
+): Promise<void> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      // Update the mock data with timestamp
+      mockBidAuthoringData[tenderId] = {
+        ...bidData,
+        last_modified: new Date().toISOString(),
+      };
+
+      console.log(`🎭 Mock: Saved bid authoring data for tender: ${tenderId}`);
+      resolve();
+    }, 500);
+  });
+};
+
+/**
+ * Real backend implementation for saving bid authoring data
+ */
+const realSaveBidAuthoringData = async (
+  tenderId: string,
+  bidData: BidAuthoringData
+): Promise<void> => {
   try {
     const requestData: BidAuthoringRequest = {
       tender_id: tenderId,
@@ -129,7 +222,7 @@ export async function saveBidAuthoringData(
     };
 
     const response = await fetch(`${API_BASE_URL}/api/bid-authoring`, {
-      method: "PUT", // Use PUT for create/update (idempotent operation)
+      method: "PUT",
       headers: {
         "Content-Type": "application/json",
       },
@@ -146,12 +239,47 @@ export async function saveBidAuthoringData(
     console.error("Error saving bid authoring data:", error);
     throw error;
   }
+};
+
+/**
+ * Save bid authoring data for a specific tender - uses mock or real based on USE_DUMMY flag
+ * Uses PUT method for create/update operations
+ */
+export async function saveBidAuthoringData(
+  tenderId: string,
+  bidData: BidAuthoringData
+): Promise<void> {
+  if (USE_DUMMY) {
+    return mockSaveBidAuthoringData(tenderId, bidData);
+  } else {
+    return realSaveBidAuthoringData(tenderId, bidData);
+  }
 }
 
 /**
- * Delete bid authoring data for a specific tender
+ * Mock implementation for deleting bid authoring data
  */
-export async function deleteBidAuthoringData(tenderId: string): Promise<void> {
+const mockDeleteBidAuthoringData = async (tenderId: string): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (mockBidAuthoringData[tenderId]) {
+        delete mockBidAuthoringData[tenderId];
+        console.log(
+          `🎭 Mock: Deleted bid authoring data for tender: ${tenderId}`
+        );
+        resolve();
+      } else {
+        console.log(`🎭 Mock: No data found to delete for tender: ${tenderId}`);
+        resolve(); // Don't reject if no data exists
+      }
+    }, 300);
+  });
+};
+
+/**
+ * Real backend implementation for deleting bid authoring data
+ */
+const realDeleteBidAuthoringData = async (tenderId: string): Promise<void> => {
   try {
     const response = await fetch(
       `${API_BASE_URL}/api/bid-authoring?tender_id=${encodeURIComponent(
@@ -175,14 +303,43 @@ export async function deleteBidAuthoringData(tenderId: string): Promise<void> {
     console.error("Error deleting bid authoring data:", error);
     throw error;
   }
+};
+
+/**
+ * Delete bid authoring data for a specific tender - uses mock or real based on USE_DUMMY flag
+ */
+export async function deleteBidAuthoringData(tenderId: string): Promise<void> {
+  if (USE_DUMMY) {
+    return mockDeleteBidAuthoringData(tenderId);
+  } else {
+    return realDeleteBidAuthoringData(tenderId);
+  }
 }
 
 /**
- * Get all bid authoring data
+ * Mock implementation for getting all bid authoring data
  */
-export async function getAllBidAuthoringData(): Promise<
+const mockGetAllBidAuthoringData = async (): Promise<
   Record<string, BidAuthoringData>
-> {
+> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      console.log(
+        `🎭 Mock: Returning all bid authoring data (${
+          Object.keys(mockBidAuthoringData).length
+        } items)`
+      );
+      resolve({ ...mockBidAuthoringData });
+    }, 300);
+  });
+};
+
+/**
+ * Real backend implementation for getting all bid authoring data
+ */
+const realGetAllBidAuthoringData = async (): Promise<
+  Record<string, BidAuthoringData>
+> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/bid-authoring`, {
       method: "GET",
@@ -201,5 +358,18 @@ export async function getAllBidAuthoringData(): Promise<
   } catch (error) {
     console.error("Error fetching all bid authoring data:", error);
     throw error;
+  }
+};
+
+/**
+ * Get all bid authoring data - uses mock or real based on USE_DUMMY flag
+ */
+export async function getAllBidAuthoringData(): Promise<
+  Record<string, BidAuthoringData>
+> {
+  if (USE_DUMMY) {
+    return mockGetAllBidAuthoringData();
+  } else {
+    return realGetAllBidAuthoringData();
   }
 }

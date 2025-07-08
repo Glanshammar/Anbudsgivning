@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { ResponsiveCard } from "@/components/ui/ResponsiveCard";
+
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -65,44 +65,45 @@ export default function BidsSubmittedPage() {
 
   return (
     <div className="flex flex-col h-full gap-4">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Submitted</h2>
-        <p className="text-gray-600">
-          Submitted bids waiting for response from the client.
-        </p>
-      </div>
       <div className="flex-grow flex flex-col gap-4">
         {bids.length === 0 ? (
           <p className="text-center text-gray-500 py-8">No submitted bids.</p>
         ) : (
-          bids.map((bid, index) => (
-            <ResponsiveCard
-              key={bid.id}
-              title={bid.title}
-              branch={bid.branch}
-              description={`Submitted: ${bid.last_modified} | Author: ${bid.author}`}
-              badgeText="Submitted"
-              details={[{ label: "Deadline", value: bid.deadline }]}
-              onClick={() => handleCardClick(bid)}
-            >
-              <Button size="sm" variant="outline">
-                View Bid
-              </Button>
-              <Button
-                size="sm"
-                variant="default"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleMoveToDialog(bid, index);
-                }}
-                className="bg-blue-500 hover:bg-blue-600 text-white"
-              >
-                Start Dialog
-              </Button>
-            </ResponsiveCard>
-          ))
+          bids.map((bid, index) => <BidCard key={bid.id} bid={bid} />)
         )}
       </div>
     </div>
   );
 }
+
+const BidCard = ({ bid }: { bid: Bid }) => {
+  const router = useRouter();
+
+  const handleCardClick = () => {
+    const encodedBidId = encodeURIComponent(bid.id);
+    router.push(`/dashboard/bids/submitted/${encodedBidId}`);
+  };
+
+  return (
+    <div
+      onClick={handleCardClick}
+      className="bg-white p-4 rounded-2xl border-4 border-black/80 shadow-md hover:shadow-xl hover:border-blue-500 transition-all duration-300 cursor-pointer"
+    >
+      <div className="flex justify-between items-start">
+        <div className="flex-1">
+          <h3 className="text-lg font-bold text-gray-800">{bid.title}</h3>
+          <p className="text-sm text-gray-600 mt-1">{bid.branch}</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Upphandling: {bid.tender_name}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Submitted: {bid.last_modified} | Author: {bid.author}
+          </p>
+          <p className="text-sm text-gray-500 mt-2">
+            <span className="font-semibold">Deadline:</span> {bid.deadline}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};

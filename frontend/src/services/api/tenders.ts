@@ -309,7 +309,7 @@ const dummyTenders: Tender[] = [
     deadline: "2025-06-14",
     end_date: "2025-08-25",
     start_date: "2025-07-20",
-    state: TENDER_STATES.NYINKOMMET,
+        state: TENDER_STATES.NYINKOMMET,
     states: [TENDER_STATES.NYINKOMMET],
   },
   {

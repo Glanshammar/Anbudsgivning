@@ -1,7 +1,6 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { ResponsiveCard } from "@/components/ui/ResponsiveCard";
 import { Textarea } from "@/components/ui/textarea";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -94,37 +93,13 @@ export default function BidsNotStartedPage() {
 
   return (
     <div className="flex flex-col h-full gap-4">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Not Started</h2>
-        <p className="text-gray-600">
-          Bids that haven't been started yet. Click "Start" to begin authoring.
-        </p>
-      </div>
       <div className="flex-grow flex flex-col gap-4">
         {bids.length === 0 ? (
           <p className="text-center text-gray-500 py-8">
             No bids waiting to be started.
           </p>
         ) : (
-          bids.map((bid, index) => (
-            <ResponsiveCard
-              key={bid.id}
-              title={bid.title}
-              branch={bid.branch}
-              description={bid.description}
-              badgeText="Not Started"
-              details={[{ label: "Deadline", value: bid.deadline }]}
-            >
-              <Button
-                size="sm"
-                variant="default"
-                onClick={() => handleStartBid(bid)}
-                className="bg-green-500 hover:bg-green-600 text-white"
-              >
-                Start
-              </Button>
-            </ResponsiveCard>
-          ))
+          bids.map((bid, index) => <BidCard key={bid.id} bid={bid} />)
         )}
       </div>
 
@@ -160,3 +135,32 @@ export default function BidsNotStartedPage() {
     </div>
   );
 }
+
+const BidCard = ({ bid }: { bid: Bid }) => {
+  const router = useRouter();
+
+  const handleCardClick = () => {
+    const encodedBidId = encodeURIComponent(bid.id);
+    router.push(`/dashboard/bids/not-started/${encodedBidId}`);
+  };
+
+  return (
+    <div
+      onClick={handleCardClick}
+      className="bg-white p-4 rounded-2xl border-4 border-black/80 shadow-md hover:shadow-xl hover:border-blue-500 transition-all duration-300 cursor-pointer"
+    >
+      <div className="flex justify-between items-start">
+        <div className="flex-1">
+          <h3 className="text-lg font-bold text-gray-800">{bid.title}</h3>
+          <p className="text-sm text-gray-600 mt-1">{bid.branch}</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Upphandling: {bid.tender_name}
+          </p>
+          <p className="text-sm text-gray-500 mt-2">
+            <span className="font-semibold">Deadline:</span> {bid.deadline}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
