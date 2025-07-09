@@ -28,6 +28,7 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow">
@@ -36,6 +37,7 @@ export default function LoginPage() {
             Logga in på ditt konto
           </h2>
         </div>
+
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (
             <div className="rounded-md bg-red-50 p-4 text-red-700">{error}</div>
@@ -81,6 +83,7 @@ export default function LoginPage() {
             >
               {isLoading ? "Loggar in..." : "Logga in"}
             </button>
+
             <button
               type="button"
               onClick={() => router.push("/register")}

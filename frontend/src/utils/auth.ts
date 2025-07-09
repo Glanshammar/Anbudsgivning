@@ -1,3 +1,12 @@
+// Import the login API service
+import {
+  login as apiLogin,
+  logout as apiLogout,
+  isAuthenticated as apiIsAuthenticated,
+  getCurrentUser as apiGetCurrentUser,
+  type User,
+} from "@/services/api/login";
+
 interface LoginCredentials {
   username: string;
   password: string;
@@ -6,89 +15,51 @@ interface LoginCredentials {
 interface AuthResponse {
   msg: string;
   success: boolean;
+  user?: User;
 }
 
-const API_BASE_URL = "http://localhost:5000";
-
-// Login function - flask-login will handle session creation
+/**
+ * Authenticates user using the API service (mock or real backend)
+ */
 export const login = async (
   credentials: LoginCredentials
 ): Promise<AuthResponse> => {
-  const response = await fetch(`${API_BASE_URL}/api/user/login`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include", // This ensures cookies are sent and received
-    body: JSON.stringify(credentials),
-  });
-
-  let errorMessage = "Inloggningen misslyckades";
-  if (!response.ok) {
-    try {
-      const errorData = await response.json();
-      errorMessage = errorData.message || errorData.error || errorMessage;
-    } catch (e) {
-      // If response is not JSON, keep default error message
-    }
-    throw new Error(errorMessage);
+  try {
+    return await apiLogin(credentials);
+  } catch (error) {
+    console.error("Login error:", error);
+    throw error;
   }
-
-  const data = await response.json();
-  return data;
 };
 
-// Logout function - flask-login will clear session
+/**
+ * Logs out user using the API service (mock or real backend)
+ */
 export const logout = async (): Promise<void> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/user/logout`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include", // Ensures cookies are sent for authentication
-    });
-
-    // Even if the request fails, we should redirect to login
-    // because the user wants to log out
+    await apiLogout();
   } catch (error) {
-    console.error("Logout request failed:", error);
-    // Continue with logout even if request fails
+    console.error("Logout error:", error);
   }
-
-  // Redirect to login page
-  window.location.href = "/login";
 };
 
-// Check if user is authenticated by checking session status
+/**
+ * Check if user is authenticated using the API service (mock or real backend)
+ */
 export const isAuthenticated = async (): Promise<boolean> => {
-  if (typeof window === "undefined") return false;
-
   try {
-    const response = await fetch(`${API_BASE_URL}/api/status/api`, {
-      method: "GET",
-      credentials: "include", // Ensures cookies are sent
-    });
-
-    return response.ok;
+    return await apiIsAuthenticated();
   } catch {
     return false;
   }
 };
 
-// Get current user info from flask-login
-export const getCurrentUser = async (): Promise<any> => {
+/**
+ * Retrieves current user information using the API service (mock or real backend)
+ */
+export const getCurrentUser = async (): Promise<User> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/user/profile`, {
-      method: "GET",
-      credentials: "include",
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to get user info");
-    }
-
-    return await response.json();
+    return await apiGetCurrentUser();
   } catch (error) {
     console.error("Error getting user info:", error);
     throw error;

@@ -86,38 +86,89 @@ class Consultant:
 
 
 class TenderDocument:
-    def __init__(self, project_name: str, branch: str, deadline: datetime, start_date: datetime, end_date: datetime):
+    # Define all states for tender documents
+    VALID_STATES = [
+        "nyinkommet",                    # Nyinkommet (Inbox)
+        "under_utredning",              # Under utredning (Under investigation)
+        "bid_authoring",               # Bid Authoring (Writing the bid)
+        "sent_bids",                   # Upphandlingar vi bjudit på (Submitted)
+    ]
+    
+    def __init__(self, project_name: str, branch: str, deadline: datetime, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, state: str = "nyinkommet"):
         if not isinstance(branch, str):
             raise ValueError('Invalid branch')
         if not isinstance(deadline, datetime):
             raise ValueError('Invalid deadline')
-        if not isinstance(end_date, datetime):
+        if end_date is not None and not isinstance(end_date, datetime):
             raise ValueError('Invalid end_date')
         if not isinstance(project_name, str):
             raise ValueError('Invalid project_name')
-        if not isinstance(start_date, datetime):
+        if start_date is not None and not isinstance(start_date, datetime):
             raise ValueError('Invalid start_date')
+        if not isinstance(state, str):
+            raise ValueError('Invalid state')
+        if state not in self.VALID_STATES:
+            raise ValueError(f'Invalid state: {state}. Must be one of {self.VALID_STATES}')
+            
         self.branch = branch
         self.deadline = deadline
         self.start_date = start_date
         self.end_date = end_date
         self.project_name = project_name
+        self.state = state
         self.tender_link = None
         self.description = None
+        self.bid_data = None  # För att lagra bid authoring data
+        self.submission_date = None  # När anbudet skickades in
 
     def __repr__(self):
-        return f'TenderDocument(project_name={self.project_name}, branch={self.branch}, deadline={self.deadline}, start_date={self.start_date}, end_date={self.end_date}), \nurl'
+        return f'TenderDocument(project_name={self.project_name}, state={self.state}, branch={self.branch}, deadline={self.deadline}, start_date={self.start_date}, end_date={self.end_date}), \nurl={self.tender_link}, description={self.description}'
         
     def to_dict(self):
-        return {
+        result = {
             'project_name': self.project_name,
             'branch': self.branch,
             'deadline': self.deadline.strftime("%Y-%m-%d"),
-            'start_date': self.start_date.strftime("%Y-%m-%d"),
-            'end_date': self.end_date.strftime("%Y-%m-%d"),
+            'start_date': self.start_date.strftime("%Y-%m-%d") if self.start_date else None,
+            'end_date': self.end_date.strftime("%Y-%m-%d") if self.end_date else None,
             'url': self.tender_link,
-            'description': self.description
+            'description': self.description,
+            'state': self.state
         }
+        
+        # Lägg till extra fält om de finns
+        if self.bid_data is not None:
+            result['bid_data'] = self.bid_data
+        if self.submission_date is not None:
+            result['submission_date'] = self.submission_date.strftime("%Y-%m-%d") if isinstance(self.submission_date, datetime) else self.submission_date
+            
+        return result
+    
+    def update_state(self, new_state: str):
+        """Uppdatera state för upphandlingen"""
+        if new_state not in self.VALID_STATES:
+            raise ValueError(f'Invalid state: {new_state}. Must be one of {self.VALID_STATES}')
+        old_state = self.state
+        self.state = new_state
+        
+        # Automatiskt sätt submission_date när anbudet skickas
+        if new_state == "sent_bids" and old_state != "sent_bids":
+            self.submission_date = datetime.now()
+    
+    def can_transition_to(self, target_state: str) -> bool:
+        """Kontrollera om övergång till target_state är giltig"""
+        if target_state not in self.VALID_STATES:
+            return False
+            
+        # Definiera giltiga övergångar
+        valid_transitions = {
+            "nyinkommet": ["under_utredning"],
+            "under_utredning": "nyinkommet",  # Kan gå tillbaka till inbox eller framåt
+            "bid_authoring": "sent_bids",
+            "sent_bids": []  # Slutstadium, inga övergångar
+        }
+        
+        return target_state in valid_transitions.get(self.state, [])
 
 
 class Calendar:

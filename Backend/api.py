@@ -38,6 +38,7 @@ COMPANY_DATA = 'CompanyData'
 CONSULTANTS = 'Consultants'
 USERS = 'Users'
 TENDERS = 'Tenders'
+BID_AUTHORING = 'BidAuthoring'
 
 
 # Initialize logger
@@ -104,9 +105,11 @@ app = CreateApp()
 CORS(app, resources={
     r"/*": {
         "origins": ["http://localhost:3000"],
-        "methods": ["GET", "POST", "PUT", "DELETE"],
-        "allow_headers": ["Content-Type", "Authorization"],
-        "supports_credentials": True
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+        "supports_credentials": True,
+        "expose_headers": ["Content-Type", "Authorization"],
+        "max_age": 86400  # Cache preflight response for 24 hours
     }
 })
 
@@ -136,6 +139,21 @@ async def cleanup(exception=None):
 @app.login_manager.unauthorized_handler
 def unauthorized():
     return jsonify({"message": "You must be logged in to access this resource."}), 401
+
+
+# Global OPTIONS handler for all API routes
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        response = make_response()
+        response.headers.add("Access-Control-Allow-Origin", "http://localhost:3000")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Requested-With")
+        response.headers.add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+        response.headers.add("Access-Control-Allow-Credentials", "true")
+        response.headers.add("Access-Control-Max-Age", "86400")
+        return response
+
+
 # ------------------------------------------------------------------------------------------------------------- #
 # --------------------------------------------- Request Functions --------------------------------------------- #
 async def ServerRequest(command: str = None, params: dict = None) -> Tuple[Dict[str, Any], int]:
@@ -353,9 +371,13 @@ async def Login() -> Tuple[Dict[str, Any], int]:
 
 @app.route('/api/user/logout', methods=['POST'])
 @BlockAgents
-@login_required
 async def Logout() -> Tuple[Dict[str, Any], int]:
-    logout_user()
+    try:
+        logout_user()
+    except Exception as e:
+        # Even if logout fails, we still want to return success
+        # since the client should clear its session state
+        logger.warning(f"Logout warning: {str(e)}", extra={'error': str(e)})
     return jsonify({"message": "Successfully logged out"}), 200
 
 
@@ -555,19 +577,67 @@ async def TendersRequest():
             try:
                 # Parse date strings to datetime objects
                 for date_field in ['deadline', 'start_date', 'end_date']:
-                    if date_field in tender and isinstance(tender[date_field], str):
-                        tender[date_field] = datetime.datetime.strptime(tender[date_field], "%Y-%m-%d")
+                    if date_field in tender and isinstance(tender[date_field], str) and tender[date_field].strip():
+                        try:
+                            tender[date_field] = datetime.strptime(tender[date_field], "%Y-%m-%d")
+                        except ValueError as e:
+                            return jsonify({"error": f"Invalid date format for {date_field}: {tender[date_field]}. Expected format: YYYY-MM-DD"}), 400
                 
-                tender_obj = TenderDocument(**tender)
+                # Sätt default state om det inte finns
+                if 'state' not in tender:
+                    tender['state'] = 'nyinkommet'
+                
+                # Skapa TenderDocument objekt, men hantera extra fält manuellt
+                tender_params = {k: v for k, v in tender.items() 
+                               if k in ['project_name', 'branch', 'deadline', 'start_date', 'end_date', 'state']}
+                
+                # Sätt None för tomma datum-fält
+                if 'start_date' in tender_params and not tender_params['start_date']:
+                    tender_params['start_date'] = None
+                if 'end_date' in tender_params and not tender_params['end_date']:
+                    tender_params['end_date'] = None
+                    
+                tender_obj = TenderDocument(**tender_params)
+                
+                # Lägg till extra fält som inte är i konstruktorn
+                if 'description' in tender:
+                    tender_obj.description = tender['description']
+                if 'url' in tender:
+                    tender_obj.tender_link = tender['url']
+                if 'bid_data' in tender:
+                    tender_obj.bid_data = tender['bid_data']
+                if 'submission_date' in tender:
+                    tender_obj.submission_date = tender['submission_date']
+                
                 validated_tenders.append(tender_obj.to_dict())
             except (ValueError, TypeError) as e:
                 return jsonify({"error": f"Invalid tender data: {str(e)}"}), 400
         
         if request.method == 'POST':
-            logger.info(f"Creating new tenders {validated_tenders} for user: {current_user_id}", extra={'user_id': current_user_id})
-            return await DatabaseRequest(collection_name=COMPANY_DATA,
-                                data={"tenders": validated_tenders},
+            # Hämta befintliga tenders först
+            existing_data = current_app.db.collection(COMPANY_DATA).document('Tenders').get()
+            existing_tenders = existing_data.to_dict().get('tenders', []) if existing_data.exists else []
+            
+            # Kombinera befintliga och nya tenders, undvik dubbletter baserat på project_name
+            existing_projects = {tender['project_name'] for tender in existing_tenders}
+            new_tenders = [
+                tender for tender in validated_tenders 
+                if tender['project_name'] not in existing_projects
+            ]
+            combined_tenders = existing_tenders + new_tenders
+            
+            logger.info(f"Adding {len(new_tenders)} new tenders to {len(existing_tenders)} existing tenders for user: {current_user_id}", extra={'user_id': current_user_id})
+            
+            # Spara till databasen
+            db_response, status_code = await DatabaseRequest(collection_name=COMPANY_DATA,
+                                data={"tenders": combined_tenders},
                                 doc_id=doc_id)
+            
+            # Returnera bara den första nya tendern (eftersom vi bara skapar en åt gången)
+            if status_code == 200 and new_tenders:
+                return jsonify({"tender": new_tenders[0]}), 201
+            else:
+                return db_response, status_code
         
         elif request.method == 'PUT':
             existing_data = current_app.db.collection(COMPANY_DATA).document('Tenders').get()
@@ -594,6 +664,103 @@ async def TendersRequest():
         except Exception as e:
             logger.error(f"Error deleting tenders: {str(e)}", extra={'error': str(e)})
             return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/tenders/<tender_id>/state', methods=['PUT'])
+@login_required
+async def update_tender_state(tender_id: str):
+    """Uppdatera state för en specifik upphandling"""
+    current_user_id = current_user.get_id()
+    
+    try:
+        data = request.get_json()
+        new_state = data.get('state')
+        
+        if not new_state:
+            return jsonify({"error": "state is required"}), 400
+            
+        if new_state not in TenderDocument.VALID_STATES:
+            return jsonify({"error": f"Invalid state. Must be one of {TenderDocument.VALID_STATES}"}), 400
+        
+        # Hämta befintliga tenders
+        doc_ref = current_app.db.collection(COMPANY_DATA).document('Tenders')
+        doc = doc_ref.get()
+        
+        if not doc.exists:
+            return jsonify({"error": "No tenders found"}), 404
+            
+        tenders_data = doc.to_dict().get('tenders', [])
+        
+        # Hitta och uppdatera rätt tender (baserat på project_name som ID)
+        tender_found = False
+        for tender in tenders_data:
+            if tender['project_name'] == tender_id:
+                old_state = tender.get('state', 'nyinkommet')
+                tender['state'] = new_state
+                
+                # Automatiskt sätt submission_date när anbudet skickas
+                if new_state == "sent_bids" and old_state != "sent_bids":
+                    tender['submission_date'] = datetime.now().strftime("%Y-%m-%d")
+                
+                tender_found = True
+                break
+                
+        if not tender_found:
+            return jsonify({"error": "Tender not found"}), 404
+            
+        # Spara tillbaka till databasen
+        doc_ref.set({'tenders': tenders_data})
+        
+        logger.info(f"Updated tender {tender_id} state to {new_state} for user: {current_user_id}")
+        return jsonify({"message": "State updated successfully", "tender_id": tender_id, "new_state": new_state}), 200
+        
+    except Exception as e:
+        logger.error(f"Error updating tender state: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/tenders/by-state/<state>', methods=['GET'])
+@login_required
+async def get_tenders_by_state(state: str):
+    """Hämta alla tenders med en specifik state"""
+    current_user_id = current_user.get_id()
+    
+    if state not in TenderDocument.VALID_STATES:
+        return jsonify({"error": f"Invalid state. Must be one of {TenderDocument.VALID_STATES}"}), 400
+    
+    try:
+        doc_ref = current_app.db.collection(COMPANY_DATA).document('Tenders')
+        doc = doc_ref.get()
+        
+        if not doc.exists:
+            return jsonify({"tenders": []}), 200
+            
+        all_tenders = doc.to_dict().get('tenders', [])
+        
+        # Filtrera tenders baserat på state (default till 'nyinkommet' för befintliga tenders utan state)
+        filtered_tenders = [tender for tender in all_tenders if tender.get('state', 'nyinkommet') == state]
+        
+        logger.info(f"Retrieved {len(filtered_tenders)} tenders with state {state} for user: {current_user_id}")
+        return jsonify({"tenders": filtered_tenders}), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting tenders by state: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/tenders/states', methods=['GET'])
+@login_required
+async def get_tender_states():
+    """Hämta alla giltiga tender states"""
+    return jsonify({
+        "states": TenderDocument.VALID_STATES,
+        "state_labels": {
+            "nyinkommet": "Nyinkommet",
+            "under_utredning": "Under utredning",
+            "bid_authoring": "Bid Authoring",
+            "sent_bids": "Upphandlingar vi bjudit på"
+        }
+    }), 200
 
 
 @app.route('/api/expertise', methods=['POST', 'GET', 'PUT'])
@@ -691,6 +858,94 @@ async def TenderPortals():
                              doc_id=doc_id)
 
 
+@app.route('/api/bid-authoring', methods=['GET', 'POST', 'PUT', 'DELETE'])
+@login_required
+async def BidAuthoringRequest():
+    """
+    Handle bid authoring data for specific tenders
+    JSON format:
+    {
+        "tender_id": "project_name_or_id",
+        "bid_data": {
+            "personuppgifter": {
+                "companyName": "string",
+                "orgNumber": "string", 
+                "address": "string",
+                "contactPerson": "string",
+                "email": "string",
+                "phone": "string"
+            },
+            "summary": "string",
+            "keySkills": "string",
+            "history": "string",
+            "status": 35,
+            "last_modified": "2025-01-09T10:30:00Z"
+        }
+    }
+    """
+    current_user_id = current_user.get_id()
+    
+    if request.method == 'GET':
+        # Get specific bid authoring data by tender_id
+        tender_id = request.args.get('tender_id')
+        if tender_id:
+            doc_id = f"bid_{tender_id}"
+            logger.info(f"Getting bid authoring data for tender {tender_id} by user: {current_user_id}")
+            return await DatabaseRequest(collection_name=COMPANY_DATA,
+                                data=None,
+                                doc_id=doc_id)
+        else:
+            # Get all bid authoring documents
+            logger.info(f"Getting all bid authoring data for user: {current_user_id}")
+            try:
+                # Get all documents that start with "bid_"
+                docs = current_app.db.collection(COMPANY_DATA).where("__name__", ">=", "bid_").where("__name__", "<", "bid_\uf8ff").get()
+                all_bids = {}
+                for doc in docs:
+                    if doc.id.startswith("bid_"):
+                        tender_id = doc.id[4:]  # Remove "bid_" prefix
+                        all_bids[tender_id] = doc.to_dict()
+                return jsonify(all_bids), 200
+            except Exception as e:
+                logger.error(f"Error getting all bid authoring data: {str(e)}")
+                return jsonify({"error": str(e)}), 500
+    
+    elif request.method in ['POST', 'PUT']:
+        data = request.get_json()
+        tender_id = data.get('tender_id')
+        bid_data = data.get('bid_data', {})
+        
+        if not tender_id:
+            return jsonify({"error": "tender_id is required"}), 400
+            
+        # Add timestamp
+        bid_data['last_modified'] = datetime.now().isoformat()
+        
+        doc_id = f"bid_{tender_id}"
+        
+        if request.method == 'POST':
+            logger.info(f"Creating bid authoring data for tender {tender_id} by user: {current_user_id}")
+            return await DatabaseRequest(collection_name=COMPANY_DATA,
+                                data=bid_data,
+                                doc_id=doc_id)
+        else:  # PUT
+            logger.info(f"Updating bid authoring data for tender {tender_id} by user: {current_user_id}")
+            return await DatabaseRequest(collection_name=COMPANY_DATA,
+                                data=bid_data,
+                                doc_id=doc_id)
+    
+    elif request.method == 'DELETE':
+        tender_id = request.args.get('tender_id')
+        if not tender_id:
+            return jsonify({"error": "tender_id is required"}), 400
+            
+        doc_id = f"bid_{tender_id}"
+        logger.info(f"Deleting bid authoring data for tender {tender_id} by user: {current_user_id}")
+        return await DatabaseRequest(collection_name=COMPANY_DATA,
+                            data=None,
+                            doc_id=doc_id)
+
+
 @app.route('/api/company_profile', methods=['GET', 'POST', 'PUT', 'DELETE'])
 @login_required
 @RoleRequired('Admin')
@@ -747,8 +1002,8 @@ async def AgentManagement():
     except Exception as e:
         logger.error(f"Agent management failed: {str(e)}", extra={'error': str(e)})
         return jsonify({"error": str(e)}), 500
-# ------------------------------------------------------------------------------------------------------------- #
-# -------------------------------------------- Update Application --------------------------------------------- #
+
+
 def GetLatestRelease():
     url = None
     response = requests.get(url)

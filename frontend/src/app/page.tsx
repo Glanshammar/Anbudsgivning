@@ -9,7 +9,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
       <div className="max-w-2xl w-full space-y-8 p-8 text-center">
-        <h1 className="text-4xl font-extrabold text-gray-900 sm:text-5xl sm:tracking-tight lg:text-6xl">
+        <h1 className="text-5xl font-extrabold text-gray-900 tracking-tight">
           Anbudsgivning
         </h1>
         <p className="mt-4 text-xl text-gray-600">
