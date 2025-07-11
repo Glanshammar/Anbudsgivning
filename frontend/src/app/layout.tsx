@@ -24,9 +24,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="w-full h-full">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased w-full h-full m-0 p-0`}
+        style={{ width: "100vw", minHeight: "100vh" }}
       >
         <ClientLayout>{children}</ClientLayout>
       </body>

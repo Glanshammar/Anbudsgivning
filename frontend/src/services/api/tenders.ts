@@ -309,7 +309,7 @@ const dummyTenders: Tender[] = [
     deadline: "2025-06-14",
     end_date: "2025-08-25",
     start_date: "2025-07-20",
-        state: TENDER_STATES.NYINKOMMET,
+    state: TENDER_STATES.NYINKOMMET,
     states: [TENDER_STATES.NYINKOMMET],
   },
   {
@@ -676,5 +676,67 @@ export async function deleteTender(tenderId: string): Promise<void> {
 
     // TODO: Implement real API call when backend is ready
     console.log(`Would delete tender ${tenderId} via API`);
+  });
+}
+
+/**
+ * Creates a new bid and removes the tender from tenders
+ * This is called when user clicks "Create New Project" on a tender under review
+ * Returns the created bid so caller can navigate to its detail page
+ */
+export async function createBidAndRemoveTender(
+  tender: Tender
+): Promise<import("./bids").Bid> {
+  const requestKey = `create-bid-remove-tender-${tender.project_name}`;
+
+  return requestManager.executeRequest(requestKey, async () => {
+    console.log(
+      `🔄 Creating bid and removing tender: ${tender.project_name}...`
+    );
+
+    if (USE_DUMMY) {
+      // Import createBid from bids API
+      const { createBid } = await import("./bids");
+
+      // Create the bid first
+      const newBid = await createBid(
+        tender.project_name,
+        tender.description,
+        tender.deadline,
+        tender.branch
+      );
+
+      // Then remove the tender
+      await deleteTender(tender.project_name);
+
+      console.log(
+        `✅ Dummy mode: Created bid and removed tender ${tender.project_name}`
+      );
+      return newBid;
+    }
+
+    // TODO: Implement real API call when backend is ready
+    // This should be an atomic operation on the backend
+    try {
+      // Create bid first
+      const { createBid } = await import("./bids");
+      const newBid = await createBid(
+        tender.project_name,
+        tender.description,
+        tender.deadline,
+        tender.branch
+      );
+
+      // Then delete tender
+      await deleteTender(tender.project_name);
+
+      console.log(
+        `✅ Successfully created bid and removed tender: ${tender.project_name}`
+      );
+      return newBid;
+    } catch (error) {
+      console.error(`❌ Failed to create bid and remove tender:`, error);
+      throw error;
+    }
   });
 }

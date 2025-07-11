@@ -30,7 +30,7 @@ export default function BidsWonLostPage() {
   }, []);
 
   const handleCardClick = (bid: Bid) => {
-    router.push(`/dashboard/bids/summary/${bid.id}`);
+    router.push(`/dashboard/projects/summary/${bid.id}`);
   };
 
   // Mock function to determine if bid was won or lost (in real app, this would be in the data)
@@ -78,7 +78,7 @@ const BidCard = ({ bid, isWon }: { bid: Bid; isWon: boolean }) => {
 
   const handleCardClick = () => {
     const encodedBidId = encodeURIComponent(bid.id);
-    router.push(`/dashboard/bids/won-lost/${encodedBidId}`);
+    router.push(`/dashboard/projects/won-lost/${encodedBidId}`);
   };
 
   return (

@@ -44,7 +44,7 @@ export default function BidsSubmittedPage() {
   };
 
   const handleCardClick = (bid: Bid) => {
-    router.push(`/dashboard/bids/view/${bid.id}`);
+    router.push(`/dashboard/projects/view/${bid.id}`);
   };
 
   if (loading) {
@@ -81,7 +81,7 @@ const BidCard = ({ bid }: { bid: Bid }) => {
 
   const handleCardClick = () => {
     const encodedBidId = encodeURIComponent(bid.id);
-    router.push(`/dashboard/bids/submitted/${encodedBidId}`);
+    router.push(`/dashboard/projects/submitted/${encodedBidId}`);
   };
 
   return (

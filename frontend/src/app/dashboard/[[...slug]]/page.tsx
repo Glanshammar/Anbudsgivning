@@ -11,6 +11,7 @@ import {
   updateTenderState,
   addTenderState,
   deleteTender,
+  createBidAndRemoveTender,
   TENDER_STATES,
   TENDER_STATE_LABELS,
 } from "@/services/api/tenders";
@@ -21,7 +22,7 @@ import {
   getBidById,
   updateBidState,
   updateBidContent,
-  deleteBid,
+  discardBid,
   BID_STATES,
   BID_STATE_LABELS,
   type Bid,
@@ -38,8 +39,6 @@ import NotificationsPage from "../../pages/notifications";
 import StatisticsPage from "../../pages/statistics";
 import TendersInboxPage from "../../pages/tenders-inbox";
 import TendersUnderUtredningPage from "../../pages/tenders-under-utredning";
-import TendersPrepareBidPage from "../../pages/tenders-prepare-bid";
-import TendersSubmittedPage from "../../pages/tenders-submitted";
 
 import BidsNotStartedPage from "../../pages/bids-not-started";
 import BidsAuthoringPage from "../../pages/bids-authoring";
@@ -124,7 +123,7 @@ const TenderDetailPage = ({ tenderName }: { tenderName: string }) => {
       case TENDER_STATES.NYINKOMMET:
         return "Review";
       case TENDER_STATES.UNDER_UTREDNING:
-        return "Prepare Bid";
+        return "Create New Project";
       case TENDER_STATES.BID_AUTHORING:
         return "Submit Bid";
       default:
@@ -172,7 +171,7 @@ const TenderDetailPage = ({ tenderName }: { tenderName: string }) => {
           `/dashboard/tenders/prepare-bid/${tenderIdEncoded}?t=${Date.now()}`
         );
       } else if (nextState === TENDER_STATES.BID_AUTHORING) {
-        router.push(`/dashboard/bids/not-started`);
+        router.push(`/dashboard/projects/not-started`);
       } else if (nextState === TENDER_STATES.SENT_BIDS) {
         router.push(
           `/dashboard/tenders/submitted/${tenderIdEncoded}?t=${Date.now()}`
@@ -225,8 +224,8 @@ const TenderDetailPage = ({ tenderName }: { tenderName: string }) => {
     }
   };
 
-  // Function to handle rejecting/declining a tender
-  const handleRejectTender = async () => {
+  // Function to handle rejecting/discarding a tender
+  const handleDiscardTender = async () => {
     if (!tender) return;
 
     setUpdating(true);
@@ -243,8 +242,28 @@ const TenderDetailPage = ({ tenderName }: { tenderName: string }) => {
         router.push(`/dashboard/tenders/inbox?t=${Date.now()}`);
       }
     } catch (error) {
-      console.error("Failed to reject tender:", error);
-      setError("Could not decline tender");
+      console.error("Failed to discard tender:", error);
+      setError("Could not discard tender");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // Function to handle creating new project from tender under review
+  const handleCreateNewProject = async () => {
+    if (!tender) return;
+
+    setUpdating(true);
+    try {
+      // Create bid and remove tender from tenders
+      const newBid = await createBidAndRemoveTender(tender);
+
+      // Navigate directly to the new project's detail page
+      const bidId = encodeURIComponent(newBid.id);
+      router.push(`/dashboard/projects/not-started/${bidId}?t=${Date.now()}`);
+    } catch (error) {
+      console.error("Failed to create new project:", error);
+      setError("Failed to create new project");
     } finally {
       setUpdating(false);
     }
@@ -270,25 +289,25 @@ const TenderDetailPage = ({ tenderName }: { tenderName: string }) => {
         const bidId = encodeURIComponent(existingBid.id);
         switch (existingBid.state) {
           case BID_STATES.NOT_STARTED:
-            router.push(`/dashboard/bids/not-started/${bidId}`);
+            router.push(`/dashboard/projects/not-started/${bidId}`);
             break;
           case BID_STATES.AUTHORING:
-            router.push(`/dashboard/bids/authoring/${bidId}`);
+            router.push(`/dashboard/projects/authoring/${bidId}`);
             break;
           case BID_STATES.REVIEWING:
-            router.push(`/dashboard/bids/reviewing/${bidId}`);
+            router.push(`/dashboard/projects/reviewing/${bidId}`);
             break;
           case BID_STATES.SUBMITTED:
-            router.push(`/dashboard/bids/submitted/${bidId}`);
+            router.push(`/dashboard/projects/submitted/${bidId}`);
             break;
           case BID_STATES.ONGOING_DIALOG:
-            router.push(`/dashboard/bids/ongoing-dialog/${bidId}`);
+            router.push(`/dashboard/projects/ongoing-dialog/${bidId}`);
             break;
           case BID_STATES.WON_LOST:
-            router.push(`/dashboard/bids/won-lost/${bidId}`);
+            router.push(`/dashboard/projects/won-lost/${bidId}`);
             break;
           default:
-            router.push(`/dashboard/bids/not-started/${bidId}`);
+            router.push(`/dashboard/projects/not-started/${bidId}`);
         }
       } else {
         // Create new bid document and navigate to it
@@ -301,7 +320,7 @@ const TenderDetailPage = ({ tenderName }: { tenderName: string }) => {
 
         console.log("Created new bid document:", newBid);
         const bidId = encodeURIComponent(newBid.id);
-        router.push(`/dashboard/bids/not-started/${bidId}`);
+        router.push(`/dashboard/projects/not-started/${bidId}`);
       }
     } catch (error) {
       console.error("Failed to create/link to bid document:", error);
@@ -405,14 +424,25 @@ const TenderDetailPage = ({ tenderName }: { tenderName: string }) => {
 
           <h2 className="text-xl font-bold text-gray-800 mb-4">Actions</h2>
           <div className="flex flex-wrap gap-4 mb-6">
-            {/* Show "Avstå" button for Under utredning state */}
+            {/* Show "Discard" button for Under utredning state */}
             {tender.state === TENDER_STATES.UNDER_UTREDNING && (
               <Button
                 variant="destructive"
-                onClick={handleRejectTender}
+                onClick={handleDiscardTender}
                 disabled={updating}
               >
-                {updating ? "Updating..." : "Decline"}
+                {updating ? "Updating..." : "Discard"}
+              </Button>
+            )}
+
+            {/* Show "Create New Project" button for Under utredning state */}
+            {tender.state === TENDER_STATES.UNDER_UTREDNING && (
+              <Button
+                onClick={handleCreateNewProject}
+                disabled={updating}
+                className="bg-blue-500 hover:bg-blue-600 text-white"
+              >
+                {updating ? "Creating..." : "Create New Project"}
               </Button>
             )}
 
@@ -429,16 +459,16 @@ const TenderDetailPage = ({ tenderName }: { tenderName: string }) => {
                 </Button>
               )}
 
-            {getNextState(tender.state) &&
-              tender.state !== TENDER_STATES.SKA_BJUDAS_PA && (
-                <Button
-                  onClick={handleMoveToNextState}
-                  disabled={updating}
-                  className="bg-blue-500 hover:bg-blue-600 text-white"
-                >
-                  {updating ? "Updating..." : getActionButtonText(tender.state)}
-                </Button>
-              )}
+            {/* Show Review button for NYINKOMMET state */}
+            {tender.state === TENDER_STATES.NYINKOMMET && (
+              <Button
+                onClick={handleMoveToNextState}
+                disabled={updating}
+                className="bg-blue-500 hover:bg-blue-600 text-white"
+              >
+                {updating ? "Updating..." : "Review"}
+              </Button>
+            )}
 
             {tender.tender_document_link &&
               tender.tender_document_link !== "#" && (
@@ -630,7 +660,9 @@ const BidDetailPage = ({
     // Navigate to authoring page
     if (bid) {
       const bidIdEncoded = encodeURIComponent(bid.id);
-      router.push(`/dashboard/bids/authoring/${bidIdEncoded}?t=${Date.now()}`);
+      router.push(
+        `/dashboard/projects/authoring/${bidIdEncoded}?t=${Date.now()}`
+      );
     }
   };
 
@@ -707,32 +739,32 @@ const BidDetailPage = ({
       switch (nextState) {
         case BID_STATES.AUTHORING:
           router.push(
-            `/dashboard/bids/authoring/${bidIdEncoded}?t=${Date.now()}`
+            `/dashboard/projects/authoring/${bidIdEncoded}?t=${Date.now()}`
           );
           break;
         case BID_STATES.REVIEWING:
           router.push(
-            `/dashboard/bids/reviewing/${bidIdEncoded}?t=${Date.now()}`
+            `/dashboard/projects/reviewing/${bidIdEncoded}?t=${Date.now()}`
           );
           break;
         case BID_STATES.SUBMITTED:
           router.push(
-            `/dashboard/bids/submitted/${bidIdEncoded}?t=${Date.now()}`
+            `/dashboard/projects/submitted/${bidIdEncoded}?t=${Date.now()}`
           );
           break;
         case BID_STATES.ONGOING_DIALOG:
           router.push(
-            `/dashboard/bids/ongoing-dialog/${bidIdEncoded}?t=${Date.now()}`
+            `/dashboard/projects/ongoing-dialog/${bidIdEncoded}?t=${Date.now()}`
           );
           break;
         case BID_STATES.WON_LOST:
           router.push(
-            `/dashboard/bids/won-lost/${bidIdEncoded}?t=${Date.now()}`
+            `/dashboard/projects/won-lost/${bidIdEncoded}?t=${Date.now()}`
           );
           break;
         default:
           router.push(
-            `/dashboard/bids/not-started/${bidIdEncoded}?t=${Date.now()}`
+            `/dashboard/projects/not-started/${bidIdEncoded}?t=${Date.now()}`
           );
       }
     } catch (error) {
@@ -773,22 +805,22 @@ const BidDetailPage = ({
       switch (previousState) {
         case BID_STATES.NOT_STARTED:
           router.push(
-            `/dashboard/bids/not-started/${bidIdEncoded}?t=${Date.now()}`
+            `/dashboard/projects/not-started/${bidIdEncoded}?t=${Date.now()}`
           );
           break;
         case BID_STATES.AUTHORING:
           router.push(
-            `/dashboard/bids/authoring/${bidIdEncoded}?t=${Date.now()}`
+            `/dashboard/projects/authoring/${bidIdEncoded}?t=${Date.now()}`
           );
           break;
         case BID_STATES.REVIEWING:
           router.push(
-            `/dashboard/bids/reviewing/${bidIdEncoded}?t=${Date.now()}`
+            `/dashboard/projects/reviewing/${bidIdEncoded}?t=${Date.now()}`
           );
           break;
         case BID_STATES.SUBMITTED:
           router.push(
-            `/dashboard/bids/submitted/${bidIdEncoded}?t=${Date.now()}`
+            `/dashboard/projects/submitted/${bidIdEncoded}?t=${Date.now()}`
           );
           break;
       }
@@ -800,24 +832,32 @@ const BidDetailPage = ({
     }
   };
 
-  const handleDeleteBid = async () => {
+  const handleDiscardBid = async () => {
     if (!bid) return;
 
-    const confirmDelete = window.confirm(
-      `Are you sure you want to delete the bid "${bid.title}"? This action cannot be undone.`
+    const confirmDiscard = window.confirm(
+      `Are you sure you want to discard the project "${bid.title}"? This will move it to discarded projects.`
     );
 
-    if (!confirmDelete) return;
+    if (!confirmDiscard) return;
 
     setUpdating(true);
     try {
-      await deleteBid(bid.id);
+      await discardBid(bid.id);
 
-      // Navigate back to the authoring bids list after deletion
-      router.push(`/dashboard/bids/authoring?t=${Date.now()}`);
+      // Navigate back to the appropriate projects list
+      if (bid.state === BID_STATES.NOT_STARTED) {
+        router.push(`/dashboard/projects/not-started?t=${Date.now()}`);
+      } else if (bid.state === BID_STATES.AUTHORING) {
+        router.push(`/dashboard/projects/authoring?t=${Date.now()}`);
+      } else if (bid.state === BID_STATES.REVIEWING) {
+        router.push(`/dashboard/projects/reviewing?t=${Date.now()}`);
+      } else {
+        router.push(`/dashboard/projects?t=${Date.now()}`);
+      }
     } catch (error) {
-      console.error("Failed to delete bid:", error);
-      setError("Failed to delete bid");
+      console.error("Failed to discard project:", error);
+      setError("Failed to discard project");
     } finally {
       setUpdating(false);
     }
@@ -913,15 +953,17 @@ const BidDetailPage = ({
 
           <h2 className="text-xl font-bold text-gray-800 mb-4">Actions</h2>
           <div className="flex flex-wrap gap-4 mb-6">
-            {/* Show "Delete" button for Authoring state */}
-            {bid.state === BID_STATES.AUTHORING && (
+            {/* Show "Discard" button for Not Started, Authoring, and Reviewing states */}
+            {(bid.state === BID_STATES.NOT_STARTED ||
+              bid.state === BID_STATES.AUTHORING ||
+              bid.state === BID_STATES.REVIEWING) && (
               <Button
                 variant="outline"
-                onClick={handleDeleteBid}
+                onClick={handleDiscardBid}
                 disabled={updating}
                 className="bg-red-500 hover:bg-red-600 text-white"
               >
-                {updating ? "Deleting..." : "Delete"}
+                {updating ? "Discarding..." : "Discard"}
               </Button>
             )}
 
@@ -1061,15 +1103,13 @@ const BidDetailPage = ({
 const componentMap: { [key: string]: React.ComponentType<any> } = {
   "tenders/inbox": TendersInboxPage,
   "tenders/under-utredning": TendersUnderUtredningPage,
-  "tenders/prepare-bid": TendersPrepareBidPage,
-  "tenders/submitted": TendersSubmittedPage,
 
-  "bids/not-started": BidsNotStartedPage,
-  "bids/authoring": BidsAuthoringPage,
-  "bids/reviewing": BidsReviewingPage,
-  "bids/submitted": BidsSubmittedPage,
-  "bids/ongoing-dialog": BidsOngoingDialogPage,
-  "bids/won-lost": BidsWonLostPage,
+  "projects/not-started": BidsNotStartedPage,
+  "projects/authoring": BidsAuthoringPage,
+  "projects/reviewing": BidsReviewingPage,
+  "projects/submitted": BidsSubmittedPage,
+  "projects/ongoing-dialog": BidsOngoingDialogPage,
+  "projects/won-lost": BidsWonLostPage,
   documents: DocumentsPage,
   statistics: StatisticsPage,
   calendar: CalendarPage,
@@ -1086,14 +1126,12 @@ const dataFetcherMap: { [key: string]: () => Promise<any[]> } = {
   "tenders/inbox": () => getTendersByState(TENDER_STATES.NYINKOMMET),
   "tenders/under-utredning": () =>
     getTendersByState(TENDER_STATES.UNDER_UTREDNING),
-  "tenders/prepare-bid": () => getTendersByState(TENDER_STATES.SKA_BJUDAS_PA),
-  "tenders/submitted": () => getTendersByState(TENDER_STATES.SENT_BIDS),
-  "bids/not-started": () => getBidsByState(BID_STATES.NOT_STARTED),
-  "bids/authoring": () => getBidsByState(BID_STATES.AUTHORING),
-  "bids/reviewing": () => getBidsByState(BID_STATES.REVIEWING),
-  "bids/submitted": () => getBidsByState(BID_STATES.SUBMITTED),
-  "bids/ongoing-dialog": () => getBidsByState(BID_STATES.ONGOING_DIALOG),
-  "bids/won-lost": () => getBidsByState(BID_STATES.WON_LOST),
+  "projects/not-started": () => getBidsByState(BID_STATES.NOT_STARTED),
+  "projects/authoring": () => getBidsByState(BID_STATES.AUTHORING),
+  "projects/reviewing": () => getBidsByState(BID_STATES.REVIEWING),
+  "projects/submitted": () => getBidsByState(BID_STATES.SUBMITTED),
+  "projects/ongoing-dialog": () => getBidsByState(BID_STATES.ONGOING_DIALOG),
+  "projects/won-lost": () => getBidsByState(BID_STATES.WON_LOST),
 };
 
 interface NavItem {
@@ -1136,12 +1174,12 @@ const NavCard = ({
 
   // Responsive padding and width logic
   const layoutClasses = isShrunken
-    ? "p-2 bg-white flex-1 justify-center h-auto min-h-[60px]" // Minimal padding for mobile rows
+    ? "p-1 sm:p-2 bg-white flex-1 justify-center h-auto min-h-[50px] sm:min-h-[60px]" // Use flex-1 to fill available space, remove min-width constraints
     : isAlone
     ? "p-6 bg-white justify-start h-full w-full" // Full height and width for alone cards
     : isMainDashboard
     ? "p-6 bg-white justify-start flex-shrink-0 w-80 min-h-[500px] h-full" // Fixed width for main dashboard uniformity
-    : "p-6 bg-white justify-start flex-1 min-h-[500px] h-full"; // Flexible width for sub-pages
+    : "p-6 bg-white justify-start flex-1 min-h-[500px] h-full min-w-[320px]"; // Flexible width for sub-pages with minimum width
 
   const handleTenderClick = (e: React.MouseEvent, item: any) => {
     e.stopPropagation();
@@ -1168,8 +1206,8 @@ const NavCard = ({
       <div className="flex-shrink-0 text-center w-full">
         <h2
           className={`${
-            isShrunken ? "text-sm" : "text-2xl"
-          } font-semibold text-gray-800`}
+            isShrunken ? "text-xs sm:text-sm" : "text-2xl"
+          } font-semibold text-gray-800 leading-tight`}
         >
           {item.title}
         </h2>
@@ -1293,11 +1331,11 @@ const NavigationLevel = ({
   }, [items, basePath, isShrunken]);
 
   const containerClasses = isShrunken
-    ? "flex-shrink-0 p-2 bg-gray-100 border-b-2 border-gray-200" // Reduced padding for mobile rows
-    : "flex-1 p-6 bg-gray-50"; // Normal padding for main dashboard
+    ? "full-width-container flex-shrink-0 p-2 bg-gray-100 border-b-2 border-gray-200 overflow-x-auto" // Use full-width-container class
+    : "w-full flex-1 p-6 bg-gray-50"; // Normal padding for main dashboard
 
   const flexClasses = isShrunken
-    ? "flex w-full h-full gap-2" // Minimal gap for mobile rows
+    ? "flex full-width-container h-full gap-1 sm:gap-2 justify-start" // Use full-width-container for flex
     : "flex w-full h-full gap-4 scroll-horizontal";
 
   if (isLoading) {
@@ -1309,8 +1347,11 @@ const NavigationLevel = ({
   }
 
   return (
-    <div className={containerClasses}>
-      <div className={flexClasses}>
+    <div
+      className={containerClasses}
+      style={isShrunken ? { width: "100vw", maxWidth: "100vw" } : {}}
+    >
+      <div className={flexClasses} style={isShrunken ? { width: "100%" } : {}}>
         {visibleItems.map((item) => (
           <NavCard
             key={item.path}
@@ -1338,14 +1379,12 @@ export default function DynamicDashboardPage() {
   const isTenderDetailPage =
     slug.length >= 3 &&
     slug[0] === "tenders" &&
-    !["inbox", "under-utredning", "prepare-bid", "submitted"].includes(
-      slug[slug.length - 1]
-    );
+    !["inbox", "under-utredning"].includes(slug[slug.length - 1]);
 
   // Check if this is a bid detail page (ends with an encoded bid id)
   const isBidDetailPage =
     slug.length >= 3 &&
-    slug[0] === "bids" &&
+    slug[0] === "projects" &&
     ![
       "not-started",
       "authoring",
@@ -1428,7 +1467,7 @@ export default function DynamicDashboardPage() {
   if (isTenderDetailPage) {
     const tenderName = slug[slug.length - 1];
     return (
-      <div className="flex flex-col h-full">
+      <div className="w-full flex flex-col h-full">
         {/* Render all navigation levels */}
         {levels.map((level, index) => (
           <NavigationLevel
@@ -1451,7 +1490,7 @@ export default function DynamicDashboardPage() {
   if (isBidDetailPage) {
     const bidId = slug[slug.length - 1];
     return (
-      <div className="flex flex-col h-full">
+      <div className="w-full flex flex-col h-full">
         {/* Render all navigation levels */}
         {levels.map((level, index) => (
           <NavigationLevel
@@ -1474,7 +1513,7 @@ export default function DynamicDashboardPage() {
   const PageComponent = componentMap[componentMapKey];
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="w-full flex flex-col h-full">
       {/* Render all navigation levels */}
       {levels.map((level, index) => (
         <NavigationLevel

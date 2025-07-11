@@ -44,7 +44,7 @@ export default function BidsOngoingDialogPage() {
   };
 
   const handleCardClick = (bid: Bid) => {
-    router.push(`/dashboard/bids/dialog/${bid.id}`);
+    router.push(`/dashboard/projects/dialog/${bid.id}`);
   };
 
   if (loading) {
@@ -83,7 +83,7 @@ const BidCard = ({ bid }: { bid: Bid }) => {
 
   const handleCardClick = () => {
     const encodedBidId = encodeURIComponent(bid.id);
-    router.push(`/dashboard/bids/ongoing-dialog/${encodedBidId}`);
+    router.push(`/dashboard/projects/ongoing-dialog/${encodedBidId}`);
   };
 
   return (

@@ -1,6 +1,6 @@
 [
   {
-    "title": "Tenders",
+    "title": "Incoming Tenders",
     "path": "tenders",
     "description": "Manage incoming and ongoing tenders.",
     "children": [
@@ -13,22 +13,12 @@
         "title": "Under Review",
         "path": "under-utredning",
         "description": "Tenders being evaluated for further action."
-      },
-      {
-        "title": "Preparing Bid",
-        "path": "prepare-bid",
-        "description": "Start and manage bid preparation work."
-      },
-      {
-        "title": "Submitted",
-        "path": "submitted",
-        "description": "View status and follow up on submitted bids."
       }
     ]
   },
   {
-    "title": "Bids",
-    "path": "bids",
+    "title": "Projects",
+    "path": "projects",
     "description": "Manage all bid documents.",
     "children": [
       {
@@ -40,8 +30,8 @@
         "title": "Authoring",
         "path": "authoring",
         "description": "Bids currently being written."
-  },
-  {
+      },
+      {
         "title": "Reviewing",
         "path": "reviewing",
         "description": "Bids under review."
@@ -54,7 +44,7 @@
       {
         "title": "Ongoing Dialog",
         "path": "ongoing-dialog",
-        "description": "Bids with ongoing dialog."
+        "description": "Projects in customer dialog."
       },
       {
         "title": "Won/Lost",

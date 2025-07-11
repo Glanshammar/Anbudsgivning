@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import {
   getBidsByState,
   updateBidState,
-  deleteBid,
   type Bid,
   BID_STATES,
 } from "@/services/api/bids";
@@ -62,7 +61,7 @@ export default function BidsReviewingPage() {
   }
 
   const handleCardClick = (bid: Bid) => {
-    router.push(`/dashboard/bids/review/${bid.id}`);
+    router.push(`/dashboard/projects/review/${bid.id}`);
   };
 
   return (
@@ -85,7 +84,7 @@ const BidCard = ({ bid }: { bid: Bid }) => {
 
   const handleCardClick = () => {
     const encodedBidId = encodeURIComponent(bid.id);
-    router.push(`/dashboard/bids/reviewing/${encodedBidId}`);
+    router.push(`/dashboard/projects/reviewing/${encodedBidId}`);
   };
 
   return (

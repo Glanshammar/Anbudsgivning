@@ -3,10 +3,15 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { getTenderPortals, setTenderPortals } from "@/services/api/portals";
-import { getTenders, Tender } from "@/services/api/tenders";
+import {
+  getTendersByState,
+  TENDER_STATES,
+  Tender,
+} from "@/services/api/tenders";
 import { Portal } from "@/services/api/portals";
 import { useTenderContext } from "@/contexts/TenderContext";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 const agents = [
   {
@@ -47,7 +52,6 @@ export default function InboxPage() {
   const [message, setMessage] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [showAgentSettings, setShowAgentSettings] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
 
   // Get tenders from context instead of local state
   const inboxTenders = getTendersByPhase("inbox");
@@ -69,11 +73,61 @@ export default function InboxPage() {
     }
   }, []);
 
+  const fetchPortals = async () => {
+    if (!isMountedRef.current) return;
+
+    try {
+      const data = await getTenderPortals();
+      if (isMountedRef.current) {
+        // Remove duplicates based on URL to prevent React key conflicts
+        const uniquePortals = data.filter(
+          (portal, index, self) =>
+            index === self.findIndex((p) => p.url === portal.url)
+        );
+        setPortals(uniquePortals);
+      }
+    } catch (error) {
+      console.error("Error in fetchPortals:", error);
+      if (isMountedRef.current) {
+        setMessage("Fel vid hämtning av portaler: " + (error as Error).message);
+      }
+    }
+  };
+
+  const fetchTenders = async () => {
+    if (!isMountedRef.current) return;
+
+    try {
+      // Fetch tenders from all relevant states
+      const [incomingTenders, reviewTenders] = await Promise.all([
+        getTendersByState(TENDER_STATES.NYINKOMMET),
+        getTendersByState(TENDER_STATES.UNDER_UTREDNING),
+      ]);
+
+      const allTenders = [...incomingTenders, ...reviewTenders];
+
+      if (isMountedRef.current) {
+        // Only add tenders that don't already exist in context
+        allTenders.forEach((tender: Tender) => {
+          if (!tenderExists(tender.project_name)) {
+            addTender(tender);
+          }
+        });
+      }
+    } catch (error) {
+      console.error("Error in fetchTenders:", error);
+      if (isMountedRef.current) {
+        setMessage(
+          "Fel vid hämtning av upphandlingar: " + (error as Error).message
+        );
+      }
+    }
+  };
+
   // Effect to fetch data when component mounts or selectedAgents changes
   useEffect(() => {
     if (!selectedAgents.includes("tender-finder") || !isMountedRef.current) {
       setLoading(false);
-      setIsInitialized(true);
       return;
     }
 
@@ -109,7 +163,6 @@ export default function InboxPage() {
       } finally {
         if (isMountedRef.current) {
           setLoading(false);
-          setIsInitialized(true);
         }
       }
     };
@@ -120,56 +173,12 @@ export default function InboxPage() {
     return () => {
       isMountedRef.current = false;
     };
-  }, [selectedAgents]); // Depend on selectedAgents
+  }, [selectedAgents]); // Removed loading, fetchPortals, fetchTenders from dependencies to fix the warning
 
   // Reset mounted ref when component mounts
   useEffect(() => {
     isMountedRef.current = true;
   }, []);
-
-  const fetchPortals = async () => {
-    if (!isMountedRef.current) return;
-
-    try {
-      const data = await getTenderPortals();
-      if (isMountedRef.current) {
-        // Remove duplicates based on URL to prevent React key conflicts
-        const uniquePortals = data.filter(
-          (portal, index, self) =>
-            index === self.findIndex((p) => p.url === portal.url)
-        );
-        setPortals(uniquePortals);
-      }
-    } catch (error) {
-      console.error("Error in fetchPortals:", error);
-      if (isMountedRef.current) {
-        setMessage("Fel vid hämtning av portaler: " + (error as Error).message);
-      }
-    }
-  };
-
-  const fetchTenders = async () => {
-    if (!isMountedRef.current) return;
-
-    try {
-      const data = await getTenders();
-      if (isMountedRef.current) {
-        // Only add tenders that don't already exist in context
-        data.forEach((tender) => {
-          if (!tenderExists(tender.project_name)) {
-            addTender(tender);
-          }
-        });
-      }
-    } catch (error) {
-      console.error("Error in fetchTenders:", error);
-      if (isMountedRef.current) {
-        setMessage(
-          "Fel vid hämtning av upphandlingar: " + (error as Error).message
-        );
-      }
-    }
-  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -305,9 +314,11 @@ export default function InboxPage() {
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
               title="Agentinställningar"
             >
-              <img
+              <Image
                 src="/agent-icon.png"
                 alt="Agentinställningar"
+                width={24}
+                height={24}
                 className="w-6 h-6"
               />
             </button>
@@ -569,7 +580,7 @@ export default function InboxPage() {
                             </td>
                             <td className="px-6 py-4">
                               <div className="text-sm text-gray-500">
-                                {tender.brief_description}
+                                {tender.description}
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -627,7 +638,7 @@ export default function InboxPage() {
                               Beskrivning
                             </h4>
                             <p className="text-sm text-gray-600">
-                              {tender.brief_description}
+                              {tender.description}
                             </p>
                           </div>
 

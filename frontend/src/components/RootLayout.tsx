@@ -23,8 +23,8 @@ const ClientLayout = ({ children }: ClientLayoutProps) => {
 
   // Dashboard pages get full layout with navigation structure
   return (
-    <div className="h-screen flex flex-col bg-gray-50/50">
-      <main className="flex-1 flex flex-col">{children}</main>
+    <div className="w-full h-screen flex flex-col bg-gray-50/50">
+      <main className="w-full flex-1 flex flex-col">{children}</main>
     </div>
   );
 };
