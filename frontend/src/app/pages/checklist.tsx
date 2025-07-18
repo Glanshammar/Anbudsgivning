@@ -3,14 +3,14 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
-interface ChecklistItem {
+interface ReviewCommentItem {
   id: string;
   question: string;
   category: string;
 }
 
 /**
- * Represents a user's vote on a checklist question
+ * Represents a user's vote on a review comment question
  * Includes user identification and timestamp for audit trail
  */
 interface UserVote {
@@ -21,18 +21,18 @@ interface UserVote {
 }
 
 /**
- * Maps checklist question IDs to arrays of user votes
+ * Maps review comment question IDs to arrays of user votes
  * Enables multiple users to vote on each question
  */
-interface ChecklistResponse {
+interface ReviewCommentResponse {
   [key: string]: UserVote[]; // Array of votes per question
 }
 
 /**
- * Predefined checklist questions organized by business category
+ * Predefined review comment questions organized by business category
  * Covers technical, economic, and strategic evaluation criteria
  */
-const CHECKLIST_ITEMS: ChecklistItem[] = [
+const REVIEW_COMMENT_ITEMS: ReviewCommentItem[] = [
   // Tekniska/Kompetensmässiga faktorer
   {
     id: "competence",
@@ -102,19 +102,22 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
   },
 ];
 
-interface ChecklistProps {
+interface ReviewCommentProps {
   tenderName: string;
   onClose: () => void;
 }
 
 /**
- * Collaborative Checklist Component
+ * Collaborative Review Comments Component
  * Implements Facebook-style voting where team members can vote thumbs up/down
  * Provides recommendation based on collective team sentiment
  */
-export default function Checklist({ tenderName, onClose }: ChecklistProps) {
+export default function ReviewComments({
+  tenderName,
+  onClose,
+}: ReviewCommentProps) {
   // Simulate existing votes (in real app this would come from database)
-  const [responses, setResponses] = useState<ChecklistResponse>({
+  const [responses, setResponses] = useState<ReviewCommentResponse>({
     competence: [
       {
         userId: "user1",
@@ -160,7 +163,7 @@ export default function Checklist({ tenderName, onClose }: ChecklistProps) {
   };
 
   /**
-   * Handles user voting on checklist questions
+   * Handles user voting on review comment questions
    * Replaces any existing vote from the same user
    */
   const handleResponse = (itemId: string, value: boolean) => {
@@ -211,13 +214,13 @@ export default function Checklist({ tenderName, onClose }: ChecklistProps) {
    * Uses percentage of positive votes to determine recommendation strength
    */
   const getOverallRecommendation = () => {
-    const questionsWithVotes = CHECKLIST_ITEMS.filter((item) => {
+    const questionsWithVotes = REVIEW_COMMENT_ITEMS.filter((item) => {
       const votes = responses[item.id] || [];
       return votes.length > 0;
     });
 
     // Wait for all questions to be answered
-    if (questionsWithVotes.length < CHECKLIST_ITEMS.length) {
+    if (questionsWithVotes.length < REVIEW_COMMENT_ITEMS.length) {
       return "Väntar på att alla frågor besvaras av teamet";
     }
 
@@ -244,13 +247,13 @@ export default function Checklist({ tenderName, onClose }: ChecklistProps) {
   };
 
   // Group questions by category for organized display
-  const groupedItems = CHECKLIST_ITEMS.reduce((acc, item) => {
+  const groupedItems = REVIEW_COMMENT_ITEMS.reduce((acc, item) => {
     if (!acc[item.category]) {
       acc[item.category] = [];
     }
     acc[item.category].push(item);
     return acc;
-  }, {} as { [key: string]: ChecklistItem[] });
+  }, {} as { [key: string]: ReviewCommentItem[] });
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -336,12 +339,12 @@ export default function Checklist({ tenderName, onClose }: ChecklistProps) {
 
         <div className="mt-6 flex gap-4">
           <Button onClick={onClose} variant="outline">
-            Stäng checklista
+            Stäng Review Comments
           </Button>
           <Button
             onClick={() => {
               // Här kan man senare spara resultatet
-              console.log("Checklist responses:", responses);
+              console.log("Review Comments responses:", responses);
               onClose();
             }}
           >

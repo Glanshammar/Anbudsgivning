@@ -63,10 +63,10 @@ let bidsData: Bid[] = [
     description:
       "Utveckling av ny IT-plattform för hantering av användardata och integration med externa system.",
     state: BID_STATES.NOT_STARTED,
-    created_date: "2024-01-15",
-    last_modified: "2024-01-15",
+    created_date: "2025-01-15",
+    last_modified: "2025-01-15",
     author: "Anna Svensson",
-    deadline: "2024-03-15",
+    deadline: "2025-03-15",
     branch: "IT & Teknik",
   },
   {
@@ -76,13 +76,13 @@ let bidsData: Bid[] = [
     description:
       "Implementation av molnbaserad lösning för dataanalys och rapportering med realtidsuppkoppling.",
     state: BID_STATES.AUTHORING,
-    created_date: "2024-01-10",
-    last_modified: "2024-01-15",
-    authoring_started_date: "2024-01-12",
+    created_date: "2025-01-10",
+    last_modified: "2025-01-15",
+    authoring_started_date: "2025-01-12",
     author: "Anna Svensson",
     content:
       "Vi föreslår en skalbar molnlösning baserad på Microsoft Azure som kan hantera stora datamängder i realtid. Vår lösning inkluderar avancerade analysverktyg och automatiserade rapporter som ger er organisation djupare insikter i verksamheten.",
-    deadline: "2024-02-15",
+    deadline: "2025-02-15",
     branch: "IT & Teknik",
   },
   {
@@ -92,11 +92,11 @@ let bidsData: Bid[] = [
     description:
       "Byggprojekt för ny kontorsbyggnad med fokus på hållbarhet och energieffektivitet.",
     state: BID_STATES.REVIEWING,
-    created_date: "2024-01-05",
-    last_modified: "2024-01-12",
-    authoring_started_date: "2024-01-08",
+    created_date: "2025-01-05",
+    last_modified: "2025-01-12",
+    authoring_started_date: "2025-01-08",
     author: "Erik Larsson",
-    deadline: "2024-02-20",
+    deadline: "2025-02-20",
     branch: "Bygg & Anläggning",
   },
   {
@@ -407,6 +407,96 @@ let bidsData: Bid[] = [
     author: "Maria Johansson",
     deadline: "2025-01-30",
     branch: "Miljö & Hållbarhet",
+  },
+  // 2025 discarded projects - created earlier but discarded in 2025
+  {
+    id: "bid_24",
+    tender_name: "Projekt 45",
+    title: "Projekt 45",
+    description: "Blockchain för offentlig sektor",
+    state: BID_STATES.DISCARDED,
+    created_date: "2024-11-15",
+    last_modified: "2025-01-10", // Discarded in January 2025
+    author: "Anna Svensson",
+    deadline: "2025-03-15",
+    branch: "IT & Teknik",
+  },
+  {
+    id: "bid_25",
+    tender_name: "Projekt 46",
+    title: "Projekt 46",
+    description: "Automatiserad parkeringsövervakning",
+    state: BID_STATES.DISCARDED,
+    created_date: "2024-12-05",
+    last_modified: "2025-02-14", // Discarded in February 2025
+    author: "Erik Larsson",
+    deadline: "2025-04-20",
+    branch: "Transport",
+  },
+  {
+    id: "bid_26",
+    tender_name: "Projekt 47",
+    title: "Projekt 47",
+    description: "Digitala vårdtjänster",
+    state: BID_STATES.DISCARDED,
+    created_date: "2024-12-20",
+    last_modified: "2025-03-07", // Discarded in March 2025
+    authoring_started_date: "2025-01-15",
+    author: "Maria Johansson",
+    deadline: "2025-05-10",
+    branch: "Hälsa & Vård",
+  },
+  {
+    id: "bid_27",
+    tender_name: "Projekt 48",
+    title: "Projekt 48",
+    description: "Drönare för miljöövervakning",
+    state: BID_STATES.DISCARDED,
+    created_date: "2024-11-30",
+    last_modified: "2025-04-20", // Discarded in April 2025
+    authoring_started_date: "2025-02-10",
+    author: "Anna Svensson",
+    deadline: "2025-06-25",
+    branch: "Miljö & Hållbarhet",
+  },
+  {
+    id: "bid_28",
+    tender_name: "Projekt 49",
+    title: "Projekt 49",
+    description: "Virtuell realitet för utbildning",
+    state: BID_STATES.DISCARDED,
+    created_date: "2024-10-15",
+    last_modified: "2025-05-24", // Discarded in May 2025
+    authoring_started_date: "2025-03-01",
+    author: "Erik Larsson",
+    deadline: "2025-07-30",
+    branch: "Utbildning",
+  },
+  {
+    id: "bid_29",
+    tender_name: "Projekt 50",
+    title: "Projekt 50",
+    description: "Quantum computing pilot",
+    state: BID_STATES.DISCARDED,
+    created_date: "2024-09-20",
+    last_modified: "2025-06-17", // Discarded in June 2025
+    authoring_started_date: "2025-04-05",
+    author: "Maria Johansson",
+    deadline: "2025-08-20",
+    branch: "IT & Teknik",
+  },
+  {
+    id: "bid_30",
+    tender_name: "Projekt 51",
+    title: "Projekt 51",
+    description: "Biometrisk identifiering",
+    state: BID_STATES.DISCARDED,
+    created_date: "2024-08-10",
+    last_modified: "2025-07-12", // Discarded in July 2025
+    authoring_started_date: "2025-05-15",
+    author: "Anna Svensson",
+    deadline: "2025-09-15",
+    branch: "Säkerhet",
   },
 ];
 
@@ -1015,20 +1105,17 @@ const mockGetAverageAuthoringTimeByYear = async (
         console.log(
           `🎭 Mock: No submitted bids with authoring dates found for year ${year}, using realistic mock value`
         );
-        // Generate realistic mock values for years without data
-        const currentYear = new Date().getFullYear();
-        const yearDiff = Math.abs(currentYear - year);
+        // Use predefined values for years without data based on historical trends
+        const yearValues: { [key: number]: number } = {
+          2021: 9.2,
+          2022: 8.5,
+          2023: 7.8,
+          2024: 7.5,
+          2025: 7.5,
+        };
 
-        // Older years tend to have longer authoring times (less efficient processes)
-        const baseTime = 7; // Base 7 days
-        const yearlyIncrease = Math.min(yearDiff * 0.5, 5); // Up to 5 extra days for older years
-        const randomVariation = (Math.random() - 0.5) * 2; // ±1 day random variation
-
-        const mockAuthoringTime = Math.max(
-          3,
-          Math.min(15, baseTime + yearlyIncrease + randomVariation)
-        );
-        resolve(Math.round(mockAuthoringTime * 10) / 10);
+        const mockAuthoringTime = yearValues[year] || 7.5;
+        resolve(mockAuthoringTime);
         return;
       }
 
@@ -1159,25 +1246,22 @@ const mockGetHitRateByYear = async (year: number): Promise<number> => {
       );
 
       if (submittedBids.length === 0) {
-        // Generate realistic mock hit rate for years without data
-        const currentYear = new Date().getFullYear();
-        const yearDiff = Math.abs(currentYear - year);
+        // Use predefined values for years without data based on historical trends
+        const yearValues: { [key: number]: number } = {
+          2021: 42.5,
+          2022: 45.0,
+          2023: 47.5,
+          2024: 50.0,
+          2025: 50.0,
+        };
 
-        // Assume hit rates improve over time (better processes)
-        const baseRate = 40; // Base 40% hit rate
-        const yearlyImprovement = Math.min(yearDiff * 2, 15); // Up to 15% improvement for older years
-        const randomVariation = (Math.random() - 0.5) * 10; // ±5% random variation
-
-        const mockHitRate = Math.max(
-          20,
-          Math.min(80, baseRate + yearlyImprovement + randomVariation)
-        );
+        const mockHitRate = yearValues[year] || 50.0;
         console.log(
           `🎭 Mock: Hit rate for ${year}: ${mockHitRate.toFixed(
             1
-          )}% (mock value)`
+          )}% (predefined value)`
         );
-        resolve(Math.round(mockHitRate * 10) / 10);
+        resolve(mockHitRate);
         return;
       }
 
@@ -1237,25 +1321,22 @@ const mockGetQualifyingTendersByYear = async (
       );
 
       if (yearBids.length === 0) {
-        // Generate realistic mock qualifying rate for years without data
-        const currentYear = new Date().getFullYear();
-        const yearDiff = Math.abs(currentYear - year);
+        // Use predefined values for years without data based on historical trends
+        const yearValues: { [key: number]: number } = {
+          2021: 12.5,
+          2022: 14.0,
+          2023: 15.5,
+          2024: 16.0,
+          2025: 16.0,
+        };
 
-        // Assume qualifying rates improve over time (better bid selection)
-        const baseRate = 15; // Base 15% qualifying rate
-        const yearlyImprovement = Math.min(yearDiff * 1, 10); // Up to 10% improvement for older years
-        const randomVariation = (Math.random() - 0.5) * 6; // ±3% random variation
-
-        const mockQualifyingRate = Math.max(
-          5,
-          Math.min(35, baseRate + yearlyImprovement + randomVariation)
-        );
+        const mockQualifyingRate = yearValues[year] || 16.0;
         console.log(
           `🎭 Mock: Qualifying tenders for ${year}: ${mockQualifyingRate.toFixed(
             1
-          )}% (mock value)`
+          )}% (predefined value)`
         );
-        resolve(Math.round(mockQualifyingRate * 10) / 10);
+        resolve(mockQualifyingRate);
         return;
       }
 
@@ -1416,36 +1497,29 @@ const mockGetBidCompletionRateByYear = async (
       );
 
       if (yearBids.length === 0) {
-        // Generate realistic mock completion rate for years without data
-        const currentYear = new Date().getFullYear();
-        const yearDiff = Math.abs(currentYear - year);
+        // Use predefined values for years without data based on historical trends
+        const yearValues: { [key: number]: number } = {
+          2021: 85.0,
+          2022: 90.0,
+          2023: 95.0,
+          2024: 100.0,
+          2025: 100.0,
+        };
 
-        // Assume completion rates improve over time (better processes)
-        const baseRate = 75; // Base 75% completion rate
-        const yearlyImprovement = Math.min(yearDiff * 2, 15); // Up to 15% improvement for older years
-        const randomVariation = (Math.random() - 0.5) * 6; // ±3% random variation
-
-        const mockCompletionRate = Math.max(
-          60,
-          Math.min(95, baseRate + yearlyImprovement + randomVariation)
-        );
+        const mockCompletionRate = yearValues[year] || 100.0;
         console.log(
           `🎭 Mock: Completion rate for ${year}: ${mockCompletionRate.toFixed(
             1
-          )}% (mock value)`
+          )}% (predefined value)`
         );
-        resolve(Math.round(mockCompletionRate * 10) / 10);
+        resolve(mockCompletionRate);
         return;
       }
 
       // Calculate completion rate based on bid states
-      // Completed bids are those in REVIEWING, SUBMITTED, ONGOING_DIALOG, or WON_LOST states
+      // Completed bids are only those that have reached the final WON_LOST state
       const completedBids = yearBids.filter(
-        (bid) =>
-          bid.state === BID_STATES.REVIEWING ||
-          bid.state === BID_STATES.SUBMITTED ||
-          bid.state === BID_STATES.ONGOING_DIALOG ||
-          bid.state === BID_STATES.WON_LOST
+        (bid) => bid.state === BID_STATES.WON_LOST
       );
 
       const completionRate = (completedBids.length / yearBids.length) * 100;
@@ -1498,5 +1572,361 @@ export const getBidCompletionRateByYear = async (
     return mockGetBidCompletionRateByYear(year);
   } else {
     return realGetBidCompletionRateByYear(year);
+  }
+};
+
+/**
+ * Mock implementation for getting hit rate by month for the last 13 months
+ */
+const mockGetHitRateByMonth = async (): Promise<
+  { monthName: string; value: number }[]
+> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const now = new Date();
+      const monthlyData: { monthName: string; value: number }[] = [];
+
+      // Generate data for the last 13 months (includes same month from previous year)
+      for (let i = 12; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthKey = `${date.getFullYear()}-${String(
+          date.getMonth() + 1
+        ).padStart(2, "0")}`;
+        const monthName = date.toLocaleDateString("en-US", {
+          month: "short",
+          year: "numeric",
+        });
+
+        // Count submitted and won bids for this month
+        const submittedBidsInMonth = bidsData.filter(
+          (bid) =>
+            (bid.state === BID_STATES.SUBMITTED ||
+              bid.state === BID_STATES.ONGOING_DIALOG ||
+              bid.state === BID_STATES.WON_LOST) &&
+            bid.submitted_date &&
+            bid.submitted_date.startsWith(monthKey)
+        );
+
+        const wonBidsInMonth = submittedBidsInMonth.filter(
+          (bid) => bid.state === BID_STATES.WON_LOST
+        );
+
+        // Calculate hit rate or generate mock data
+        let hitRate = 0;
+        if (submittedBidsInMonth.length > 0) {
+          hitRate = (wonBidsInMonth.length / submittedBidsInMonth.length) * 100;
+        } else {
+          // Use predefined hit rate for months without data
+          hitRate = 45.0; // Stable hit rate for months without data
+        }
+
+        monthlyData.push({
+          monthName,
+          value: Math.round(hitRate * 10) / 10,
+        });
+      }
+
+      console.log(
+        `🎭 Mock: Generated monthly hit rate data for last 13 months`
+      );
+      resolve(monthlyData);
+    }, 300);
+  });
+};
+
+/**
+ * Get hit rate by month for the last 13 months - uses mock or real based on USE_DUMMY flag
+ */
+export const getHitRateByMonth = async (): Promise<
+  { monthName: string; value: number }[]
+> => {
+  if (USE_DUMMY) {
+    return mockGetHitRateByMonth();
+  } else {
+    // Real implementation would fetch from backend
+    return mockGetHitRateByMonth();
+  }
+};
+
+/**
+ * Mock implementation for getting qualifying tenders by month for the last 13 months
+ */
+const mockGetQualifyingTendersByMonth = async (): Promise<
+  { monthName: string; value: number }[]
+> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const now = new Date();
+      const monthlyData: { monthName: string; value: number }[] = [];
+
+      // Generate data for the last 13 months (includes same month from previous year)
+      for (let i = 12; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthKey = `${date.getFullYear()}-${String(
+          date.getMonth() + 1
+        ).padStart(2, "0")}`;
+        const monthName = date.toLocaleDateString("en-US", {
+          month: "short",
+          year: "numeric",
+        });
+
+        // Count bids created in this month
+        const bidsInMonth = bidsData.filter(
+          (bid) => bid.created_date && bid.created_date.startsWith(monthKey)
+        );
+
+        // Calculate qualifying rate or generate mock data
+        let qualifyingRate = 0;
+        if (bidsInMonth.length > 0) {
+          const totalTenders = 25; // Mock value for tenders per month
+          qualifyingRate = (bidsInMonth.length / totalTenders) * 100;
+        } else {
+          // Use predefined qualifying rate for months without data
+          qualifyingRate = 16.0; // Stable qualifying rate for months without data
+        }
+
+        monthlyData.push({
+          monthName,
+          value: Math.round(qualifyingRate * 10) / 10,
+        });
+      }
+
+      console.log(
+        `🎭 Mock: Generated monthly qualifying tenders data for last 13 months`
+      );
+      resolve(monthlyData);
+    }, 300);
+  });
+};
+
+/**
+ * Get qualifying tenders by month for the last 13 months - uses mock or real based on USE_DUMMY flag
+ */
+export const getQualifyingTendersByMonth = async (): Promise<
+  { monthName: string; value: number }[]
+> => {
+  if (USE_DUMMY) {
+    return mockGetQualifyingTendersByMonth();
+  } else {
+    // Real implementation would fetch from backend
+    return mockGetQualifyingTendersByMonth();
+  }
+};
+
+/**
+ * Mock implementation for getting average authoring time by month for the last 13 months
+ */
+const mockGetAverageAuthoringTimeByMonth = async (): Promise<
+  { monthName: string; value: number }[]
+> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const now = new Date();
+      const monthlyData: { monthName: string; value: number }[] = [];
+
+      // Generate data for the last 13 months (includes same month from previous year)
+      for (let i = 12; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthKey = `${date.getFullYear()}-${String(
+          date.getMonth() + 1
+        ).padStart(2, "0")}`;
+        const monthName = date.toLocaleDateString("en-US", {
+          month: "short",
+          year: "numeric",
+        });
+
+        // Count submitted bids for this month
+        const submittedBidsInMonth = bidsData.filter(
+          (bid) =>
+            (bid.state === BID_STATES.SUBMITTED ||
+              bid.state === BID_STATES.ONGOING_DIALOG ||
+              bid.state === BID_STATES.WON_LOST) &&
+            bid.submitted_date &&
+            bid.submitted_date.startsWith(monthKey) &&
+            bid.authoring_started_date
+        );
+
+        // Calculate average authoring time or generate mock data
+        let averageTime = 0;
+        if (submittedBidsInMonth.length > 0) {
+          const totalDays = submittedBidsInMonth.reduce((sum, bid) => {
+            const startDate = new Date(bid.authoring_started_date!);
+            const endDate = new Date(bid.submitted_date!);
+
+            if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+              return sum + 7; // Default to 7 days for invalid dates
+            }
+
+            const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            // Sanity check
+            if (diffDays > 90 || diffDays < 0 || isNaN(diffDays)) {
+              return sum + 7; // Default to 7 days for unreasonable values
+            }
+
+            return sum + diffDays;
+          }, 0);
+
+          averageTime = totalDays / submittedBidsInMonth.length;
+        } else {
+          // Use predefined authoring time for months without data
+          averageTime = 7.5; // Stable authoring time for months without data
+        }
+
+        monthlyData.push({
+          monthName,
+          value: Math.round(averageTime * 10) / 10,
+        });
+      }
+
+      console.log(
+        `🎭 Mock: Generated monthly average authoring time data for last 13 months`
+      );
+      resolve(monthlyData);
+    }, 300);
+  });
+};
+
+/**
+ * Get average authoring time by month for the last 13 months - uses mock or real based on USE_DUMMY flag
+ */
+export const getAverageAuthoringTimeByMonth = async (): Promise<
+  { monthName: string; value: number }[]
+> => {
+  if (USE_DUMMY) {
+    return mockGetAverageAuthoringTimeByMonth();
+  } else {
+    // Real implementation would fetch from backend
+    return mockGetAverageAuthoringTimeByMonth();
+  }
+};
+
+/**
+ * Mock implementation for getting bid completion rate by month for the last 13 months
+ */
+const mockGetBidCompletionRateByMonth = async (): Promise<
+  { monthName: string; value: number }[]
+> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const now = new Date();
+      const monthlyData: { monthName: string; value: number }[] = [];
+
+      // Generate data for the last 13 months (includes same month from previous year)
+      for (let i = 12; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthKey = `${date.getFullYear()}-${String(
+          date.getMonth() + 1
+        ).padStart(2, "0")}`;
+        const monthName = date.toLocaleDateString("en-US", {
+          month: "short",
+          year: "numeric",
+        });
+
+        // Count bids created in this month
+        const bidsInMonth = bidsData.filter(
+          (bid) => bid.created_date && bid.created_date.startsWith(monthKey)
+        );
+
+        // Calculate completion rate or generate mock data
+        let completionRate = 0;
+        if (bidsInMonth.length > 0) {
+          const completedBids = bidsInMonth.filter(
+            (bid) => bid.state === BID_STATES.WON_LOST
+          );
+
+          completionRate = (completedBids.length / bidsInMonth.length) * 100;
+        } else {
+          // Use predefined completion rate for months without data
+          completionRate = 78.0; // Stable completion rate for months without data
+        }
+
+        monthlyData.push({
+          monthName,
+          value: Math.round(completionRate * 10) / 10,
+        });
+      }
+
+      console.log(
+        `🎭 Mock: Generated monthly completion rate data for last 13 months`
+      );
+      resolve(monthlyData);
+    }, 300);
+  });
+};
+
+/**
+ * Get bid completion rate by month for the last 13 months - uses mock or real based on USE_DUMMY flag
+ */
+export const getBidCompletionRateByMonth = async (): Promise<
+  { monthName: string; value: number }[]
+> => {
+  if (USE_DUMMY) {
+    return mockGetBidCompletionRateByMonth();
+  } else {
+    // Real implementation would fetch from backend
+    return mockGetBidCompletionRateByMonth();
+  }
+};
+
+/**
+ * Mock implementation for getting discarded projects by month for the last 13 months
+ */
+const mockGetDiscardedProjectsByMonth = async (): Promise<
+  { monthName: string; value: number }[]
+> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const now = new Date();
+      const monthlyData: { monthName: string; value: number }[] = [];
+
+      // Generate data for the last 13 months (includes same month from previous year)
+      for (let i = 12; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthKey = `${date.getFullYear()}-${String(
+          date.getMonth() + 1
+        ).padStart(2, "0")}`;
+        const monthName = date.toLocaleDateString("en-US", {
+          month: "short",
+          year: "numeric",
+        });
+
+        // Count discarded projects in this month (based on when they were discarded)
+        const discardedInMonth = bidsData.filter(
+          (bid) =>
+            bid.state === BID_STATES.DISCARDED &&
+            bid.last_modified &&
+            bid.last_modified.startsWith(monthKey)
+        );
+
+        // Use actual count only - no random generation
+        const discardedCount = discardedInMonth.length;
+
+        monthlyData.push({
+          monthName,
+          value: discardedCount,
+        });
+      }
+
+      console.log(
+        `🎭 Mock: Generated monthly discarded projects data for last 13 months`
+      );
+      resolve(monthlyData);
+    }, 300);
+  });
+};
+
+/**
+ * Get discarded projects by month for the last 13 months - uses mock or real based on USE_DUMMY flag
+ */
+export const getDiscardedProjectsByMonth = async (): Promise<
+  { monthName: string; value: number }[]
+> => {
+  if (USE_DUMMY) {
+    return mockGetDiscardedProjectsByMonth();
+  } else {
+    // Real implementation would fetch from backend
+    return mockGetDiscardedProjectsByMonth();
   }
 };

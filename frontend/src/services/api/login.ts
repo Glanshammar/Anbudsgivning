@@ -29,7 +29,7 @@ const mockUsers: User[] = [
     id: "user_1",
     username: "admin",
     email: "admin@byggab.se",
-    name: "Anna Andersson",
+    name: "Adam Admin",
     company_id: "company_1",
     company_name: "Bygg AB",
     role: "admin",
