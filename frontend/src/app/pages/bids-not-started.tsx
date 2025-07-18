@@ -141,7 +141,7 @@ const BidCard = ({ bid }: { bid: Bid }) => {
 
   const handleCardClick = () => {
     const encodedBidId = encodeURIComponent(bid.id);
-    router.push(`/dashboard/bids/not-started/${encodedBidId}`);
+    router.push(`/dashboard/projects/not-started/${encodedBidId}`);
   };
 
   return (

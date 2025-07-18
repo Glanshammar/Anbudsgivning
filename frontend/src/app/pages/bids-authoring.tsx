@@ -7,7 +7,7 @@ import {
   getBidsByState,
   updateBidState,
   updateBidContent,
-  deleteBid,
+  discardBid,
   type Bid,
   BID_STATES,
 } from "@/services/api/bids";
@@ -52,12 +52,12 @@ export default function BidsAuthoringPage() {
     }
   };
 
-  const handleDeleteBid = async (bid: Bid, index: number) => {
+  const handleDiscardBid = async (bid: Bid, index: number) => {
     try {
-      await deleteBid(bid.id);
+      await discardBid(bid.id);
       setBids((prev) => prev.filter((_, i) => i !== index));
     } catch (error) {
-      console.error("Failed to delete bid:", error);
+      console.error("Failed to discard bid:", error);
     }
   };
 
@@ -148,7 +148,7 @@ const BidCard = ({ bid }: { bid: Bid }) => {
 
   const handleCardClick = () => {
     const encodedBidId = encodeURIComponent(bid.id);
-    router.push(`/dashboard/bids/authoring/${encodedBidId}`);
+    router.push(`/dashboard/projects/authoring/${encodedBidId}`);
   };
 
   return (

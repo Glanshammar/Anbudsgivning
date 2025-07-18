@@ -99,8 +99,10 @@ export default function UserProfile() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Användarprofil</h1>
+    <div>
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold">Användarprofil</h1>
+      </div>
 
       {message && (
         <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
@@ -114,7 +116,7 @@ export default function UserProfile() {
         </div>
       )}
 
-      <div className="bg-white shadow-md rounded-lg p-6 mb-6">
+      <div className="bg-white shadow-md rounded-lg p-6 mb-6 max-w-2xl">
         <h2 className="text-xl font-semibold mb-4">Byt användarnamn</h2>
         <form onSubmit={handleUsernameChange}>
           <div className="mb-4">
@@ -139,7 +141,7 @@ export default function UserProfile() {
         </form>
       </div>
 
-      <div className="bg-white shadow-md rounded-lg p-6 mb-6">
+      <div className="bg-white shadow-md rounded-lg p-6 mb-6 max-w-2xl">
         <h2 className="text-xl font-semibold mb-4">Byt e-post</h2>
         <form onSubmit={handleEmailChange}>
           <div className="mb-4">
@@ -164,7 +166,7 @@ export default function UserProfile() {
         </form>
       </div>
 
-      <div className="bg-white shadow-md rounded-lg p-6">
+      <div className="bg-white shadow-md rounded-lg p-6 mb-6 max-w-2xl">
         <h2 className="text-xl font-semibold mb-4">Byt lösenord</h2>
         <form onSubmit={handlePasswordChange}>
           <div className="mb-4">
@@ -205,7 +207,7 @@ export default function UserProfile() {
         </form>
       </div>
 
-      <div className="bg-white shadow-md rounded-lg p-6 border-t-4 border-red-500">
+      <div className="bg-white shadow-md rounded-lg p-6 border-t-4 border-red-500 max-w-2xl">
         <button
           onClick={handleLogout}
           className="bg-red-500 text-white px-6 py-2 rounded-lg hover:bg-red-600 transition-colors flex items-center gap-2"
