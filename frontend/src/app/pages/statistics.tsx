@@ -257,7 +257,7 @@ export default function StatisticsPage() {
         } catch (error) {
           console.error(`Error fetching data for year ${year}:`, error);
           return {
-            year: year.toString(),
+        year: year.toString(),
             value: 0,
           };
         }

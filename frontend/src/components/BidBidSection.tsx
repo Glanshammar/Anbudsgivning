@@ -8,6 +8,31 @@ import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { getBidById, updateBidContent, type Bid } from "@/services/api/bids";
 import { getCurrentUser, type User } from "@/services/api/login";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+interface Suggestion {
+  id: string;
+  text: string;
+  author: string;
+  timestamp: Date;
+  completed: boolean;
+}
 
 interface Chapter {
   id: string;
@@ -16,12 +41,78 @@ interface Chapter {
   progress: number;
   lastEditedBy: string;
   mainEditor: string;
+  suggestions: Suggestion[];
 }
 
 interface BidBidSectionProps {
   bidId: string;
   onTitleUpdate?: (title: string) => void;
 }
+
+interface SortableChapterItemProps {
+  chapter: Chapter;
+  isActive: boolean;
+  onChapterClick: (id: string) => void;
+  onDeleteChapter: (id: string) => void;
+  canDelete: boolean;
+}
+
+const SortableChapterItem: React.FC<SortableChapterItemProps> = ({
+  chapter,
+  isActive,
+  onChapterClick,
+  onDeleteChapter,
+  canDelete,
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: chapter.id });
+
+  const style = {
+    transform: transform
+      ? `translate3d(0, ${transform.y}px, 0)` // Only allow vertical movement
+      : undefined,
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="relative"
+    >
+      <div
+        onClick={() => onChapterClick(chapter.id)}
+        className={`border-4 rounded-3xl cursor-pointer transition-all duration-300 px-4 py-3 text-sm font-medium text-center ${
+          isActive
+            ? "border-blue-500 shadow-2xl bg-white"
+            : "border-black/80 shadow-lg hover:shadow-2xl hover:border-blue-500 bg-white"
+        } ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}
+      >
+        {chapter.title || `Ch ${chapter.id.replace("ch", "")}`}
+      </div>
+      {canDelete && (
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            onDeleteChapter(chapter.id);
+          }}
+          className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600 cursor-pointer z-10"
+        >
+          ×
+        </div>
+      )}
+    </div>
+  );
+};
 
 const BidBidSection: React.FC<BidBidSectionProps> = ({
   bidId,
@@ -33,6 +124,21 @@ const BidBidSection: React.FC<BidBidSectionProps> = ({
   const [activeChapter, setActiveChapter] = useState<string>("ch1");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [newSuggestion, setNewSuggestion] = useState<string>("");
+  const [chapterApproved, setChapterApproved] = useState<{
+    [key: string]: boolean;
+  }>({});
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Require 8px movement before drag starts
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Load bid data and current user on component mount
   useEffect(() => {
@@ -57,7 +163,14 @@ const BidBidSection: React.FC<BidBidSectionProps> = ({
             try {
               const parsedChapters = JSON.parse(bidData.content);
               if (Array.isArray(parsedChapters)) {
-                setChapters(parsedChapters);
+                // Ensure all chapters have suggestions array
+                const chaptersWithSuggestions = parsedChapters.map(
+                  (chapter: any) => ({
+                    ...chapter,
+                    suggestions: chapter.suggestions || [],
+                  })
+                );
+                setChapters(chaptersWithSuggestions);
               }
             } catch (e) {
               // If content is not valid JSON, treat as single chapter
@@ -69,6 +182,7 @@ const BidBidSection: React.FC<BidBidSectionProps> = ({
                   progress: 0,
                   lastEditedBy: user.name,
                   mainEditor: user.name,
+                  suggestions: [],
                 },
               ]);
             }
@@ -82,6 +196,7 @@ const BidBidSection: React.FC<BidBidSectionProps> = ({
                 progress: 0,
                 lastEditedBy: user.name,
                 mainEditor: user.name,
+                suggestions: [],
               },
             ]);
           }
@@ -154,6 +269,7 @@ const BidBidSection: React.FC<BidBidSectionProps> = ({
       progress: 0,
       lastEditedBy: currentUser?.name || "Unknown User",
       mainEditor: currentUser?.name || "Unknown User",
+      suggestions: [],
     };
     setChapters((prev) => [...prev, newChapter]);
     setActiveChapter(newChapter.id);
@@ -174,6 +290,94 @@ const BidBidSection: React.FC<BidBidSectionProps> = ({
     return (
       chapters.find((chapter) => chapter.id === activeChapter) || chapters[0]
     );
+  };
+
+  const addSuggestion = () => {
+    if (!newSuggestion.trim() || !currentUser) return;
+
+    const suggestion: Suggestion = {
+      id: `suggestion_${Date.now()}`,
+      text: newSuggestion.trim(),
+      author: currentUser.name,
+      timestamp: new Date(),
+      completed: false,
+    };
+
+    setChapters((prev) =>
+      prev.map((chapter) =>
+        chapter.id === activeChapter
+          ? {
+              ...chapter,
+              suggestions: [...chapter.suggestions, suggestion],
+            }
+          : chapter
+      )
+    );
+
+    setNewSuggestion("");
+  };
+
+  const toggleSuggestionCompleted = (suggestionId: string) => {
+    setChapters((prev) =>
+      prev.map((chapter) =>
+        chapter.id === activeChapter
+          ? {
+              ...chapter,
+              suggestions: chapter.suggestions.map((suggestion) =>
+                suggestion.id === suggestionId
+                  ? { ...suggestion, completed: !suggestion.completed }
+                  : suggestion
+              ),
+            }
+          : chapter
+      )
+    );
+  };
+
+  const handleSuggestionKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      addSuggestion();
+    }
+  };
+
+  const handleChapterApproval = () => {
+    setChapterApproved((prev) => ({
+      ...prev,
+      [activeChapter]: !prev[activeChapter],
+    }));
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setChapters((items) => {
+        const oldIndex = items.findIndex((item) => item.id === active.id);
+        const newIndex = items.findIndex((item) => item.id === over.id);
+
+        const reorderedItems = arrayMove(items, oldIndex, newIndex);
+
+        // Update chapter IDs to reflect new order
+        const updatedItems = reorderedItems.map((item, index) => ({
+          ...item,
+          id: `ch${index + 1}`,
+        }));
+
+        // Update active chapter if it was moved
+        const movedChapter = updatedItems.find(
+          (item, index) =>
+            items[oldIndex] &&
+            item.title === items[oldIndex].title &&
+            item.content === items[oldIndex].content
+        );
+        if (movedChapter) {
+          setActiveChapter(movedChapter.id);
+        }
+
+        return updatedItems;
+      });
+    }
   };
 
   if (loading) {
@@ -204,79 +408,209 @@ const BidBidSection: React.FC<BidBidSectionProps> = ({
 
   return (
     <div className="w-full h-full flex flex-col">
-      {/* Chapter tabs */}
-      <div className="flex items-center gap-1 bg-gray-50">
-        {chapters.map((chapter) => (
-          <div key={chapter.id} className="relative flex-1">
+      <div className="flex flex-1">
+        {/* Chapter sidebar */}
+        <div className="w-64 bg-gray-50 border-r border-gray-200 flex flex-col">
+          {/* Chapter list */}
+          <div className="flex-1 p-4 space-y-2 overflow-y-auto">
+            {/* Add new chapter button */}
             <div
-              onClick={() => setActiveChapter(chapter.id)}
-              className={`border-4 rounded-3xl cursor-pointer transition-all duration-300 px-4 py-2 text-sm font-medium text-center ${
-                activeChapter === chapter.id
-                  ? "border-blue-500 shadow-2xl bg-white"
-                  : "border-black/80 shadow-lg hover:shadow-2xl hover:border-blue-500 bg-white"
-              }`}
+              onClick={addNewChapter}
+              className="border-4 rounded-3xl cursor-pointer transition-all duration-300 px-4 py-3 text-sm font-medium border-black/80 shadow-lg hover:shadow-2xl hover:border-blue-500 bg-white text-center"
             >
-              {chapter.title || `Ch ${chapter.id.replace("ch", "")}`}
+              ➕ Add Chapter
             </div>
-            {chapters.length > 1 && (
-              <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteChapter(chapter.id);
-                }}
-                className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600 cursor-pointer"
+
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={chapters.map((chapter) => chapter.id)}
+                strategy={verticalListSortingStrategy}
               >
-                ×
-              </div>
-            )}
-          </div>
-        ))}
-        <div className="flex-1">
-          <div
-            onClick={addNewChapter}
-            className="border-4 rounded-3xl cursor-pointer transition-all duration-300 px-4 py-2 text-sm font-medium border-black/80 shadow-lg hover:shadow-2xl hover:border-blue-500 bg-white text-center"
-          >
-            ➕
+                {chapters.map((chapter) => (
+                  <SortableChapterItem
+                    key={chapter.id}
+                    chapter={chapter}
+                    isActive={activeChapter === chapter.id}
+                    onChapterClick={setActiveChapter}
+                    onDeleteChapter={deleteChapter}
+                    canDelete={chapters.length > 1}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
           </div>
         </div>
-      </div>
 
-      {/* Chapter content */}
-      <div className="flex-1 p-6 overflow-y-auto">
-        <div className="max-w-4xl mx-auto space-y-6">
-          {/* Chapter title input */}
+        {/* Metadata sidebar - hidden on mobile */}
+        <div className="hidden md:flex w-80 bg-gray-50 border-r border-gray-200 flex-col p-4 space-y-4">
+          {/* Chapter Title */}
           <div className="space-y-2">
-            <Label htmlFor="chapterTitle">Chapter Title:</Label>
+            <Label htmlFor="titleInput" className="text-sm font-medium">
+              Chapter Title:
+            </Label>
             <Input
-              id="chapterTitle"
+              id="titleInput"
               value={currentChapter.title}
               onChange={(e) =>
                 updateChapter(currentChapter.id, "title", e.target.value)
               }
               placeholder="Enter chapter title..."
-              className="text-lg"
+              className="text-sm"
             />
           </div>
 
-          {/* Chapter content */}
-          <div className="space-y-2">
-            <Label htmlFor="chapterContent">Chapter Text:</Label>
-            <Textarea
-              id="chapterContent"
-              value={currentChapter.content}
-              onChange={(e) =>
-                updateChapter(currentChapter.id, "content", e.target.value)
-              }
-              placeholder="Write your chapter content here..."
-              className="min-h-[400px] resize-none"
-            />
+          {/* Editor information */}
+          <div className="space-y-3">
+            <div>
+              <Label className="text-sm font-medium">Main editor:</Label>
+              <p className="text-sm text-gray-600">
+                {currentChapter.mainEditor}
+              </p>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Last edited by:</Label>
+              <p className="text-sm text-gray-600">
+                {currentChapter.lastEditedBy}
+              </p>
+            </div>
           </div>
 
           {/* Progress tracking */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Progress slider */}
-            <div className="space-y-4">
-              <Label>Progress: {currentChapter.progress}% Done</Label>
+          <div className="space-y-3">
+            <Label className="text-sm font-medium">
+              Progress: {currentChapter.progress}% Done
+            </Label>
+            <Slider
+              value={[currentChapter.progress]}
+              onValueChange={(value) =>
+                updateChapter(currentChapter.id, "progress", value[0])
+              }
+              min={0}
+              max={100}
+              step={10}
+              showColorProgress={true}
+              className="w-full"
+            />
+          </div>
+
+          {/* Suggestions section */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Suggestions:</Label>
+
+            {/* Suggestions list - only show when there are suggestions */}
+            {currentChapter.suggestions.length > 0 && (
+              <div className="bg-white border border-gray-200 rounded-md p-2 space-y-2 max-h-[200px] overflow-y-auto">
+                {currentChapter.suggestions.map((suggestion) => (
+                  <div
+                    key={suggestion.id}
+                    className="flex items-start gap-2 p-2 bg-gray-50 rounded text-xs"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={suggestion.completed}
+                      onChange={() => toggleSuggestionCompleted(suggestion.id)}
+                      className="mt-0.5 h-3 w-3"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className={`${
+                          suggestion.completed
+                            ? "text-gray-500"
+                            : chapterApproved[activeChapter] &&
+                              !suggestion.completed
+                            ? "line-through text-gray-500"
+                            : "text-gray-800"
+                        }`}
+                      >
+                        {suggestion.text}
+                      </p>
+                      <p className="text-gray-500 mt-1">
+                        {suggestion.author} •{" "}
+                        {suggestion.timestamp.toLocaleString("sv-SE", {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add suggestion input */}
+            <Input
+              value={newSuggestion}
+              onChange={(e) => setNewSuggestion(e.target.value)}
+              onKeyPress={handleSuggestionKeyPress}
+              placeholder="Add a suggestion and press Enter..."
+              className="text-sm"
+            />
+
+            {/* Chapter approval button */}
+            <Button
+              onClick={handleChapterApproval}
+              variant="outline"
+              size="sm"
+              className={`w-full text-xs ${
+                chapterApproved[activeChapter]
+                  ? "bg-gray-50 hover:bg-gray-100 border-gray-300 text-gray-700"
+                  : "bg-green-50 hover:bg-green-100 border-green-300 text-green-700"
+              }`}
+            >
+              {chapterApproved[activeChapter]
+                ? "↩️ Undo approval"
+                : "👍 Chapter complete & OK"}
+            </Button>
+          </div>
+        </div>
+
+        {/* Main content area - Chapter Text */}
+        <div className="flex-1 flex flex-col">
+          {/* Mobile metadata header - only visible on mobile */}
+          <div className="md:hidden bg-gray-50 border-b border-gray-200 p-4 space-y-3">
+            {/* Chapter Title on mobile */}
+            <div className="space-y-1">
+              <Label htmlFor="mobileTitleInput" className="text-xs font-medium">
+                Chapter Title:
+              </Label>
+              <Input
+                id="mobileTitleInput"
+                value={currentChapter.title}
+                onChange={(e) =>
+                  updateChapter(currentChapter.id, "title", e.target.value)
+                }
+                placeholder="Enter chapter title..."
+                className="text-sm h-8"
+              />
+            </div>
+
+            {/* Editor information on mobile */}
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <Label className="text-xs font-medium">Main editor:</Label>
+                <p className="text-xs text-gray-600">
+                  {currentChapter.mainEditor}
+                </p>
+              </div>
+              <div>
+                <Label className="text-xs font-medium">Last edited by:</Label>
+                <p className="text-xs text-gray-600">
+                  {currentChapter.lastEditedBy}
+                </p>
+              </div>
+            </div>
+
+            {/* Progress on mobile */}
+            <div className="flex items-center gap-3">
+              <Label className="text-xs font-medium whitespace-nowrap">
+                Progress:
+              </Label>
               <Slider
                 value={[currentChapter.progress]}
                 onValueChange={(value) =>
@@ -286,31 +620,106 @@ const BidBidSection: React.FC<BidBidSectionProps> = ({
                 max={100}
                 step={10}
                 showColorProgress={true}
-                className="w-full"
+                className="flex-1"
+              />
+              <span className="text-xs text-gray-600 whitespace-nowrap">
+                {currentChapter.progress}%
+              </span>
+            </div>
+
+            {/* Suggestions section on mobile */}
+            <div className="space-y-2">
+              <Label className="text-xs font-medium">Suggestions:</Label>
+
+              {/* Suggestions list - only show when there are suggestions */}
+              {currentChapter.suggestions.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-md p-2 space-y-2 max-h-[120px] overflow-y-auto">
+                  {currentChapter.suggestions.map((suggestion) => (
+                    <div
+                      key={suggestion.id}
+                      className="flex items-start gap-2 p-2 bg-gray-50 rounded text-xs"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={suggestion.completed}
+                        onChange={() =>
+                          toggleSuggestionCompleted(suggestion.id)
+                        }
+                        className="mt-0.5 h-3 w-3"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p
+                          className={`${
+                            suggestion.completed
+                              ? "text-gray-500"
+                              : chapterApproved[activeChapter] &&
+                                !suggestion.completed
+                              ? "line-through text-gray-500"
+                              : "text-gray-800"
+                          }`}
+                        >
+                          {suggestion.text}
+                        </p>
+                        <p className="text-gray-500 mt-1">
+                          {suggestion.author} •{" "}
+                          {suggestion.timestamp.toLocaleString("sv-SE", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add suggestion input on mobile */}
+              <Input
+                value={newSuggestion}
+                onChange={(e) => setNewSuggestion(e.target.value)}
+                onKeyPress={handleSuggestionKeyPress}
+                placeholder="Add a suggestion and press Enter..."
+                className="text-xs h-8"
               />
             </div>
 
-            {/* Editor information */}
-            <div className="space-y-2">
-              <div>
-                <Label className="text-sm font-medium">Main editor:</Label>
-                <p className="text-sm">{currentChapter.mainEditor}</p>
-              </div>
-              <div>
-                <Label className="text-sm font-medium">Last edited by:</Label>
-                <p className="text-sm">{currentChapter.lastEditedBy}</p>
-              </div>
-            </div>
+            {/* Approval button on mobile */}
+            <Button
+              onClick={handleChapterApproval}
+              variant="outline"
+              size="sm"
+              className={`w-full text-xs h-8 ${
+                chapterApproved[activeChapter]
+                  ? "bg-gray-50 hover:bg-gray-100 border-gray-300 text-gray-700"
+                  : "bg-green-50 hover:bg-green-100 border-green-300 text-green-700"
+              }`}
+            >
+              {chapterApproved[activeChapter]
+                ? "↩️ Undo approval"
+                : "👍 Chapter complete & OK"}
+            </Button>
           </div>
 
-          {/* Comments section */}
-          <div className="space-y-2">
-            <Label>Suggestions:</Label>
-            <Textarea
-              placeholder="Add suggestions about this chapter..."
-              className="min-h-[100px] resize-none"
-              style={{ backgroundColor: "#f3f4f6" }}
-            />
+          <div className="flex-1 p-4 md:p-6 overflow-y-auto">
+            <div className="h-full">
+              {/* Content textarea */}
+              <div className="h-full flex flex-col space-y-2">
+                <Label htmlFor="contentInput" className="text-sm font-medium">
+                  Chapter Text:
+                </Label>
+                <Textarea
+                  id="contentInput"
+                  value={currentChapter.content}
+                  onChange={(e) =>
+                    updateChapter(currentChapter.id, "content", e.target.value)
+                  }
+                  placeholder="Write your chapter content here..."
+                  className="flex-1 resize-none"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
