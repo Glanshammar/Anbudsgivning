@@ -15,26 +15,45 @@ import {
 import CollaborateModal from "@/components/CollaborateModal";
 import jsPDF from "jspdf";
 
+interface Chapter {
+  id: string;
+  title: string;
+  content: string;
+  progress: number;
+  lastEditedBy: string;
+  mainEditor: string;
+  suggestions: any[];
+}
+
 interface BidActionsSectionProps {
   bidId: string;
   onTitleUpdate?: (title: string) => void;
 }
 
-// Function to format bid content from JSON to readable text
+// Function to format bid content from JSON to readable text with hierarchical structure
 const formatBidContent = (content: string): string => {
   if (!content) return "";
 
   try {
-    const chapters = JSON.parse(content);
+    const chapters = JSON.parse(content) as Chapter[];
     if (Array.isArray(chapters)) {
       return chapters
-        .map((chapter) => {
-          const title =
-            chapter.title || `Chapter ${chapter.id?.replace("ch", "") || ""}`;
+        .map((chapter: Chapter, chapterIndex: number) => {
+          const chapterNumber = chapterIndex + 1;
+          const chapterTitle = chapter.title || `Chapter ${chapterNumber}`;
           const chapterContent = chapter.content || "";
-          return `${title}\n${chapterContent}`;
+
+          // Start with the main chapter
+          let formattedContent = `${chapterNumber}. ${chapterTitle}`;
+
+          // Add main chapter content if it exists
+          if (chapterContent.trim()) {
+            formattedContent += `\n${chapterContent}`;
+          }
+
+          return formattedContent;
         })
-        .join("\n\n");
+        .join("\n\n\n");
     }
   } catch (e) {
     // If content is not valid JSON, return as is
@@ -93,34 +112,19 @@ const downloadBidFile = (bid: Bid, format: "pdf" | "txt") => {
     // Save the PDF
     doc.save(`${bid.title.replace(/\s+/g, "_")}_bid.pdf`);
   } else {
-    // Create TXT file
-    const fileContent = `
-BID DOCUMENT
-
-Project: ${bid.title}
-Tender Name: ${bid.tender_name}
-Branch: ${bid.branch}
-Deadline: ${bid.deadline}
-Created: ${new Date(bid.created_date).toLocaleDateString()}
-Author: ${bid.author}
-
-DESCRIPTION
-${bid.description}
-
-BID CONTENT
-${formattedContent}
-    `.trim();
+    // Create TXT file - only include the actual bid content
+    const fileContent = formattedContent.trim();
 
     // Create blob and download
     const blob = new Blob([fileContent], { type: "text/plain" });
-    const url = window.URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = `${bid.title.replace(/\s+/g, "_")}_bid.txt`;
     document.body.appendChild(a);
     a.click();
-    window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 };
 

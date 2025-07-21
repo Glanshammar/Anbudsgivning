@@ -34,6 +34,65 @@ import BidTenderSection from "@/components/BidTenderSection";
 import BidActionsSection from "@/components/BidActionsSection";
 import BidBidSection from "@/components/BidBidSection";
 
+// Breadcrumb Component for deep navigation
+const Breadcrumb = ({
+  levels,
+  currentSlug,
+}: {
+  levels: Array<{
+    items: NavItem[];
+    basePath: string;
+    activeSegment: string;
+    isShrunken: boolean;
+  }>;
+  currentSlug: string[];
+}) => {
+  const router = useRouter();
+
+  // Show all levels except the last 3 (which are shown as navigation)
+  const breadcrumbLevels = levels.slice(0, -3);
+
+  if (breadcrumbLevels.length === 0) return null;
+
+  const handleBreadcrumbClick = (levelIndex: number) => {
+    // Navigate to the clicked breadcrumb level
+    const targetSlug = currentSlug.slice(0, levelIndex + 1);
+    const targetPath = `/dashboard/${targetSlug.join("/")}`;
+    router.push(targetPath);
+  };
+
+  return (
+    <div className="w-full bg-gray-100 border-b border-gray-200 px-4 py-2">
+      <div className="flex items-center space-x-2 text-sm text-gray-600">
+        <span
+          onClick={() => router.push("/dashboard")}
+          className="hover:text-blue-600 cursor-pointer font-medium"
+        >
+          Home
+        </span>
+        {breadcrumbLevels.map((level, index) => {
+          const activeItem = level.items.find(
+            (item) => item.path === level.activeSegment
+          );
+          return (
+            <React.Fragment key={index}>
+              <span className="text-gray-400">{">"}</span>
+              <span
+                onClick={() => handleBreadcrumbClick(index)}
+                className="hover:text-blue-600 cursor-pointer"
+              >
+                {activeItem?.title || level.activeSegment}
+              </span>
+            </React.Fragment>
+          );
+        })}
+        <span className="text-gray-400">{">"}</span>
+        <span className="text-gray-800 font-medium">...</span>
+      </div>
+    </div>
+  );
+};
+
 // --- Page Imports ---
 import UserProfilePage from "../../pages/userprofile";
 import CalendarPage from "../../pages/calendar";
@@ -1586,16 +1645,23 @@ export default function DynamicDashboardPage() {
     });
   }
 
+  // Determine if we need breadcrumbs and which levels to show
+  const showBreadcrumb = levels.length > 3;
+  const visibleLevels = showBreadcrumb ? levels.slice(-3) : levels;
+
   // Check if we should render a detail page
   if (isTenderDetailPage) {
     const tenderName = slug[slug.length - 1];
     return (
       <div className="w-full flex flex-col h-full">
-        {/* Mobile Navigation */}
-        <MobileNavigation levels={levels} currentSlug={slug} />
+        {/* Breadcrumb Navigation */}
+        {showBreadcrumb && <Breadcrumb levels={levels} currentSlug={slug} />}
 
-        {/* Render all navigation levels */}
-        {levels.map((level, index) => (
+        {/* Mobile Navigation */}
+        <MobileNavigation levels={visibleLevels} currentSlug={slug} />
+
+        {/* Render visible navigation levels only */}
+        {visibleLevels.map((level, index) => (
           <NavigationLevel
             key={index}
             items={level.items}
@@ -1627,11 +1693,14 @@ export default function DynamicDashboardPage() {
 
     return (
       <div className="w-full flex flex-col h-full">
-        {/* Mobile Navigation */}
-        <MobileNavigation levels={levels} currentSlug={slug} />
+        {/* Breadcrumb Navigation */}
+        {showBreadcrumb && <Breadcrumb levels={levels} currentSlug={slug} />}
 
-        {/* Render all navigation levels */}
-        {levels.map((level, index) => (
+        {/* Mobile Navigation */}
+        <MobileNavigation levels={visibleLevels} currentSlug={slug} />
+
+        {/* Render visible navigation levels only */}
+        {visibleLevels.map((level, index) => (
           <NavigationLevel
             key={index}
             items={level.items}
@@ -1656,11 +1725,14 @@ export default function DynamicDashboardPage() {
 
     return (
       <div className="w-full flex flex-col h-full">
-        {/* Mobile Navigation */}
-        <MobileNavigation levels={levels} currentSlug={slug} />
+        {/* Breadcrumb Navigation */}
+        {showBreadcrumb && <Breadcrumb levels={levels} currentSlug={slug} />}
 
-        {/* Render all navigation levels */}
-        {levels.map((level, index) => (
+        {/* Mobile Navigation */}
+        <MobileNavigation levels={visibleLevels} currentSlug={slug} />
+
+        {/* Render visible navigation levels only */}
+        {visibleLevels.map((level, index) => (
           <NavigationLevel
             key={index}
             items={level.items}
@@ -1689,11 +1761,14 @@ export default function DynamicDashboardPage() {
 
   return (
     <div className="w-full flex flex-col h-full">
-      {/* Mobile Navigation */}
-      <MobileNavigation levels={levels} currentSlug={slug} />
+      {/* Breadcrumb Navigation */}
+      {showBreadcrumb && <Breadcrumb levels={levels} currentSlug={slug} />}
 
-      {/* Render all navigation levels */}
-      {levels.map((level, index) => (
+      {/* Mobile Navigation */}
+      <MobileNavigation levels={visibleLevels} currentSlug={slug} />
+
+      {/* Render visible navigation levels only */}
+      {visibleLevels.map((level, index) => (
         <NavigationLevel
           key={index}
           items={level.items}
@@ -1711,7 +1786,7 @@ export default function DynamicDashboardPage() {
           basePath={basePath}
           activeSegment={undefined}
           isShrunken={false}
-          levelIndex={levels.length}
+          levelIndex={visibleLevels.length}
         />
       )}
 
